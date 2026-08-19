@@ -1,0 +1,494 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap");
+
+:root {
+  font-family: "Noto Sans SC", sans-serif;
+  color: #17232d;
+  background: #eef3f7;
+  --admin-sidebar-bg: #0d2133;
+  --admin-sidebar-panel: rgba(255, 255, 255, 0.04);
+  --admin-accent: #d6a557;
+  --admin-accent-soft: #fff1cb;
+  --admin-ink: #1b2d41;
+  --admin-muted: #607285;
+  --admin-surface: #ffffff;
+  --admin-border: #d8e0e7;
+  --admin-shadow: 0 20px 60px rgba(14, 28, 43, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  color: var(--admin-ink);
+  background: #f3f6fa;
+}
+
+.admin-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+}
+
+.app-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  width: 248px;
+  min-height: 100vh;
+  padding: 1.5rem 0.75rem 1.25rem;
+  background: #10293d;
+  color: #dce8ee;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.app-sidebar h1 {
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.75rem 1.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.sidebar-mark {
+  margin: 0;
+  color: #f5c66f;
+  font: 600 0.76rem "IBM Plex Mono", monospace;
+  letter-spacing: 0.12em;
+}
+
+.sidebar-logo {
+  display: grid;
+  flex: 0 0 34px;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #e5aa4c;
+  color: #10293d;
+  font: 700 1.15rem Georgia, serif;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.sidebar-group-label {
+  margin: 0 0 0.4rem 0.85rem;
+  color: #718a9b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.sidebar-menu {
+  border-right: none !important;
+  background: transparent !important;
+}
+
+.sidebar-menu .el-menu-item {
+  height: 42px;
+  margin-bottom: 0.2rem;
+  border-radius: 7px;
+  font-size: 0.9rem;
+}
+
+.sidebar-menu .el-menu-item.is-active {
+  background: #1d4058 !important;
+  box-shadow: inset 3px 0 0 #f5c66f;
+}
+
+.sidebar-menu .el-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.sidebar-menu .el-icon {
+  margin-right: 0.65rem;
+  color: #8fa8b8;
+}
+
+.sidebar-menu .el-menu-item.is-active .el-icon {
+  color: #f5c66f;
+}
+
+.sidebar-footer {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1.25rem;
+  left: 1.5rem;
+  margin: 0;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  color: #718a9b;
+  font-size: 0.75rem;
+}
+
+.workspace-shell {
+  grid-column: 2;
+  min-width: 0;
+  padding: 1rem 1.5rem 2.5rem;
+}
+
+.page-stack {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.workspace-body {
+  padding-top: 1.5rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 56px;
+  padding: 0 0.25rem;
+  border-bottom: 1px solid #dbe3eb;
+}
+
+.header-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #5c7382;
+  font-size: 0.8rem;
+}
+
+.header-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #56a77a;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.header-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  padding: 0.45rem 0.5rem;
+  color: var(--admin-ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.page-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  max-width: none;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #dbe3eb;
+}
+
+.page-kicker {
+  margin: 0 0 0.45rem;
+  color: #c17b27;
+  font: 600 0.7rem "IBM Plex Mono", monospace;
+  letter-spacing: 0.12em;
+}
+
+.page-header h2 {
+  margin: 0;
+  font-size: clamp(1.65rem, 2.5vw, 2.25rem);
+  line-height: 1.2;
+}
+
+.page-description {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  text-align: right;
+}
+
+.status-panel,
+.form-card,
+.preview-card,
+.dashboard-panel,
+.empty-module-card {
+  border: 1px solid rgba(255, 255, 255, 0.72) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--admin-shadow) !important;
+}
+
+.status-panel {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 1rem 1.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--admin-muted);
+  line-height: 1.7;
+  box-shadow: var(--admin-shadow);
+}
+
+.status-panel .el-icon {
+  color: var(--admin-accent);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.settings-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.preview-card .el-card__body,
+.form-card .el-card__body,
+.dashboard-panel .el-card__body,
+.empty-module-card .el-card__body {
+  padding: 1.4rem;
+}
+
+.preview-card {
+  padding: 0 !important;
+}
+
+.dashboard-stat-card {
+  margin-bottom: 1rem;
+  border: none !important;
+  border-radius: 8px !important;
+  box-shadow: var(--admin-shadow) !important;
+}
+
+.dashboard-stat-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dashboard-stat-title {
+  margin: 0 0 0.6rem;
+  color: var(--admin-muted);
+}
+
+.dashboard-stat-card strong {
+  font-size: 2rem;
+  color: var(--admin-ink);
+}
+
+.dashboard-stat-text {
+  margin: 1rem 0 0;
+  color: var(--admin-muted);
+  line-height: 1.7;
+}
+
+.dashboard-stat-icon {
+  font-size: 1.5rem;
+  color: var(--admin-accent);
+}
+
+.dashboard-module-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.dashboard-module-item {
+  padding: 1.2rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fffdfa 0%, #ffffff 100%);
+}
+
+.dashboard-module-item h3 {
+  margin: 0 0 0.6rem;
+}
+
+.dashboard-module-item p {
+  margin: 0;
+  color: var(--admin-muted);
+  line-height: 1.75;
+}
+
+.preview-card {
+  padding: 1.2rem;
+}
+
+.preview-hero {
+  overflow: hidden;
+  min-height: 340px;
+  border-radius: 8px;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.preview-mask {
+  min-height: 340px;
+  padding: 2rem;
+  background: linear-gradient(180deg, rgba(9, 20, 33, 0.3), rgba(9, 20, 33, 0.78));
+  color: #fff6eb;
+}
+
+.preview-badge {
+  color: #ffd36f;
+  letter-spacing: 0.22em;
+  font-size: 0.8rem;
+}
+
+.preview-card h3 {
+  margin: 1rem 0 0.5rem;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+}
+
+.preview-card p,
+.preview-card li {
+  line-height: 1.8;
+}
+
+.login-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 2rem 1.25rem;
+  background:
+    radial-gradient(circle at top left, rgba(214, 165, 87, 0.18), transparent 22rem),
+    linear-gradient(135deg, #f5f8fb 0%, #e8eef5 100%);
+}
+
+.login-panel-wrap {
+  width: min(100%, 460px);
+}
+
+.login-panel {
+  width: min(100%, 440px);
+  border: 1px solid rgba(255, 255, 255, 0.72) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 32px 80px rgba(13, 31, 50, 0.14) !important;
+}
+
+.login-panel h2 {
+  margin: 0 0 1.75rem;
+  font-size: 2.1rem;
+}
+
+.login-form {
+  margin-bottom: 1rem;
+}
+
+.login-submit {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.empty-module-card {
+  min-height: 360px;
+}
+
+.el-button--primary {
+  --el-button-bg-color: #173959;
+  --el-button-border-color: #173959;
+  --el-button-hover-bg-color: #204b72;
+  --el-button-hover-border-color: #204b72;
+  --el-button-active-bg-color: #102c43;
+  --el-button-active-border-color: #102c43;
+}
+
+.el-card {
+  --el-card-border-color: transparent;
+}
+
+.el-breadcrumb__inner.is-link,
+.el-breadcrumb__inner {
+  color: var(--admin-muted) !important;
+}
+
+@media (max-width: 860px) {
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    position: relative;
+    width: 100%;
+    min-height: auto;
+    padding: 1rem;
+  }
+
+  .workspace-shell {
+    grid-column: auto;
+    padding: 1rem 1rem 3rem;
+  }
+
+  .sidebar-brand {
+    padding-bottom: 1rem;
+  }
+
+  .sidebar-nav {
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .sidebar-group-label,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .sidebar-menu {
+    display: inline-flex;
+    width: 100%;
+  }
+
+  .sidebar-menu .el-menu-item {
+    flex: 1;
+    justify-content: center;
+    padding: 0 0.5rem;
+  }
+
+  .settings-grid,
+  .dashboard-module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header {
+    display: block;
+  }
+
+  .page-description {
+    margin-top: 0.65rem;
+    text-align: left;
+  }
+
+  .login-panel-wrap {
+    padding: 0;
+  }
+}

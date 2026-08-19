@@ -1,0 +1,19 @@
+{
+  "name": "personal-blog",
+  "private": true,
+  "workspaces": [
+    "web",
+    "admin"
+  ],
+  "scripts": {
+    "dev:backend": ".\\.venv\\Scripts\\python.exe -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:web": "npm --workspace web run dev",
+    "dev:admin": "npm --workspace admin run dev",
+    "build": "npm run build:web && npm run build:admin",
+    "build:web": "npm --workspace web run build",
+    "build:admin": "npm --workspace admin run build",
+    "lint": "npm run lint:web && npm run lint:admin",
+    "lint:web": "npm --workspace web run lint",
+    "lint:admin": "npm --workspace admin run lint"
+  }
+}
