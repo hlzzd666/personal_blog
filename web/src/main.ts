@@ -2,11 +2,16 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createRouter, createWebHistory } from "vue-router";
 import App from "./App.vue";
+import ArticleDetailPage from "./pages/ArticleDetailPage.vue";
+import ArticlesPage from "./pages/ArticlesPage.vue";
 import "./styles.css";
 
 const router = createRouter({
   history: createWebHistory(),
-  routes: [{ path: "/", component: App }],
+  routes: [
+    { path: "/articles", component: ArticlesPage },
+    { path: "/articles/:slug", component: ArticleDetailPage },
+  ],
 });
 
 createApp(App).use(createPinia()).use(router).mount("#app");

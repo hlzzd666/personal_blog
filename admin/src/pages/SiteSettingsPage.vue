@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { Check, Link } from "@element-plus/icons-vue";
+import { Check, Picture, Upload } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { computed, onMounted, ref } from "vue";
 
-import { fetchSiteSettings, updateSiteSettings } from "../api/site-settings";
+import { fetchSiteSettings, updateSiteSettings, uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type { QuoteItem, SiteSettings } from "../types/site";
 
@@ -11,11 +11,18 @@ const form = ref<SiteSettings>({
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
   hero_image_url: "https://images.hdqwalls.com/download/one-piece-anime-artwork-i6-2560x1440.jpg",
   nav_brand: "某某某的个人空间",
+  owner_avatar_url: "/owner-avatar.jpg",
+  owner_location_name: "未设置站长地址",
+  owner_latitude: null,
+  owner_longitude: null,
   quotes: [],
 });
 const statusText = ref("正在读取首页配置...");
 const saving = ref(false);
 const quoteDraft = ref("");
+const avatarInput = ref<HTMLInputElement | null>(null);
+const heroInput = ref<HTMLInputElement | null>(null);
+const uploadingImage = ref<"avatar" | "hero" | "">("");
 
 const previewQuotes = computed(() => quoteDraft.value.split("\n").filter(Boolean).slice(0, 3));
 
@@ -34,6 +41,43 @@ function parseQuotes(): QuoteItem[] {
       const [author, text] = line.split("|").map((item) => item.trim());
       return { author, text };
     });
+}
+
+function openImagePicker(type: "avatar" | "hero") {
+  const input = type === "avatar" ? avatarInput.value : heroInput.value;
+  input?.click();
+}
+
+async function handleImageSelected(type: "avatar" | "hero", event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) {
+    return;
+  }
+  if (!file.type.startsWith("image/")) {
+    ElMessage.error("请选择图片文件");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error("图片大小不能超过 10 MB");
+    return;
+  }
+
+  uploadingImage.value = type;
+  try {
+    const result = await uploadImage(file);
+    if (type === "avatar") {
+      form.value.owner_avatar_url = result.url;
+    } else {
+      form.value.hero_image_url = result.url;
+    }
+    ElMessage.success("图片上传成功，请保存配置");
+  } catch {
+    ElMessage.error("图片上传失败，请稍后重试");
+  } finally {
+    uploadingImage.value = "";
+  }
 }
 
 async function loadSettings() {
@@ -109,17 +153,84 @@ onMounted(() => {
             <el-input v-model="form.nav_brand" placeholder="某某某的个人空间" />
           </el-form-item>
 
-          <el-form-item label="封面图 URL">
-            <el-input
-              v-model="form.hero_image_url"
-              type="textarea"
-              :rows="3"
-              placeholder="填写可访问的海贼王风格封面图地址"
-            >
-              <template #prefix>
-                <el-icon><Link /></el-icon>
-              </template>
-            </el-input>
+          <el-form-item label="站长头像">
+            <div class="image-picker image-picker-avatar">
+              <img :src="form.owner_avatar_url" alt="站长头像" />
+              <div class="image-picker-content">
+                <strong>{{ form.owner_avatar_url ? "已选择头像" : "暂未选择头像" }}</strong>
+                <span>支持 JPG、PNG、WEBP，单张不超过 10 MB</span>
+                <input
+                  ref="avatarInput"
+                  class="image-picker-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  @change="handleImageSelected('avatar', $event)"
+                />
+                <el-button
+                  type="primary"
+                  plain
+                  :loading="uploadingImage === 'avatar'"
+                  @click="openImagePicker('avatar')"
+                >
+                  <el-icon><Upload /></el-icon>
+                  更换头像
+                </el-button>
+              </div>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="站长地址名称">
+            <el-input v-model="form.owner_location_name" placeholder="例如：上海市浦东新区" />
+          </el-form-item>
+
+          <div class="coordinate-fields">
+            <el-form-item label="站长纬度">
+              <el-input-number
+                v-model="form.owner_latitude"
+                :min="-90"
+                :max="90"
+                :step="0.000001"
+                :precision="6"
+                controls-position="right"
+                placeholder="例如：31.230416"
+              />
+            </el-form-item>
+            <el-form-item label="站长经度">
+              <el-input-number
+                v-model="form.owner_longitude"
+                :min="-180"
+                :max="180"
+                :step="0.000001"
+                :precision="6"
+                controls-position="right"
+                placeholder="例如：121.473701"
+              />
+            </el-form-item>
+          </div>
+          <p class="coordinate-hint">经纬度会在后端用于计算访客与站长的直线距离，前台不会展示坐标原值。</p>
+
+          <el-form-item label="首页封面图">
+            <div class="image-picker image-picker-hero">
+              <img :src="form.hero_image_url" alt="首页封面图" />
+              <div class="image-picker-overlay">
+                <input
+                  ref="heroInput"
+                  class="image-picker-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  @change="handleImageSelected('hero', $event)"
+                />
+                <el-button
+                  type="primary"
+                  :loading="uploadingImage === 'hero'"
+                  @click="openImagePicker('hero')"
+                >
+                  <el-icon><Picture /></el-icon>
+                  更换封面图
+                </el-button>
+              </div>
+            </div>
+            <span class="image-picker-hint">建议使用横向图片，上传后点击底部按钮保存。</span>
           </el-form-item>
 
           <el-form-item label="经典语句">
@@ -148,6 +259,8 @@ onMounted(() => {
         <div class="preview-hero" :style="{ backgroundImage: `url(${form.hero_image_url})` }">
           <div class="preview-mask">
             <p>{{ form.site_subtitle }}</p>
+            <img class="preview-avatar" :src="form.owner_avatar_url" alt="站长头像预览" />
+            <small>站长地址：{{ form.owner_location_name }}</small>
             <ul>
               <li v-for="line in previewQuotes" :key="line">{{ line }}</li>
             </ul>

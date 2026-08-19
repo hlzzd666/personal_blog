@@ -11,12 +11,18 @@ class Settings(BaseSettings):
     database_url: str
     sql_echo: bool = False
     cors_origins: str = ""
+    trusted_proxy_ips: str = ""
+    public_base_url: str = "http://127.0.0.1:8000"
 
     model_config = SettingsConfigDict(env_file="backend/.env", extra="ignore")
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def trusted_proxy_ip_list(self) -> list[str]:
+        return [ip.strip() for ip in self.trusted_proxy_ips.split(",") if ip.strip()]
 
 
 @lru_cache

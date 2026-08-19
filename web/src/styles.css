@@ -1,10 +1,18 @@
-@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Sans+SC:wght@400;500;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;800&family=ZCOOL+KuaiLe&display=swap");
+
+@font-face {
+  font-family: "iconfont";
+  src:
+    url("//at.alicdn.com/t/c/font_5224957_5qzk278nutu.woff2?t=1787173865741") format("woff2"),
+    url("//at.alicdn.com/t/c/font_5224957_5qzk278nutu.woff?t=1787173865741") format("woff"),
+    url("//at.alicdn.com/t/c/font_5224957_5qzk278nutu.ttf?t=1787173865741") format("truetype");
+}
 
 :root {
   color: #ffffff;
   background: #07131f;
-  font-family: "Noto Sans SC", sans-serif;
-  --display-font: "Cinzel", "Noto Sans SC", serif;
+  font-family: "ZCOOL KuaiLe", "Noto Sans SC", sans-serif;
+  --display-font: "ZCOOL KuaiLe", "Noto Sans SC", sans-serif;
 }
 
 * {
@@ -13,6 +21,12 @@
 
 html {
   scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 body {
@@ -24,4 +38,11 @@ body {
 a:focus-visible {
   outline: 3px solid #ffd36f;
   outline-offset: 4px;
+}
+
+.iconfont {
+  font-family: "iconfont" !important;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

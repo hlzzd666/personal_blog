@@ -1,1 +1,1 @@
-{"root":["./src/env.d.ts","./src/main.ts","./src/api/http.ts","./src/api/site-settings.ts","./src/app.vue"],"version":"5.8.3"}
+{"root":["./src/env.d.ts","./src/main.ts","./src/api/articles.ts","./src/api/http.ts","./src/api/site-settings.ts","./src/api/visitor-location.ts","./src/app.vue","./src/pages/articledetailpage.vue","./src/pages/articlespage.vue"],"version":"5.8.3"}

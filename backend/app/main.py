@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .api.router import router
 from .core.config import settings
@@ -9,6 +10,8 @@ from .core.exceptions import register_exception_handlers
 from .core.response import build_success_response
 
 app = FastAPI(title=settings.app_name, version="0.1.0", debug=settings.debug)
+
+app.mount("/uploads", StaticFiles(directory="backend/uploads", check_dir=False), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,

@@ -12,3 +12,14 @@ export async function updateSiteSettings(payload) {
         data: payload,
     });
 }
+export async function uploadImage(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request({
+        method: "POST",
+        url: "/media/images",
+        data: formData,
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 30000,
+    });
+}

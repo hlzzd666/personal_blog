@@ -1,6 +1,13 @@
 import { request } from "./http";
 import type { SiteSettings } from "../types/site";
 
+export type ImageUploadResult = {
+  url: string;
+  filename: string;
+  content_type: string;
+  size: number;
+};
+
 export async function fetchSiteSettings(): Promise<SiteSettings> {
   return request<SiteSettings>({
     method: "GET",
@@ -13,5 +20,17 @@ export async function updateSiteSettings(payload: SiteSettings): Promise<SiteSet
     method: "PUT",
     url: "/site-settings",
     data: payload,
+  });
+}
+
+export async function uploadImage(file: File): Promise<ImageUploadResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request<ImageUploadResult>({
+    method: "POST",
+    url: "/media/images",
+    data: formData,
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 30000,
   });
 }

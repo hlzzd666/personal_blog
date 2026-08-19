@@ -1,7 +1,8 @@
 {
   "site_subtitle": "自由、梦想、伙伴，这里记录我向前航行的每一步。",
   "hero_image_url": "https://images.hdqwalls.com/download/monkey-d-luffy-tk-1366x768.jpg",
-  "nav_brand": "某某某的个人空间",
+  "nav_brand": "王路飞的个人空间",
+  "owner_avatar_url": "http://127.0.0.1:8000/uploads/f22d0d1f72ca46de9737bb6a184c5c61.jpg",
   "quotes": [
     {
       "author": "路飞",
@@ -27,5 +28,8 @@
       "author": "索隆",
       "text": "如果连船长都保护不了，还谈什么野心"
     }
-  ]
+  ],
+  "owner_location_name": "江苏省南京市",
+  "owner_latitude": 31.23,
+  "owner_longitude": 121.47
 }

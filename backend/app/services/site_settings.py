@@ -10,6 +10,10 @@ DEFAULT_SITE_SETTINGS = SiteSettings(
     site_subtitle="自由、梦想、伙伴，这里记录我向前航行的每一步。",
     hero_image_url="https://images.hdqwalls.com/download/one-piece-anime-artwork-i6-2560x1440.jpg",
     nav_brand="某某某的个人空间",
+    owner_avatar_url="/owner-avatar.jpg",
+    owner_location_name="未设置站长地址",
+    owner_latitude=None,
+    owner_longitude=None,
     quotes=[
         {
             "author": "路飞",

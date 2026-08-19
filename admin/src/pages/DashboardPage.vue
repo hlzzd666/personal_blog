@@ -61,7 +61,7 @@ const todoList = [
             </div>
             <div class="dashboard-module-item">
               <h3>文章管理</h3>
-              <p>预留文章列表、编辑器、发布流程和分类标签。</p>
+              <p>文章列表、Markdown 编辑器，以及归档、分类和标签维护。</p>
             </div>
             <div class="dashboard-module-item">
               <h3>媒体资源</h3>
