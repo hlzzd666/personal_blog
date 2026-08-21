@@ -14,12 +14,13 @@ export type Article = {
   updated_at: string;
   views: number;
   likes: number;
+  liked_by_current_visitor: boolean;
   tags: string[];
   category: string;
   created_at: string;
 };
 
-export type ArticlePayload = Omit<Article, "id" | "created_at" | "updated_at" | "views" | "likes"> & {
+export type ArticlePayload = Omit<Article, "id" | "created_at" | "updated_at" | "views" | "likes" | "liked_by_current_visitor"> & {
   updated_at?: string | null;
   views?: number;
   likes?: number;
@@ -41,5 +42,5 @@ export function fetchArticle(slug: string) {
 }
 
 export function likeArticle(slug: string) {
-  return request<{ likes: number }>({ url: `/articles/${encodeURIComponent(slug)}/like`, method: "POST" });
+  return request<{ likes: number; liked_by_current_visitor: boolean }>({ url: `/articles/${encodeURIComponent(slug)}/like`, method: "POST" });
 }

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -29,4 +29,20 @@ class Article(Base):
     likes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     category: Mapped[str] = mapped_column(String(80), default="未分类", server_default="未分类")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ArticleLikeRecord(Base):
+    __tablename__ = "article_like_records"
+    __table_args__ = (
+        UniqueConstraint("article_id", "visitor_hash", name="uq_article_like_records_article_visitor"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    visitor_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

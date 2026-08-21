@@ -36,6 +36,7 @@ class ArticleResponse(ArticlePayload):
     id: int
     created_at: datetime
     updated_at: datetime
+    liked_by_current_visitor: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -45,3 +46,8 @@ class ArticleListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ArticleLikeResponse(BaseModel):
+    likes: int
+    liked_by_current_visitor: bool

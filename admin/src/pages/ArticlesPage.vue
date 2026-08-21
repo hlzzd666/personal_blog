@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Delete, Edit, Plus, Search } from "@element-plus/icons-vue";
+import { Delete, Edit, Plus, Search, Upload } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
 import { MdEditor } from "md-editor-v3";
 import "md-editor-v3/lib/style.css";
 
 import { createArticle, deleteArticle, fetchManageArticles, updateArticle } from "../api/articles";
+import { uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type { Article, ArticlePayload } from "../types/article";
 
@@ -37,6 +38,8 @@ const categoryFilter = ref("");
 const page = ref(1);
 const form = reactive<ArticlePayload>(emptyArticle());
 const drawerTitle = computed(() => (editingId.value === null ? "写一篇新文章" : "编辑文章"));
+const markdownInput = ref<HTMLInputElement | null>(null);
+const importingMarkdown = ref(false);
 
 function formatDate(value: string | null) {
   if (!value) return "未设置";
@@ -127,6 +130,65 @@ function handlePageChange(nextPage: number) {
   void loadArticles();
 }
 
+async function handleMarkdownImageUpload(files: File[], insertImages: (urls: string[]) => void) {
+  const validFiles = files.filter((file) => {
+    if (!file.type.startsWith("image/")) {
+      ElMessage.warning(`已跳过非图片文件：${file.name}`);
+      return false;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      ElMessage.warning(`图片不能超过 10 MB：${file.name}`);
+      return false;
+    }
+    return true;
+  });
+
+  if (!validFiles.length) {
+    return;
+  }
+
+  try {
+    const results = await Promise.all(validFiles.map((file) => uploadImage(file)));
+    insertImages(results.map((result) => result.url));
+    ElMessage.success(`已插入 ${results.length} 张图片`);
+  } catch {
+    ElMessage.error("图片上传失败，请稍后重试");
+  }
+}
+
+function openMarkdownPicker() {
+  markdownInput.value?.click();
+}
+
+async function importMarkdown(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) {
+    return;
+  }
+
+  const filename = file.name.toLowerCase();
+  if (!filename.endsWith(".md") && !filename.endsWith(".markdown")) {
+    ElMessage.error("请选择 .md 或 .markdown 文件");
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error("Markdown 文件不能超过 5 MB");
+    return;
+  }
+
+  importingMarkdown.value = true;
+  try {
+    form.content_markdown = await file.text();
+    ElMessage.success("Markdown 内容已导入");
+  } catch {
+    ElMessage.error("Markdown 文件读取失败");
+  } finally {
+    importingMarkdown.value = false;
+  }
+}
+
 onMounted(() => {
   void loadArticles();
 });
@@ -189,7 +251,35 @@ onMounted(() => {
           <el-form-item label="文章分类"><el-input v-model="form.category" placeholder="随笔 / 技术 / 生活" /></el-form-item>
         </div>
         <el-form-item label="标签"><el-select v-model="form.tags" multiple filterable allow-create default-first-option placeholder="输入后回车添加标签"><el-option v-for="tag in form.tags" :key="tag" :label="tag" :value="tag" /></el-select></el-form-item>
-        <el-form-item label="Markdown 内容" required><MdEditor v-model="form.content_markdown" language="zh-CN" preview-theme="github" /></el-form-item>
+        <el-form-item required>
+          <template #label>
+            <div class="markdown-field-label">
+              <span>Markdown 内容</span>
+              <input
+                ref="markdownInput"
+                class="markdown-import-input"
+                type="file"
+                accept=".md,.markdown,text/markdown"
+                @change="importMarkdown"
+              />
+              <el-button
+                link
+                type="primary"
+                :loading="importingMarkdown"
+                @click="openMarkdownPicker"
+              >
+                <el-icon><Upload /></el-icon>
+                导入 Markdown
+              </el-button>
+            </div>
+          </template>
+          <MdEditor
+            v-model="form.content_markdown"
+            language="zh-CN"
+            preview-theme="github"
+            :on-upload-img="handleMarkdownImageUpload"
+          />
+        </el-form-item>
         <div class="editor-form-grid">
           <el-form-item label="发表时间"><el-date-picker v-model="form.published_at" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY年MM月DD日 HH:mm" placeholder="选择发表时间" /></el-form-item>
           <el-form-item label="更新时间"><el-date-picker v-model="form.updated_at" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY年MM月DD日 HH:mm" placeholder="选择更新时间" /></el-form-item>

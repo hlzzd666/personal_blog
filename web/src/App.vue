@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import SiteNavigation from "./components/SiteNavigation.vue";
 import { fetchSiteSettings, type SiteSettings } from "./api/site-settings";
 import { fetchVisitorLocation, type VisitorLocation } from "./api/visitor-location";
 
@@ -29,9 +30,8 @@ const fallbackSettings: SiteSettings = {
 };
 
 const route = useRoute();
+const isHome = computed(() => route.path === "/");
 const settings = ref<SiteSettings>(fallbackSettings);
-const navVisible = ref(true);
-const navRevealing = ref(false);
 const activeQuoteIndex = ref(0);
 const typedCharacters = ref(0);
 const scrollProgress = ref(0);
@@ -71,13 +71,14 @@ const voyageStats = [
 
 let quoteTimer: number | undefined;
 let switchTimer: number | undefined;
-let navRevealTimer: number | undefined;
 let locationWatchId: number | undefined;
-let lastScrollY = 0;
 let scrollFrame: number | undefined;
 let sectionObserver: IntersectionObserver | undefined;
+let homeSession = 0;
 
-const activeQuote = computed(() => settings.value.quotes[activeQuoteIndex.value] ?? fallbackSettings.quotes[0]);
+const activeQuote = computed(
+  () => settings.value.quotes[activeQuoteIndex.value] ?? fallbackSettings.quotes[0],
+);
 const typedQuote = computed(() => activeQuote.value.text.slice(0, typedCharacters.value));
 const latitudeText = computed(() => {
   if (!currentPosition.value) {
@@ -129,7 +130,8 @@ const greetingText = computed(() => {
   return "晚上好，愿这段阅读陪伴你";
 });
 const welcomeMessage = computed(() => {
-  const location = visitorLocationText.value === "正在查询访客位置" ? "远方" : visitorLocationText.value;
+  const location =
+    visitorLocationText.value === "正在查询访客位置" ? "远方" : visitorLocationText.value;
   return `欢迎来自 ${location} 的小伙伴，${greetingText.value}。你距离站长「${settings.value.owner_location_name}」${distanceText.value}。`;
 });
 
@@ -144,7 +146,9 @@ async function loadSettings() {
 async function loadVisitorLocation() {
   try {
     visitorLocation.value = await fetchVisitorLocation();
-    visitorLocationStatus.value = visitorLocation.value.location_available ? "位置已同步" : "位置暂不可用";
+    visitorLocationStatus.value = visitorLocation.value.location_available
+      ? "位置已同步"
+      : "位置暂不可用";
   } catch {
     visitorLocationStatus.value = "位置查询失败";
   }
@@ -165,27 +169,11 @@ function startTypingCycle() {
       return;
     }
     typedCharacters.value += 1;
-    }, 130);
+  }, 130);
 }
 
 function handleScroll() {
   const currentY = window.scrollY;
-  const scrollingUp = currentY < lastScrollY;
-  navVisible.value = currentY < 24 || scrollingUp;
-
-  if (scrollingUp && currentY >= 24) {
-    navRevealing.value = true;
-    window.clearTimeout(navRevealTimer);
-    navRevealTimer = window.setTimeout(() => {
-      navRevealing.value = false;
-    }, 1200);
-  } else if (!scrollingUp) {
-    navRevealing.value = false;
-    window.clearTimeout(navRevealTimer);
-  }
-
-  lastScrollY = currentY;
-
   if (scrollFrame !== undefined) {
     return;
   }
@@ -247,59 +235,71 @@ function startLocationWatch() {
   );
 }
 
-onMounted(async () => {
+async function initializeHome() {
+  const session = ++homeSession;
   await loadSettings();
+  if (session !== homeSession || !isHome.value) return;
+
   void loadVisitorLocation();
   startTypingCycle();
   startLocationWatch();
+  await nextTick();
+  if (session !== homeSession || !isHome.value) return;
+
   observeSections();
   window.addEventListener("scroll", handleScroll, { passive: true });
   handleScroll();
-});
+}
 
-onBeforeUnmount(() => {
+function disposeHome() {
+  homeSession += 1;
   window.removeEventListener("scroll", handleScroll);
   window.clearInterval(quoteTimer);
   window.clearTimeout(switchTimer);
-  window.clearTimeout(navRevealTimer);
+  quoteTimer = undefined;
+  switchTimer = undefined;
   if (scrollFrame !== undefined) {
     window.cancelAnimationFrame(scrollFrame);
+    scrollFrame = undefined;
   }
   sectionObserver?.disconnect();
+  sectionObserver = undefined;
   if (locationWatchId !== undefined) {
     navigator.geolocation.clearWatch(locationWatchId);
+    locationWatchId = undefined;
   }
+}
+
+onMounted(() => {
+  if (isHome.value) {
+    void initializeHome();
+  }
+});
+
+watch(isHome, (home) => {
+  disposeHome();
+  if (home) {
+    void initializeHome();
+  }
+});
+
+onBeforeUnmount(() => {
+  disposeHome();
 });
 </script>
 
 <template>
-  <div v-if="route.path === '/'" class="page-shell">
+  <SiteNavigation :brand="isHome ? settings.nav_brand : undefined" />
+  <div v-if="isHome" class="page-shell">
     <div class="voyage-progress" aria-hidden="true">
       <span :style="{ transform: `scaleY(${scrollProgress})` }"></span>
     </div>
-    <header :class="['floating-nav', { hidden: !navVisible, revealing: navRevealing }]">
-      <a class="brand" href="#hero">{{ settings.nav_brand }}</a>
-      <nav aria-label="主导航">
-        <a href="#hero">首页</a>
-        <div class="article-nav-menu">
-          <button type="button" class="article-nav-trigger">
-            文章 <i class="iconfont article-nav-icon" aria-hidden="true">&#xe64e;</i>
-          </button>
-          <div class="article-nav-panel">
-            <a href="/articles?view=archive"><i class="nav-item-mark" aria-hidden="true"></i>归档</a>
-            <a href="/articles?view=tags"><i class="nav-item-mark" aria-hidden="true"></i>标签</a>
-            <a href="/articles?view=categories"><i class="nav-item-mark" aria-hidden="true"></i>分类</a>
-          </div>
-        </div>
-        <a href="#about">关于自己</a>
-        <a href="#timeline">航海日志</a>
-      </nav>
-    </header>
-
     <section
       id="hero"
       class="hero"
-      :style="{ backgroundImage: `linear-gradient(rgba(7, 18, 29, 0.38), rgba(7, 18, 29, 0.72)), url(${settings.hero_image_url})` }"
+      :style="{
+        backgroundImage: `linear-gradient(rgba(7, 18, 29, 0.38), rgba(7, 18, 29, 0.72)), url(${settings.hero_image_url})`,
+      }"
     >
       <div class="hero-atmosphere" aria-hidden="true"></div>
       <div class="hero-grain" aria-hidden="true"></div>
@@ -318,18 +318,11 @@ onBeforeUnmount(() => {
         <div class="hero-copy" :style="{ transform: `translate3d(0, ${heroParallax}px, 0)` }">
           <p class="hero-subtitle">{{ settings.site_subtitle }}</p>
           <div class="quote-box">
-            <p class="quote-line">
-              {{ typedQuote }}<span class="cursor">|</span>
-            </p>
+            <p class="quote-line">{{ typedQuote }}<span class="cursor">|</span></p>
             <p class="quote-author">{{ activeQuote.author }}</p>
           </div>
         </div>
-        <a
-          class="scroll-indicator"
-          href="#articles"
-          aria-label="继续往下看"
-          title="继续往下看"
-        >
+        <a class="scroll-indicator" href="#articles" aria-label="继续往下看" title="继续往下看">
           <span class="scroll-arrow" aria-hidden="true"></span>
         </a>
       </div>
@@ -338,7 +331,12 @@ onBeforeUnmount(() => {
     <main class="content-shell">
       <section
         id="articles"
-        :class="['content-section', 'deck-section', 'reveal-section', { visible: visibleSections.articles }]"
+        :class="[
+          'content-section',
+          'deck-section',
+          'reveal-section',
+          { visible: visibleSections.articles },
+        ]"
         data-reveal-section
       >
         <div class="section-heading">
@@ -356,22 +354,35 @@ onBeforeUnmount(() => {
             <p class="section-tag">{{ card.tag }}</p>
             <h3>{{ card.title }}</h3>
             <p>{{ card.text }}</p>
-            <a class="feature-card-link" href="/articles">打开文章归档 <span aria-hidden="true">↗</span></a>
+            <RouterLink
+              class="feature-card-link"
+              :to="{ path: '/articles', query: { view: 'archive' } }"
+            >
+              打开文章归档 <span aria-hidden="true">↗</span>
+            </RouterLink>
           </article>
         </div>
       </section>
 
       <section
         id="about"
-        :class="['content-section', 'split-section', 'reveal-section', { visible: visibleSections.about }]"
+        :class="[
+          'content-section',
+          'split-section',
+          'reveal-section',
+          { visible: visibleSections.about },
+        ]"
         data-reveal-section
       >
         <div class="about-copy">
-          <p class="section-tag">ONBOARD PROFILE</p>
-          <h2>一页可读的航行档案</h2>
+          <p class="section-tag">ABOUT ME</p>
+          <h2>关于我，不只是一份履历</h2>
           <p>
-            不展示冗长履历，而是把正在写什么、当前位置与站点状态压缩成几张可以快速读完的信息舱。
+            从正在做的事、走过的航迹到搭建本站的想法，完整档案已经整理成一页可以慢慢展开的个人海图。
           </p>
+          <RouterLink class="about-page-link" to="/about">
+            打开关于我 <span aria-hidden="true">↗</span>
+          </RouterLink>
         </div>
         <div class="identity-deck">
           <article class="profile-card info-card">
@@ -434,7 +445,12 @@ onBeforeUnmount(() => {
 
       <section
         id="timeline"
-        :class="['content-section', 'timeline-section', 'reveal-section', { visible: visibleSections.timeline }]"
+        :class="[
+          'content-section',
+          'timeline-section',
+          'reveal-section',
+          { visible: visibleSections.timeline },
+        ]"
         data-reveal-section
       >
         <div class="section-heading section-heading-compact">
@@ -450,7 +466,11 @@ onBeforeUnmount(() => {
       </section>
     </main>
   </div>
-  <router-view v-else />
+  <router-view v-else v-slot="{ Component }">
+    <KeepAlive include="ArticlesPage">
+      <component :is="Component" />
+    </KeepAlive>
+  </router-view>
 </template>
 
 <style scoped>
@@ -481,200 +501,6 @@ onBeforeUnmount(() => {
   transition: transform 0.15s linear;
 }
 
-.floating-nav {
-  position: fixed;
-  inset: 0 0 auto 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.1rem 2.4rem;
-  background: transparent;
-  isolation: isolate;
-  transition:
-    transform 0.75s cubic-bezier(0.22, 0.72, 0.25, 1),
-    opacity 0.75s ease;
-  will-change: transform, opacity;
-}
-
-.floating-nav::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(8, 22, 36, 0.72), rgba(8, 22, 36, 0.34)),
-    repeating-linear-gradient(168deg, transparent 0 9px, rgba(255, 255, 255, 0.045) 10px 11px, transparent 12px 20px);
-  backdrop-filter: blur(12px);
-  opacity: 0;
-}
-
-.floating-nav > * {
-  position: relative;
-  z-index: 1;
-}
-
-.floating-nav.revealing::before {
-  animation: nav-glass-fade 1.2s ease both;
-}
-
-.floating-nav.hidden {
-  opacity: 0;
-  transform: translateY(-110%);
-  pointer-events: none;
-}
-
-.brand,
-nav a,
-.article-nav-trigger {
-  color: #fff9ef;
-  text-decoration: none;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
-}
-
-.brand {
-  font-weight: 700;
-  font-size: 1rem;
-  letter-spacing: 0.04em;
-}
-
-nav {
-  display: flex;
-  align-items: center;
-  gap: 1.35rem;
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-nav > a,
-.article-nav-trigger {
-  position: relative;
-  padding-bottom: 0.45rem;
-}
-
-nav > a::before,
-.article-nav-trigger::before {
-  content: "";
-  position: absolute;
-  right: 50%;
-  bottom: 0;
-  left: 50%;
-  height: 2px;
-  background: #ffd36f;
-  box-shadow: 0 0 0.65rem rgba(255, 211, 111, 0.54);
-  transition:
-    left 0.28s cubic-bezier(0.2, 0.75, 0.28, 1),
-    right 0.28s cubic-bezier(0.2, 0.75, 0.28, 1);
-}
-
-nav > a:hover::before,
-nav > a:focus-visible::before,
-.article-nav-menu:hover .article-nav-trigger::before,
-.article-nav-menu:focus-within .article-nav-trigger::before {
-  right: 0;
-  left: 0;
-}
-
-nav > a:hover,
-nav > a:focus-visible,
-.article-nav-menu:hover .article-nav-trigger,
-.article-nav-menu:focus-within .article-nav-trigger {
-  color: #ffd36f;
-}
-
-.article-nav-menu {
-  position: relative;
-  cursor: pointer;
-}
-
-.article-nav-menu::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  right: -0.75rem;
-  left: -0.75rem;
-  height: 0.45rem;
-}
-
-.article-nav-menu * {
-  cursor: pointer;
-}
-
-.article-nav-trigger {
-  display: inline-flex;
-  align-items: center;
-  border: 0;
-  background: transparent;
-  font: inherit;
-}
-
-.article-nav-icon {
-  display: inline-block;
-  margin-left: 0.35rem;
-  color: currentColor;
-  font-size: 0.72rem;
-  line-height: 1;
-  transition: transform 0.28s cubic-bezier(0.2, 0.75, 0.28, 1);
-}
-
-.article-nav-menu:hover .article-nav-icon,
-.article-nav-menu:focus-within .article-nav-icon {
-  transform: rotate(180deg);
-}
-
-.article-nav-panel {
-  position: absolute;
-  top: calc(100% + 0.45rem);
-  left: 50%;
-  display: none;
-  grid-template-columns: repeat(3, auto);
-  gap: 0.2rem;
-  min-width: 14.5rem;
-  padding: 0.45rem;
-  border: 1px solid rgba(255, 249, 239, 0.14);
-  border-radius: 8px;
-  background:
-    linear-gradient(145deg, rgba(65, 146, 158, 0.24), transparent 60%),
-    rgba(8, 28, 43, 0.92);
-  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(14px);
-  transform: translateX(-50%);
-}
-
-.article-nav-menu:hover .article-nav-panel,
-.article-nav-menu:focus-within .article-nav-panel {
-  display: grid;
-  animation: article-menu-reveal 0.22s ease both;
-}
-
-.article-nav-panel a {
-  display: inline-flex;
-  gap: 0.38rem;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.15rem;
-  padding: 0.35rem 0.55rem;
-  border-radius: 5px;
-  color: rgba(255, 249, 239, 0.82);
-  font-size: 0.78rem;
-  text-shadow: none;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.article-nav-panel a:hover {
-  color: #ffd36f;
-  background: rgba(255, 211, 111, 0.12);
-}
-
-.nav-item-mark {
-  width: 0.4rem;
-  height: 0.4rem;
-  border: 1px solid #ffd36f;
-  border-radius: 50%;
-  box-shadow: 0 0 0.45rem rgba(255, 211, 111, 0.36);
-}
-
 .hero {
   position: relative;
   overflow: hidden;
@@ -691,9 +517,18 @@ nav > a:focus-visible,
   background:
     radial-gradient(circle at 50% 48%, rgba(255, 211, 111, 0.16), transparent 18rem),
     linear-gradient(116deg, transparent 20%, rgba(255, 211, 111, 0.1) 46%, transparent 66%),
-    repeating-linear-gradient(172deg, transparent 0 16px, rgba(255, 255, 255, 0.026) 17px 18px, transparent 19px 34px),
+    repeating-linear-gradient(
+      172deg,
+      transparent 0 16px,
+      rgba(255, 255, 255, 0.026) 17px 18px,
+      transparent 19px 34px
+    ),
     repeating-linear-gradient(88deg, transparent 0 58px, rgba(255, 255, 255, 0.03) 59px 60px);
-  background-size: 100% 100%, 220% 100%, 100% 100%, 100% 100%;
+  background-size:
+    100% 100%,
+    220% 100%,
+    100% 100%,
+    100% 100%;
   mix-blend-mode: screen;
   opacity: 0.65;
   animation: sea-glow 16s ease-in-out infinite alternate;
@@ -704,7 +539,11 @@ nav > a:focus-visible,
   inset: 0;
   pointer-events: none;
   opacity: 0.16;
-  background-image: repeating-radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.45) 0 1px, transparent 1px 3px);
+  background-image: repeating-radial-gradient(
+    circle at 0 0,
+    rgba(255, 255, 255, 0.45) 0 1px,
+    transparent 1px 3px
+  );
   background-size: 5px 5px;
   mix-blend-mode: soft-light;
   animation: grain-shift 0.28s steps(2) infinite;
@@ -1098,6 +937,27 @@ nav > a:focus-visible,
   padding-block: 1.2rem;
 }
 
+.about-page-link {
+  display: inline-flex;
+  gap: 0.7rem;
+  align-items: center;
+  margin-top: 1.2rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #ffd36f;
+  color: #ffd36f;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    color 180ms ease,
+    gap 180ms ease;
+}
+
+.about-page-link:hover,
+.about-page-link:focus-visible {
+  gap: 1rem;
+  color: #fff9ef;
+}
+
 .panel-kicker {
   margin: 0 0 1rem;
   color: #ffd36f;
@@ -1234,8 +1094,7 @@ nav > a:focus-visible,
   min-height: 18rem;
   padding: 1.5rem;
   background:
-    linear-gradient(150deg, rgba(65, 146, 158, 0.34), transparent 58%),
-    rgba(8, 28, 43, 0.86);
+    linear-gradient(150deg, rgba(65, 146, 158, 0.34), transparent 58%), rgba(8, 28, 43, 0.86);
 }
 
 .card-title-row {
@@ -1307,7 +1166,11 @@ nav > a:focus-visible,
   min-height: 7.8rem;
   padding: 1.35rem 1.5rem;
   background:
-    repeating-linear-gradient(90deg, transparent 0 1.7rem, rgba(255, 249, 239, 0.035) 1.7rem 1.76rem),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 1.7rem,
+      rgba(255, 249, 239, 0.035) 1.7rem 1.76rem
+    ),
     rgba(14, 39, 55, 0.76);
 }
 
@@ -1376,10 +1239,18 @@ nav > a:focus-visible,
 
 @keyframes sea-glow {
   from {
-    background-position: 0 0, 0% 0%, 0 0, 0 0;
+    background-position:
+      0 0,
+      0% 0%,
+      0 0,
+      0 0;
   }
   to {
-    background-position: 0 0, 100% 0%, 0 14px, 16px 0;
+    background-position:
+      0 0,
+      100% 0%,
+      0 14px,
+      16px 0;
   }
 }
 
@@ -1477,47 +1348,7 @@ nav > a:focus-visible,
   }
 }
 
-@keyframes nav-glass-fade {
-  0% {
-    opacity: 0;
-  }
-
-  18% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes article-menu-reveal {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -0.4rem);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-}
-
 @media (max-width: 900px) {
-  .floating-nav {
-    flex-direction: column;
-    gap: 0.9rem;
-    padding-inline: 1rem;
-  }
-
-  nav {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .article-nav-panel {
-    top: calc(100% + 0.45rem);
-  }
-
   .feature-grid,
   .split-section {
     grid-template-columns: 1fr;
@@ -1578,7 +1409,6 @@ nav > a:focus-visible,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .floating-nav::before,
   .hero-atmosphere,
   .hero-grain,
   .hero-route,
@@ -1588,10 +1418,6 @@ nav > a:focus-visible,
   .hero-copy > *,
   .scroll-arrow,
   .timeline-item span {
-    animation: none;
-  }
-
-  .article-nav-panel {
     animation: none;
   }
 

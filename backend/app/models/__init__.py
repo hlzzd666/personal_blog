@@ -1,4 +1,5 @@
 from .base import Base
-from .article import Article
+from .about_profile import AboutProfile
+from .article import Article, ArticleLikeRecord
 
-__all__ = ["Article", "Base"]
+__all__ = ["AboutProfile", "Article", "ArticleLikeRecord", "Base"]

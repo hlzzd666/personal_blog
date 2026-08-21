@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     cors_origins: str = ""
     trusted_proxy_ips: str = ""
     public_base_url: str = "http://127.0.0.1:8000"
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    article_list_cache_ttl: int = 300
+    article_visitor_identity_secret: str = "change-this-development-visitor-identity-secret"
 
     model_config = SettingsConfigDict(env_file="backend/.env", extra="ignore")
 

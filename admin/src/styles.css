@@ -568,6 +568,27 @@ body {
   border-color: var(--admin-border);
 }
 
+.markdown-field-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.markdown-field-label .el-button {
+  height: auto;
+  margin-left: 0.25rem;
+  padding: 0;
+}
+
+.markdown-import-input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .drawer-actions {
   display: flex;
   justify-content: flex-end;
@@ -615,6 +636,231 @@ body {
   min-height: 360px;
 }
 
+.about-admin-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 64px;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 12px 34px rgba(14, 28, 43, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.about-save-status {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  color: var(--admin-muted);
+  font-size: 0.84rem;
+}
+
+.about-save-status .el-icon {
+  flex: 0 0 auto;
+  color: #3d9266;
+}
+
+.about-editor-tabs > .el-tabs__header {
+  margin-bottom: 1rem;
+  padding: 0 0.4rem;
+}
+
+.about-editor-tabs .el-tabs__item {
+  height: 44px;
+  font-weight: 700;
+}
+
+.about-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.about-form-grid-profile {
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+
+.about-form-section {
+  min-width: 0;
+  margin-bottom: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: var(--admin-surface);
+  box-shadow: 0 16px 46px rgba(14, 28, 43, 0.06);
+}
+
+.about-section-heading,
+.about-repeat-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.about-section-heading {
+  margin-bottom: 1.2rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #e4eaf0;
+}
+
+.about-section-heading h3,
+.about-repeat-title strong {
+  margin: 0;
+  color: var(--admin-ink);
+}
+
+.about-section-heading h3 {
+  font-size: 1rem;
+}
+
+.about-section-heading p {
+  margin: 0.35rem 0 0;
+  color: var(--admin-muted);
+  font-size: 0.8rem;
+}
+
+.about-field-pair,
+.about-field-triple {
+  display: grid;
+  gap: 1rem;
+}
+
+.about-field-pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.about-field-triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.about-form-section .el-select,
+.about-form-section .el-input-number {
+  width: 100%;
+}
+
+.about-avatar-editor {
+  display: grid;
+  gap: 1rem;
+}
+
+.about-avatar-editor > img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #e7edf2;
+}
+
+.about-metric-editor {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.about-metric-item {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr auto;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.7rem;
+  border: 1px solid #e2e9ef;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.about-repeat-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.about-repeat-item {
+  padding: 1rem;
+  border: 1px solid #dfe7ed;
+  border-radius: 8px;
+  background: #fafcfd;
+}
+
+.about-repeat-item-compact {
+  background: #f8fafc;
+}
+
+.about-skill-editor-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.about-skill-editor-item {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: center;
+  padding: 0.8rem;
+  border: 1px solid #dfe7ed;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.about-skill-editor-item .el-form-item {
+  margin-bottom: 0;
+}
+
+.about-skill-icon-editor {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: center;
+}
+
+.about-skill-icon-editor > small {
+  color: var(--admin-muted);
+  font-size: 0.72rem;
+}
+
+.about-skill-icon-editor img,
+.about-skill-icon-editor > span {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 1px solid #dbe4ea;
+  border-radius: 8px;
+  color: var(--admin-muted);
+  background: #fff;
+  object-fit: contain;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.about-skill-icon-editor .el-button {
+  width: 100%;
+}
+
+.about-repeat-title {
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.about-repeat-title strong {
+  font-size: 0.9rem;
+}
+
+.about-order-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.about-site-editor {
+  max-width: 980px;
+}
+
 .el-button--primary {
   --el-button-bg-color: #173959;
   --el-button-border-color: #173959;
@@ -647,7 +893,32 @@ body {
 
   .workspace-shell {
     grid-column: auto;
+    min-width: 0;
     padding: 1rem 1rem 3rem;
+  }
+
+  .page-stack,
+  .about-admin-page,
+  .about-editor-tabs,
+  .about-editor-tabs > .el-tabs__header,
+  .about-editor-tabs .el-tabs__nav-wrap {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .about-editor-tabs > .el-tabs__header,
+  .about-editor-tabs .el-tabs__nav-wrap {
+    overflow: hidden;
+  }
+
+  .about-editor-tabs .el-tabs__nav-scroll {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .about-editor-tabs .el-tabs__nav-scroll::-webkit-scrollbar {
+    display: none;
   }
 
   .sidebar-brand {
@@ -676,7 +947,10 @@ body {
   }
 
   .settings-grid,
-  .dashboard-module-grid {
+  .dashboard-module-grid,
+  .about-form-grid,
+  .about-form-grid-profile,
+  .about-metric-editor {
     grid-template-columns: 1fr;
   }
 
@@ -700,6 +974,11 @@ body {
     gap: 0;
   }
 
+  .about-field-triple {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
   .page-header {
     display: block;
   }
@@ -711,5 +990,31 @@ body {
 
   .login-panel-wrap {
     padding: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .about-admin-toolbar,
+  .about-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .about-field-pair {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .about-skill-editor-item {
+    grid-template-columns: 82px minmax(0, 1fr);
+  }
+
+  .about-skill-editor-item > .about-order-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .about-save-status span {
+    overflow-wrap: anywhere;
   }
 }
