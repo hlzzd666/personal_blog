@@ -37,6 +37,13 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 const CSRF_COOKIE_NAME = "personal_blog_admin_csrf";
 const CSRF_HEADER_NAME = "X-CSRF-Token";
 const CSRF_METHODS = new Set(["post", "put", "patch", "delete"]);
+function createRequestId() {
+    const randomUuid = globalThis.crypto?.randomUUID;
+    if (typeof randomUuid === "function") {
+        return randomUuid.call(globalThis.crypto);
+    }
+    return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
 export const http = axios.create({
     baseURL: API_BASE,
     timeout: 10000,
@@ -53,7 +60,7 @@ function readCookie(name) {
 http.interceptors.request.use((config) => {
     const headers = config.headers;
     if (!headers.get("X-Request-Id")) {
-        headers.set("X-Request-Id", crypto.randomUUID());
+        headers.set("X-Request-Id", createRequestId());
     }
     const method = config.method?.toLowerCase() ?? "get";
     const csrfToken = readCookie(CSRF_COOKIE_NAME);

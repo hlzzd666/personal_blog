@@ -69,6 +69,9 @@ npm run dev:admin
 
 ## 部署备注
 
+需要将当前项目打包、上传并更新到服务器时，请阅读简明教程：
+[`docs/deployment-guide.zh-CN.md`](docs/deployment-guide.zh-CN.md)。
+
 ### 上传目录持久化
 
 生产环境不要把上传文件长期放在代码发布目录里。后端已支持通过 `UPLOAD_DIR` 指定真实上传目录，本地默认值仍是 `backend/uploads`。

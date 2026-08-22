@@ -34,6 +34,13 @@ export class ApiError extends Error {
     }
 }
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+function createRequestId() {
+    const randomUuid = globalThis.crypto?.randomUUID;
+    if (typeof randomUuid === "function") {
+        return randomUuid.call(globalThis.crypto);
+    }
+    return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
 export const http = axios.create({
     baseURL: API_BASE,
     timeout: 10000,
@@ -41,7 +48,7 @@ export const http = axios.create({
 http.interceptors.request.use((config) => {
     const headers = config.headers;
     if (!headers.get("X-Request-Id")) {
-        headers.set("X-Request-Id", crypto.randomUUID());
+        headers.set("X-Request-Id", createRequestId());
     }
     return config;
 });
