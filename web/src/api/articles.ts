@@ -26,11 +26,28 @@ export type ArticlePayload = Omit<Article, "id" | "created_at" | "updated_at" | 
   likes?: number;
 };
 
+export type ArticleCountItem = {
+  name: string;
+  count: number;
+};
+
+export type ArticleMonthCount = {
+  key: string;
+  count: number;
+};
+
+export type ArticleListStats = {
+  categories: ArticleCountItem[];
+  tags: ArticleCountItem[];
+  months: ArticleMonthCount[];
+};
+
 export type ArticleList = {
   items: Article[];
   total: number;
   page: number;
   page_size: number;
+  stats: ArticleListStats;
 };
 
 export function fetchArticles(params: Record<string, string | number | undefined> = {}) {

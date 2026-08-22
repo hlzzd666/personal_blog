@@ -11,7 +11,8 @@ from .core.response import build_success_response
 
 app = FastAPI(title=settings.app_name, version="0.1.0", debug=settings.debug)
 
-app.mount("/uploads", StaticFiles(directory="backend/uploads", check_dir=False), name="uploads")
+settings.upload_path.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.upload_path), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,

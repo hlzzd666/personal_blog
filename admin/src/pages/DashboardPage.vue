@@ -4,7 +4,7 @@ import { Calendar, DataLine, EditPen, MagicStick } from "@element-plus/icons-vue
 import PageHeader from "../components/PageHeader.vue";
 
 const summaryCards = [
-  { title: "首页视觉", value: "01", description: "当前已接入欢迎页配置和名句轮播", icon: MagicStick },
+  { title: "页面视觉", value: "01", description: "当前已接入文章列表页视觉配置和名句轮播", icon: MagicStick },
   { title: "文章模块", value: "04", description: "已预留列表、编辑、标签、分类扩展位", icon: EditPen },
   { title: "内容计划", value: "03", description: "媒体、关于自己、系统设置待继续落地", icon: DataLine },
   { title: "上线节奏", value: "本周", description: "建议优先补文章管理和图片上传", icon: Calendar },
@@ -12,7 +12,7 @@ const summaryCards = [
 
 const todoList = [
   "接入文章列表与文章编辑页",
-  "把首页封面图 URL 升级成图片上传",
+  "把文章列表页视觉资产做成可运营配置",
   "补齐关于自己模块的数据表单",
   "增加系统设置与操作日志入口",
 ];
@@ -57,7 +57,7 @@ const todoList = [
             </div>
             <div class="dashboard-module-item">
               <h3>站点设置</h3>
-              <p>首页欢迎页、封面图、品牌名与名句轮播配置。</p>
+              <p>站点基础信息、封面图、文章列表页视觉层与名句轮播配置。</p>
             </div>
             <div class="dashboard-module-item">
               <h3>文章管理</h3>

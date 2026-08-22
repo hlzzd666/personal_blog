@@ -5,7 +5,19 @@ import { computed, onMounted, ref } from "vue";
 
 import { fetchSiteSettings, updateSiteSettings, uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
-import type { QuoteItem, SiteSettings } from "../types/site";
+import type { QuoteItem, SiteSettings, VisualAssetItem } from "../types/site";
+
+function createVisualAssetDraft(): VisualAssetItem {
+  return {
+    key: "article_list_background",
+    name: "文章列表页背景",
+    usage: "background",
+    image_url: "",
+    enabled: false,
+    opacity: 0.68,
+    note: "用于文章列表页背景，建议上传清晰横图。",
+  };
+}
 
 const form = ref<SiteSettings>({
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
@@ -15,16 +27,33 @@ const form = ref<SiteSettings>({
   owner_location_name: "未设置站长地址",
   owner_latitude: null,
   owner_longitude: null,
+  visual_assets: [createVisualAssetDraft()],
   quotes: [],
 });
-const statusText = ref("正在读取首页配置...");
+const statusText = ref("正在读取站点设置...");
 const saving = ref(false);
 const quoteDraft = ref("");
 const avatarInput = ref<HTMLInputElement | null>(null);
 const heroInput = ref<HTMLInputElement | null>(null);
-const uploadingImage = ref<"avatar" | "hero" | "">("");
+const visualAssetInputs = ref<Array<HTMLInputElement | null>>([]);
+const uploadingImage = ref<"avatar" | "hero" | `asset-${number}` | "">("");
 
 const previewQuotes = computed(() => quoteDraft.value.split("\n").filter(Boolean).slice(0, 3));
+const previewVisualAssets = computed(() =>
+  form.value.visual_assets.filter((asset) => asset.image_url).slice(0, 4),
+);
+
+function normalizeVisualAssets(assets: VisualAssetItem[]) {
+  const backgroundAssets = assets.filter((asset) => asset.usage === "background");
+  const normalizedAssets = backgroundAssets.length ? backgroundAssets : [createVisualAssetDraft()];
+  return normalizedAssets.map((asset, index) => ({
+    ...asset,
+    key: asset.key || (index === 0 ? "article_list_background" : `asset_${Date.now()}_${index}`),
+    name: asset.name || "文章列表页背景",
+    usage: "background" as const,
+    opacity: Number.isFinite(asset.opacity) ? asset.opacity : 0.68,
+  }));
+}
 
 function formatQuotes(quotes: QuoteItem[]) {
   quoteDraft.value = quotes
@@ -46,6 +75,29 @@ function parseQuotes(): QuoteItem[] {
 function openImagePicker(type: "avatar" | "hero") {
   const input = type === "avatar" ? avatarInput.value : heroInput.value;
   input?.click();
+}
+
+function setVisualAssetInputRef(index: number, element: HTMLInputElement | null) {
+  visualAssetInputs.value[index] = element;
+}
+
+function openVisualAssetPicker(index: number) {
+  visualAssetInputs.value[index]?.click();
+}
+
+function addVisualAsset() {
+  form.value.visual_assets.push({
+    ...createVisualAssetDraft(),
+    key: `asset_${Date.now()}`,
+    name: "新的背景图",
+  });
+}
+
+function removeVisualAsset(index: number) {
+  form.value.visual_assets.splice(index, 1);
+  if (!form.value.visual_assets.length) {
+    form.value.visual_assets.push(createVisualAssetDraft());
+  }
 }
 
 async function handleImageSelected(type: "avatar" | "hero", event: Event) {
@@ -80,12 +132,46 @@ async function handleImageSelected(type: "avatar" | "hero", event: Event) {
   }
 }
 
+async function handleVisualAssetImageSelected(index: number, event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) {
+    return;
+  }
+  if (!file.type.startsWith("image/")) {
+    ElMessage.error("请选择图片文件");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error("图片大小不能超过 10 MB");
+    return;
+  }
+
+  uploadingImage.value = `asset-${index}`;
+  try {
+    const result = await uploadImage(file);
+    form.value.visual_assets[index].image_url = result.url;
+    if (!form.value.visual_assets[index].name || form.value.visual_assets[index].name === "新的视觉资产") {
+      form.value.visual_assets[index].name = "已上传视觉资产";
+    }
+    ElMessage.success("图片上传成功，请保存配置");
+  } catch {
+    ElMessage.error("图片上传失败，请稍后重试");
+  } finally {
+    uploadingImage.value = "";
+  }
+}
+
 async function loadSettings() {
   try {
     const payload = await fetchSiteSettings();
-    form.value = payload;
+    form.value = {
+      ...payload,
+      visual_assets: normalizeVisualAssets(payload.visual_assets),
+    };
     formatQuotes(payload.quotes);
-    statusText.value = "首页配置已加载，可直接修改。";
+    statusText.value = "站点设置已加载，可直接修改文章列表页视觉层。";
   } catch {
     statusText.value = "读取失败，请确认后端服务已启动。";
   }
@@ -93,19 +179,20 @@ async function loadSettings() {
 
 async function saveSettings() {
   saving.value = true;
-  statusText.value = "正在保存首页配置...";
+  statusText.value = "正在保存站点设置...";
 
   try {
     const payload: SiteSettings = {
       ...form.value,
       quotes: parseQuotes(),
+      visual_assets: normalizeVisualAssets(form.value.visual_assets),
     };
 
     const nextValue = await updateSiteSettings(payload);
     form.value = nextValue;
     formatQuotes(nextValue.quotes);
-    statusText.value = "保存成功，前台刷新后即可看到新的封面图和语录。";
-    ElMessage.success("首页配置已保存");
+    statusText.value = "保存成功，前台刷新后即可看到新的文章列表页视觉层。";
+    ElMessage.success("站点设置已保存");
   } catch {
     statusText.value = "保存失败，请检查语录格式是否为：角色|台词";
     ElMessage.error("保存失败，请检查语录格式");
@@ -123,8 +210,8 @@ onMounted(() => {
   <div class="page-stack">
     <PageHeader
       eyebrow="SITE SETTINGS"
-      title="首页欢迎页配置"
-      description="这里管理首屏大图、副标题、导航品牌和经典语句轮播。"
+      title="站点设置"
+      description="这里管理站点基础信息，并维护文章列表页可复用的视觉层资源。"
     />
 
     <div class="status-panel">
@@ -136,7 +223,7 @@ onMounted(() => {
       <el-card shadow="never" class="form-card">
         <template #header>
           <div class="panel-header">
-            <span>欢迎页内容</span>
+            <span>站点基础内容</span>
             <el-tag type="warning">可运营配置</el-tag>
           </div>
         </template>
@@ -209,9 +296,9 @@ onMounted(() => {
           </div>
           <p class="coordinate-hint">经纬度会在后端用于计算访客与站长的直线距离，前台不会展示坐标原值。</p>
 
-          <el-form-item label="首页封面图">
+          <el-form-item label="站点封面图">
             <div class="image-picker image-picker-hero">
-              <img :src="form.hero_image_url" alt="首页封面图" />
+              <img :src="form.hero_image_url" alt="站点封面图" />
               <div class="image-picker-overlay">
                 <input
                   ref="heroInput"
@@ -233,6 +320,73 @@ onMounted(() => {
             <span class="image-picker-hint">建议使用横向图片，上传后点击底部按钮保存。</span>
           </el-form-item>
 
+          <el-form-item label="文章列表页视觉资产">
+            <div class="visual-assets-panel">
+              <div class="visual-assets-header">
+                <div>
+                  <strong>文章列表页背景图</strong>
+                  <span>只维护背景图，前台文章列表页会读取第一张启用图片。</span>
+                </div>
+                <el-button type="primary" plain @click="addVisualAsset">添加资产</el-button>
+              </div>
+
+              <div v-for="(asset, index) in form.visual_assets" :key="asset.key" class="visual-asset-card">
+                <div class="visual-asset-preview" :style="{ backgroundImage: asset.image_url ? `url(${asset.image_url})` : 'none' }">
+                  <span :class="['visual-asset-state', { muted: !asset.enabled }]">
+                    {{ asset.enabled ? "启用" : "停用" }}
+                  </span>
+                </div>
+                <div class="visual-asset-form">
+                  <div class="visual-asset-grid">
+                    <el-input v-model="asset.key" placeholder="key，例如 article_list_background" />
+                    <el-input v-model="asset.name" placeholder="名称，例如 文章列表页背景" />
+                    <el-input model-value="背景图" disabled />
+                  </div>
+                  <div class="visual-asset-grid visual-asset-grid-secondary">
+                    <el-input v-model="asset.image_url" placeholder="图片地址或上传后自动回填" />
+                    <el-input-number
+                      v-model="asset.opacity"
+                      :min="0"
+                      :max="1"
+                      :step="0.05"
+                      :precision="2"
+                      controls-position="right"
+                      placeholder="透明度"
+                    />
+                    <el-switch v-model="asset.enabled" active-text="启用" inactive-text="停用" />
+                  </div>
+                  <el-input
+                    v-model="asset.note"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="备注，例如：用于文章列表页的清晰背景图"
+                  />
+                  <div class="visual-asset-actions">
+                    <input
+                      :ref="(el) => setVisualAssetInputRef(index, el as HTMLInputElement | null)"
+                      class="image-picker-input"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      @change="handleVisualAssetImageSelected(index, $event)"
+                    />
+                    <el-button
+                      type="primary"
+                      plain
+                      :loading="uploadingImage === `asset-${index}`"
+                      @click="openVisualAssetPicker(index)"
+                    >
+                      <el-icon><Upload /></el-icon>
+                      上传图片
+                    </el-button>
+                    <el-button type="danger" plain @click="removeVisualAsset(index)">
+                      删除
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-form-item>
+
           <el-form-item label="经典语句">
             <el-input
               v-model="quoteDraft"
@@ -243,7 +397,7 @@ onMounted(() => {
           </el-form-item>
 
           <el-button type="primary" size="large" :loading="saving" @click="saveSettings">
-            保存首页配置
+            保存设置
           </el-button>
         </el-form>
       </el-card>
@@ -264,6 +418,26 @@ onMounted(() => {
             <ul>
               <li v-for="line in previewQuotes" :key="line">{{ line }}</li>
             </ul>
+          </div>
+        </div>
+
+        <div class="preview-asset-strip">
+          <div class="panel-header">
+            <span>文章列表页背景图预览</span>
+            <el-tag effect="plain">{{ previewVisualAssets.length }} 项已配置</el-tag>
+          </div>
+          <div class="preview-asset-grid">
+            <article
+              v-for="asset in previewVisualAssets"
+              :key="asset.key"
+              class="preview-asset-card"
+              :style="{ backgroundImage: `url(${asset.image_url})` }"
+            >
+              <div class="preview-asset-shade">
+                <strong>{{ asset.name }}</strong>
+                <span>{{ asset.key }}</span>
+              </div>
+            </article>
           </div>
         </div>
       </el-card>

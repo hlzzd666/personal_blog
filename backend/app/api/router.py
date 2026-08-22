@@ -3,12 +3,14 @@ from hashlib import sha256
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.core.response import build_success_response
 from backend.app.core.config import settings
+from backend.app.schemas.auth import AdminLoginRequest, AdminSessionResponse
 from backend.app.schemas.about_profile import AboutProfileResponse, AboutProfileUpdate
 from backend.app.schemas.common import ApiResponse
 from backend.app.schemas.site_settings import SiteSettings, SiteSettingsUpdate
@@ -24,6 +26,7 @@ from backend.app.schemas.article import (
     ArticleResponse,
     ArticleUpdate,
 )
+from backend.app.schemas.media import MediaCleanupResponse, MediaListResponse
 from backend.app.services.articles import (
     create_article,
     delete_article,
@@ -38,15 +41,26 @@ from backend.app.services.about_profile import (
     serialize_about_profile,
     update_about_profile,
 )
+from backend.app.services.auth import (
+    authenticate_admin,
+    create_admin_session,
+    delete_admin_session,
+    require_admin_session,
+)
+from backend.app.services.media import cleanup_unreferenced_media_files, list_media_files
 
 router = APIRouter()
 
 MAX_IMAGE_SIZE = 10 * 1024 * 1024
+MAX_RESUME_SIZE = 20 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
+}
+ALLOWED_RESUME_TYPES = {
+    "application/pdf": ".pdf",
 }
 
 
@@ -57,12 +71,48 @@ class ImageUploadResult(BaseModel):
     size: int
 
 
+class FileUploadResult(ImageUploadResult):
+    original_filename: str
+
+
 @router.get("/health", tags=["system"], response_model=ApiResponse[dict[str, str]])
 def health_check(request: Request) -> ApiResponse[dict[str, str]]:
     return build_success_response(
         request,
         {"status": "ok", "service": "personal-blog-api"},
     )
+
+
+@router.post("/auth/login", tags=["auth"], response_model=ApiResponse[AdminSessionResponse])
+def login_admin(
+    request: Request,
+    response: Response,
+    payload: AdminLoginRequest,
+) -> ApiResponse[AdminSessionResponse]:
+    authenticate_admin(payload.username, payload.password)
+    return build_success_response(
+        request,
+        create_admin_session(response, payload.username),
+        message="登录成功",
+    )
+
+
+@router.get("/auth/me", tags=["auth"], response_model=ApiResponse[AdminSessionResponse])
+def read_current_admin(
+    request: Request,
+    admin_session: AdminSessionResponse = Depends(require_admin_session),
+) -> ApiResponse[AdminSessionResponse]:
+    return build_success_response(request, admin_session)
+
+
+@router.post("/auth/logout", tags=["auth"], response_model=ApiResponse[dict[str, bool]])
+def logout_admin(
+    request: Request,
+    response: Response,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+) -> ApiResponse[dict[str, bool]]:
+    delete_admin_session(request, response)
+    return build_success_response(request, {"logged_out": True}, message="已退出登录")
 
 
 def get_client_ip(request: Request) -> str:
@@ -113,7 +163,9 @@ def read_site_settings(request: Request) -> ApiResponse[SiteSettings]:
 
 @router.put("/site-settings", tags=["site"], response_model=ApiResponse[SiteSettings])
 def write_site_settings(
-    request: Request, payload: SiteSettingsUpdate
+    request: Request,
+    payload: SiteSettingsUpdate,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
 ) -> ApiResponse[SiteSettings]:
     return build_success_response(request, update_site_settings(payload))
 
@@ -130,10 +182,58 @@ def read_about_profile(
 def write_about_profile(
     request: Request,
     payload: AboutProfileUpdate,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
     session: Session = Depends(get_db_session),
 ) -> ApiResponse[AboutProfileResponse]:
     profile = update_about_profile(session, payload)
     return build_success_response(request, serialize_about_profile(profile), message="关于我资料已保存")
+
+
+@router.get("/media/resumes/{filename}", tags=["media"])
+def download_resume(
+    filename: str,
+    session: Session = Depends(get_db_session),
+) -> FileResponse:
+    if Path(filename).name != filename:
+        raise HTTPException(status_code=404, detail="简历不存在")
+
+    profile = get_about_profile(session)
+    expected_suffix = f"/uploads/resumes/{filename}"
+    if not profile.resume_url or not profile.resume_url.endswith(expected_suffix):
+        raise HTTPException(status_code=404, detail="简历不存在")
+
+    resume_path = settings.upload_path / "resumes" / filename
+    if not resume_path.is_file():
+        raise HTTPException(status_code=404, detail="简历不存在")
+
+    return FileResponse(
+        resume_path,
+        media_type="application/pdf",
+        filename=profile.resume_filename or "resume.pdf",
+    )
+
+
+@router.get("/media/files", tags=["media"], response_model=ApiResponse[MediaListResponse])
+def read_media_files(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[MediaListResponse]:
+    return build_success_response(request, list_media_files(session))
+
+
+@router.delete(
+    "/media/files/unreferenced",
+    tags=["media"],
+    response_model=ApiResponse[MediaCleanupResponse],
+)
+def delete_unreferenced_media_files(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[MediaCleanupResponse]:
+    cleanup_result = cleanup_unreferenced_media_files(session)
+    return build_success_response(request, cleanup_result, message="未引用文件已清理")
 
 
 @router.get("/articles", tags=["articles"], response_model=ApiResponse[ArticleListResponse])
@@ -172,6 +272,7 @@ def read_manage_articles(
     category: str | None = None,
     tag: str | None = None,
     search: str | None = None,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
     session: Session = Depends(get_db_session),
 ) -> ApiResponse[ArticleListResponse]:
     article_list, cache_status = get_article_list_response(
@@ -235,6 +336,7 @@ def like_public_article(
 def create_manage_article(
     request: Request,
     payload: ArticleCreate,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
     session: Session = Depends(get_db_session),
 ) -> ApiResponse[ArticleResponse]:
     try:
@@ -249,6 +351,7 @@ def update_manage_article(
     request: Request,
     article_id: int,
     payload: ArticleUpdate,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
     session: Session = Depends(get_db_session),
 ) -> ApiResponse[ArticleResponse]:
     article = get_article(session, article_id)
@@ -265,6 +368,7 @@ def update_manage_article(
 def delete_manage_article(
     request: Request,
     article_id: int,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
     session: Session = Depends(get_db_session),
 ) -> ApiResponse[dict[str, int]]:
     article = get_article(session, article_id)
@@ -281,13 +385,14 @@ def delete_manage_article(
 )
 async def upload_image(
     request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
     file: UploadFile = File(...),
 ) -> ApiResponse[ImageUploadResult]:
     extension = ALLOWED_IMAGE_TYPES.get(file.content_type or "")
     if extension is None:
         raise HTTPException(status_code=415, detail="仅支持 JPG、PNG、WEBP 或 GIF 图片")
 
-    upload_dir = Path("backend/uploads")
+    upload_dir = settings.upload_path
     upload_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid4().hex}{extension}"
     destination = upload_dir / filename
@@ -311,3 +416,47 @@ async def upload_image(
         size=size,
     )
     return build_success_response(request, result, message="图片上传成功")
+
+
+@router.post(
+    "/media/resumes",
+    tags=["media"],
+    response_model=ApiResponse[FileUploadResult],
+)
+async def upload_resume(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    file: UploadFile = File(...),
+) -> ApiResponse[FileUploadResult]:
+    filename_lower = (file.filename or "").lower()
+    extension = ALLOWED_RESUME_TYPES.get(file.content_type or "")
+    if extension is None and filename_lower.endswith(".pdf"):
+        extension = ".pdf"
+    if extension is None:
+        raise HTTPException(status_code=415, detail="仅支持 PDF 简历")
+
+    upload_dir = settings.upload_path / "resumes"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid4().hex}{extension}"
+    destination = upload_dir / filename
+    size = 0
+
+    try:
+        with destination.open("wb") as target:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_RESUME_SIZE:
+                    destination.unlink(missing_ok=True)
+                    raise HTTPException(status_code=413, detail="简历大小不能超过 20 MB")
+                target.write(chunk)
+    finally:
+        await file.close()
+
+    result = FileUploadResult(
+        url=f"{settings.public_base_url.rstrip('/')}/uploads/resumes/{filename}",
+        filename=filename,
+        original_filename=file.filename or "resume.pdf",
+        content_type="application/pdf",
+        size=size,
+    )
+    return build_success_response(request, result, message="简历上传成功")

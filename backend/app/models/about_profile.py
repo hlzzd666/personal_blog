@@ -15,6 +15,8 @@ class AboutProfile(Base):
     headline: Mapped[str] = mapped_column(String(160))
     bio: Mapped[str] = mapped_column(Text)
     avatar_url: Mapped[str] = mapped_column(String(2048))
+    resume_url: Mapped[str] = mapped_column(String(2048), default="")
+    resume_filename: Mapped[str] = mapped_column(String(255), default="")
     status_text: Mapped[str] = mapped_column(String(100))
     email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     location_name: Mapped[str] = mapped_column(String(100))

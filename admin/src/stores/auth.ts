@@ -1,62 +1,73 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
-import { ADMIN_CREDENTIALS, AUTH_STORAGE_KEY } from "../constants/auth";
+import { fetchCurrentAdmin, loginAdmin, logoutAdmin, type AdminLoginPayload } from "../api/auth";
 
 type AuthSession = {
   username: string;
   loggedInAt: string;
+  expiresAt: string;
 };
 
-function readSession(): AuthSession | null {
-  const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(raw) as AuthSession;
-  } catch {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    return null;
-  }
-}
-
-export function hasAuthSession() {
-  return Boolean(readSession());
-}
-
 export const useAuthStore = defineStore("auth", () => {
-  const session = ref<AuthSession | null>(readSession());
+  const session = ref<AuthSession | null>(null);
+  const initialized = ref(false);
 
   const isAuthenticated = computed(() => Boolean(session.value));
   const username = computed(() => session.value?.username ?? "");
 
-  function login(payload: { username: string; password: string }) {
-    if (
-      payload.username !== ADMIN_CREDENTIALS.username ||
-      payload.password !== ADMIN_CREDENTIALS.password
-    ) {
-      throw new Error("账号或密码错误");
-    }
-
+  function setSession(payload: { username: string; logged_in_at: string; expires_at: string }) {
     session.value = {
       username: payload.username,
-      loggedInAt: new Date().toISOString(),
+      loggedInAt: payload.logged_in_at,
+      expiresAt: payload.expires_at,
     };
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session.value));
+    initialized.value = true;
   }
 
-  function logout() {
+  function clearSession() {
     session.value = null;
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+    initialized.value = true;
+  }
+
+  async function refreshSession() {
+    try {
+      setSession(await fetchCurrentAdmin());
+      return true;
+    } catch {
+      clearSession();
+      return false;
+    }
+  }
+
+  async function login(payload: AdminLoginPayload) {
+    setSession(await loginAdmin(payload));
+  }
+
+  async function logout() {
+    try {
+      await logoutAdmin();
+    } finally {
+      clearSession();
+    }
   }
 
   return {
     session,
+    initialized,
     username,
     isAuthenticated,
+    clearSession,
+    refreshSession,
     login,
     logout,
   };
 });
+
+export async function hasAuthSession() {
+  const authStore = useAuthStore();
+  if (authStore.isAuthenticated) {
+    return true;
+  }
+  return authStore.refreshSession();
+}

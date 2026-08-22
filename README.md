@@ -36,6 +36,7 @@
 .\.venv\Scripts\Activate.ps1
 pip install -r backend\requirements.txt
 Copy-Item backend\.env.example backend\.env
+python backend\scripts\generate_password_hash.py
 alembic -c backend\alembic.ini upgrade head
 npm run dev:backend
 ```
@@ -43,6 +44,9 @@ npm run dev:backend
 API 文档地址：`http://127.0.0.1:8000/docs`
 
 开发模式下，后端默认开启 `--reload`，修改 `backend/` 下的 Python 代码后会自动重启服务。
+
+后台管理接口需要服务端登录态。复制 `.env.example` 后，把脚本生成的哈希写入
+`backend/.env` 的 `ADMIN_PASSWORD_HASH`，并按需调整 `ADMIN_USERNAME`。
 
 ### 3. 启动前台或后台
 
@@ -52,6 +56,9 @@ npm run dev:web
 npm run dev:admin
 ```
 
+后台 API 地址通过 `admin` 应用的 `VITE_API_BASE_URL` 配置，生产默认可使用同源
+`/api/v1`，本地前后端分端口运行时可设置为 `http://127.0.0.1:8000/api/v1`。
+
 “关于我”页面的高德地图使用前台环境变量加载。需要真实地图时先复制 `web/.env.example` 为
 `web/.env.local`，再填写高德开放平台的 Web 端 JS API Key 与安全密钥；城市名称和坐标仍在
 管理后台的“关于我”模块维护。
@@ -59,6 +66,34 @@ npm run dev:admin
 ## 当前范围
 
 本次只完成项目初始化、基础健康检查接口、数据库连接/迁移链路和前后台入口。首页、文章、关于自己、登录、文章编辑等具体业务模块，先按照 `docs/module-discussion.md` 逐项讨论后再实现。
+
+## 部署备注
+
+### 上传目录持久化
+
+生产环境不要把上传文件长期放在代码发布目录里。后端已支持通过 `UPLOAD_DIR` 指定真实上传目录，本地默认值仍是 `backend/uploads`。
+
+服务器部署时建议创建代码目录外的持久化目录：
+
+```bash
+sudo mkdir -p /data/personal_blog/uploads/resumes
+sudo chown -R <运行后端的用户>:<运行后端的用户> /data/personal_blog/uploads
+```
+
+然后在服务器 `backend/.env` 中配置：
+
+```env
+UPLOAD_DIR=/data/personal_blog/uploads
+PUBLIC_BASE_URL=https://你的域名
+```
+
+如果部署前本地或旧服务器已有上传文件，需要先迁移：
+
+```bash
+cp -a backend/uploads/. /data/personal_blog/uploads/
+```
+
+`/data/personal_blog/uploads` 需要纳入服务器备份；后续发布代码、重新解压或拉取仓库时，不要删除这个目录。
 
 ## 协作规范
 

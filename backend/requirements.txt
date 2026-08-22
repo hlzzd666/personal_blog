@@ -4,5 +4,6 @@ pydantic-settings==2.10.1
 sqlalchemy==2.0.43
 alembic==1.16.4
 pymysql==1.1.2
+cryptography==46.0.5
 python-multipart==0.0.20
 redis==5.2.1

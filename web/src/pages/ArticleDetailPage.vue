@@ -7,6 +7,7 @@ import { useRoute } from "vue-router";
 import { fetchArticle, likeArticle, type Article } from "../api/articles";
 
 type TocItem = { id: string; level: number; text: string };
+type PreviewImage = { src: string; alt: string };
 
 const route = useRoute();
 const article = ref<Article | null>(null);
@@ -25,12 +26,14 @@ const activeHeadingId = ref("");
 const documentIsScrollable = ref(false);
 const documentScrollThumbSize = ref(1);
 const pageScrollProgress = ref(0);
+const previewImage = ref<PreviewImage | null>(null);
 
 let scrollFrame: number | undefined;
 let revealObserver: IntersectionObserver | undefined;
 let likeTimer: number | undefined;
 let loadVersion = 0;
 let documentScrollbarDragOffset = 0;
+let bodyOverflowBeforePreview: string | null = null;
 
 const articleNumber = computed(() => String(article.value?.id ?? 0).padStart(4, "0"));
 const readingPercent = computed(() => Math.round(readingProgress.value * 100));
@@ -79,9 +82,40 @@ function buildArticleContent(markdown: string) {
   safeDocument.body.querySelectorAll("img").forEach((image) => {
     image.setAttribute("loading", "lazy");
     image.setAttribute("decoding", "async");
+    image.setAttribute("tabindex", "0");
+    image.setAttribute("role", "button");
+    image.setAttribute("aria-label", image.getAttribute("alt") || "查看文章图片");
   });
   articleContent.value = safeDocument.body.innerHTML;
   activeHeadingId.value = articleToc.value[0]?.id ?? "";
+}
+
+function openImagePreview(image: HTMLImageElement) {
+  const src = image.currentSrc || image.getAttribute("src");
+  if (!src) return;
+  previewImage.value = { src, alt: image.getAttribute("alt") || article.value?.title || "文章图片" };
+}
+
+function handleContentClick(event: MouseEvent) {
+  const target = event.target instanceof Element ? event.target.closest("img") : null;
+  if (!(target instanceof HTMLImageElement)) return;
+  event.preventDefault();
+  openImagePreview(target);
+}
+
+function handleContentKeydown(event: KeyboardEvent) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  if (!(event.target instanceof HTMLImageElement)) return;
+  event.preventDefault();
+  openImagePreview(event.target);
+}
+
+function closeImagePreview() {
+  previewImage.value = null;
+}
+
+function handlePreviewKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") closeImagePreview();
 }
 
 function formatDate(value: string | null) {
@@ -255,6 +289,18 @@ async function handleLike() {
 
 watch(() => route.params.slug, loadArticle, { immediate: true });
 
+watch(previewImage, (image) => {
+  if (image) {
+    if (bodyOverflowBeforePreview === null) bodyOverflowBeforePreview = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handlePreviewKeydown);
+    return;
+  }
+  window.removeEventListener("keydown", handlePreviewKeydown);
+  if (bodyOverflowBeforePreview !== null) document.body.style.overflow = bodyOverflowBeforePreview;
+  bodyOverflowBeforePreview = null;
+});
+
 onMounted(() => {
   window.addEventListener("scroll", updateReadingState, { passive: true });
   window.addEventListener("resize", updateReadingState, { passive: true });
@@ -264,8 +310,10 @@ onBeforeUnmount(() => {
   window.removeEventListener("scroll", updateReadingState);
   window.removeEventListener("resize", updateReadingState);
   window.removeEventListener("pointermove", handleDocumentScrollbarPointerMove);
+  window.removeEventListener("keydown", handlePreviewKeydown);
   if (scrollFrame !== undefined) window.cancelAnimationFrame(scrollFrame);
   window.clearTimeout(likeTimer);
+  if (bodyOverflowBeforePreview !== null) document.body.style.overflow = bodyOverflowBeforePreview;
   revealObserver?.disconnect();
 });
 </script>
@@ -331,7 +379,7 @@ onBeforeUnmount(() => {
           <img v-if="article.cover_image_url" class="article-detail-cover" :src="article.cover_image_url" :alt="article.title" />
           <!-- 内容已由 DOMPurify 清洗后再插入，保留 Markdown 的排版能力。 -->
           <!-- eslint-disable-next-line vue/no-v-html -->
-          <div ref="contentRoot" class="markdown-body" v-html="articleContent"></div>
+          <div ref="contentRoot" class="markdown-body" @click="handleContentClick" @keydown="handleContentKeydown" v-html="articleContent"></div>
           <p v-if="article.is_repost && article.source_url" class="article-source">本文转载自 <a :href="article.source_url" target="_blank" rel="noreferrer noopener">原始来源</a></p>
           <footer class="article-detail-footer">
             <div class="article-detail-tags"><span v-for="tag in article.tags" :key="tag"># {{ tag }}</span></div>
@@ -370,6 +418,18 @@ onBeforeUnmount(() => {
     <div v-else class="article-detail-state article-detail-error">
       <p>{{ errorText }}</p><RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">返回文章归档</RouterLink>
     </div>
+
+    <Teleport to="body">
+      <Transition name="image-preview">
+        <div v-if="previewImage" class="article-image-preview" role="dialog" aria-modal="true" :aria-label="previewImage.alt" tabindex="-1" @click.self="closeImagePreview" @keydown="handlePreviewKeydown">
+          <button class="image-preview-close" type="button" aria-label="关闭图片预览" @click="closeImagePreview">×</button>
+          <figure>
+            <img :src="previewImage.src" :alt="previewImage.alt" />
+            <figcaption v-if="previewImage.alt">{{ previewImage.alt }}</figcaption>
+          </figure>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -474,7 +534,9 @@ onBeforeUnmount(() => {
 .markdown-body :deep(a):hover { color: #ffe28a; }
 .markdown-body :deep(strong) { color: #fff9e9; }
 .markdown-body :deep(hr) { height: 1px; margin: 4rem 0; border: 0; background: linear-gradient(90deg, transparent, rgba(117, 201, 189, 0.42), transparent); }
-.markdown-body :deep(img) { display: block; max-width: 100%; height: auto; margin: 2.8rem auto; border: 1px solid rgba(244, 240, 223, 0.14); border-radius: 4px; box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.26); }
+.markdown-body :deep(img) { display: block; max-width: 100%; height: auto; margin: 2.8rem auto; border: 1px solid rgba(244, 240, 223, 0.14); border-radius: 4px; box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.26); cursor: zoom-in; transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease; }
+.markdown-body :deep(img:hover) { border-color: rgba(244, 202, 88, 0.48); box-shadow: 0 1.7rem 4.5rem rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(244, 202, 88, 0.16); transform: translateY(-0.12rem); }
+.markdown-body :deep(img:focus-visible) { outline: 2px solid var(--signal); outline-offset: 0.35rem; }
 .markdown-body :deep(ul), .markdown-body :deep(ol) { padding-left: 1.5rem; }
 .markdown-body :deep(li) { margin: 0.55rem 0; padding-left: 0.35rem; }
 .markdown-body :deep(li)::marker { color: var(--coral); }
@@ -507,6 +569,18 @@ onBeforeUnmount(() => {
 .document-end { display: flex; gap: 1rem; align-items: center; margin-top: 5rem; color: rgba(244, 240, 223, 0.26); font-family: "Noto Sans SC", sans-serif; font-size: 0.55rem; letter-spacing: 0.16em; }
 .document-end i { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(117, 201, 189, 0.26)); }
 .document-end i:last-child { transform: scaleX(-1); }
+
+.article-image-preview { --signal: #f4ca58; --current: #75c9bd; position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: clamp(1rem, 4vw, 3rem); background: radial-gradient(circle at 74% 18%, rgba(244, 202, 88, 0.1), transparent 21rem), rgba(3, 15, 22, 0.88); backdrop-filter: blur(0.7rem); }
+.article-image-preview::before { content: ""; position: absolute; inset: clamp(0.7rem, 2vw, 1.35rem); border: 1px solid rgba(117, 201, 189, 0.22); pointer-events: none; }
+.article-image-preview figure { position: relative; display: grid; max-width: min(92vw, 86rem); max-height: min(86vh, 54rem); margin: 0; }
+.article-image-preview img { display: block; max-width: 100%; max-height: calc(86vh - 3rem); border: 1px solid rgba(244, 240, 223, 0.18); border-radius: 4px; object-fit: contain; box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(117, 201, 189, 0.08); }
+.article-image-preview figcaption { justify-self: center; max-width: min(100%, 52rem); margin-top: 0.85rem; color: rgba(244, 240, 223, 0.68); font-family: "Noto Sans SC", sans-serif; font-size: 0.78rem; line-height: 1.6; text-align: center; }
+.image-preview-close { position: fixed; top: clamp(1.1rem, 3vw, 2rem); right: clamp(1.1rem, 3vw, 2rem); z-index: 1; display: grid; width: 2.75rem; aspect-ratio: 1; place-items: center; border: 1px solid rgba(244, 202, 88, 0.54); border-radius: 50%; color: var(--signal); background: rgba(5, 25, 35, 0.78); font-size: 1.55rem; line-height: 1; cursor: pointer; transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; }
+.image-preview-close:hover, .image-preview-close:focus-visible { color: #fff9e9; border-color: rgba(117, 201, 189, 0.72); box-shadow: 0 0 1.4rem rgba(117, 201, 189, 0.22); transform: rotate(6deg) scale(1.04); }
+.image-preview-enter-active, .image-preview-leave-active { transition: opacity 0.22s ease; }
+.image-preview-enter-active figure, .image-preview-leave-active figure { transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+.image-preview-enter-from, .image-preview-leave-to { opacity: 0; }
+.image-preview-enter-from figure, .image-preview-leave-to figure { transform: translateY(0.8rem) scale(0.985); }
 
 .article-detail-state { position: relative; z-index: 1; display: grid; min-height: 100vh; place-content: center; justify-items: center; color: var(--muted); font-family: "Noto Sans SC", sans-serif; }
 .article-detail-state p { margin: 1.5rem 0 0.35rem; }

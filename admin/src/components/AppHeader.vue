@@ -23,7 +23,7 @@ async function handleLogout() {
     cancelButtonText: "取消",
   });
 
-  authStore.logout();
+  await authStore.logout();
   await router.push("/login");
 }
 </script>

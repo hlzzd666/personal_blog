@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Bottom, Check, Delete, Plus, Top, Upload } from "@element-plus/icons-vue";
+import { Bottom, Check, Delete, Document, Plus, Top, Upload, View } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, ref } from "vue";
 
 import { fetchAboutProfile, updateAboutProfile } from "../api/about";
-import { uploadImage } from "../api/site-settings";
+import { uploadImage, uploadResume } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type {
   AboutProfilePayload,
@@ -20,6 +20,8 @@ const emptyForm: AboutProfilePayload = {
   headline: "",
   bio: "",
   avatar_url: "/owner-avatar.jpg",
+  resume_url: "",
+  resume_filename: "",
   status_text: "",
   email: null,
   location_name: "",
@@ -43,8 +45,10 @@ const activeSection = ref("profile");
 const loading = ref(true);
 const saving = ref(false);
 const uploadingAvatar = ref(false);
+const uploadingResume = ref(false);
 const uploadingSkillIndex = ref<number | null>(null);
 const avatarInput = ref<HTMLInputElement | null>(null);
+const resumeInput = ref<HTMLInputElement | null>(null);
 const statusText = ref("正在读取关于我资料...");
 
 function moveItem<T>(items: T[], index: number, offset: -1 | 1) {
@@ -107,6 +111,8 @@ function normalizeOptionalFields(payload: AboutProfilePayload): AboutProfilePayl
   return {
     ...payload,
     email: payload.email?.trim() || null,
+    resume_url: payload.resume_url.trim(),
+    resume_filename: payload.resume_filename.trim(),
     site_repository_url: payload.site_repository_url?.trim() || null,
     project_experiences: payload.project_experiences.map((project) => ({
       ...project,
@@ -215,6 +221,49 @@ async function handleAvatarSelected(event: Event) {
   }
 }
 
+async function handleResumeSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  if (!isPdf) {
+    ElMessage.error("请选择 PDF 简历");
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    ElMessage.error("简历大小不能超过 20 MB");
+    return;
+  }
+  uploadingResume.value = true;
+  try {
+    const result = await uploadResume(file);
+    form.value.resume_url = result.url;
+    form.value.resume_filename = result.original_filename;
+    ElMessage.success("简历已上传，请保存资料");
+  } catch {
+    ElMessage.error("简历上传失败");
+  } finally {
+    uploadingResume.value = false;
+  }
+}
+
+async function clearResume() {
+  if (!form.value.resume_url) return;
+  try {
+    await ElMessageBox.confirm("确定移除当前简历入口吗？保存后前台将不再展示下载和预览。", "移除确认", {
+      type: "warning",
+      confirmButtonText: "移除",
+      cancelButtonText: "取消",
+    });
+    form.value.resume_url = "";
+    form.value.resume_filename = "";
+    ElMessage.success("已移除简历，请保存资料");
+  } catch {
+    // 用户取消时保持当前简历。
+  }
+}
+
 function selectSkillIcon(index: number) {
   document.getElementById(`about-skill-icon-${index}`)?.click();
 }
@@ -311,25 +360,63 @@ onMounted(() => {
             </el-form>
           </section>
 
-          <section class="about-form-section about-avatar-editor">
-            <div class="about-section-heading">
-              <div>
-                <h3>人物头像</h3>
-                <p>建议使用清晰正方形图片。</p>
+          <div class="about-profile-side">
+            <section class="about-form-section about-avatar-editor">
+              <div class="about-section-heading">
+                <div>
+                  <h3>人物头像</h3>
+                  <p>建议使用清晰正方形图片。</p>
+                </div>
               </div>
-            </div>
-            <img :src="form.avatar_url" alt="关于我头像预览" />
-            <input
-              ref="avatarInput"
-              class="image-picker-input"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              @change="handleAvatarSelected"
-            />
-            <el-button :loading="uploadingAvatar" @click="avatarInput?.click()">
-              <el-icon><Upload /></el-icon>更换头像
-            </el-button>
-          </section>
+              <img :src="form.avatar_url" alt="关于我头像预览" />
+              <input
+                ref="avatarInput"
+                class="image-picker-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                @change="handleAvatarSelected"
+              />
+              <el-button :loading="uploadingAvatar" @click="avatarInput?.click()">
+                <el-icon><Upload /></el-icon>更换头像
+              </el-button>
+            </section>
+
+            <section class="about-form-section about-resume-editor">
+              <div class="about-section-heading">
+                <div>
+                  <h3>个人简历</h3>
+                  <p>上传 PDF，前台支持下载和在线预览。</p>
+                </div>
+              </div>
+              <div class="about-resume-preview" :class="{ 'is-empty': !form.resume_url }">
+                <el-icon><Document /></el-icon>
+                <strong>{{ form.resume_filename || "暂未上传简历" }}</strong>
+                <small>{{ form.resume_url ? "PDF 简历已就绪" : "支持 20 MB 以内 PDF" }}</small>
+              </div>
+              <input
+                ref="resumeInput"
+                class="image-picker-input"
+                type="file"
+                accept="application/pdf,.pdf"
+                @change="handleResumeSelected"
+              />
+              <div class="about-resume-actions">
+                <el-button :loading="uploadingResume" @click="resumeInput?.click()">
+                  <el-icon><Upload /></el-icon>{{ form.resume_url ? "更换简历" : "上传简历" }}
+                </el-button>
+                <el-button
+                  v-if="form.resume_url"
+                  :icon="View"
+                  tag="a"
+                  :href="form.resume_url"
+                  target="_blank"
+                >
+                  预览
+                </el-button>
+                <el-button v-if="form.resume_url" :icon="Delete" @click="clearResume">移除</el-button>
+              </div>
+            </section>
+          </div>
         </div>
 
         <section class="about-form-section">

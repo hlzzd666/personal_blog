@@ -100,7 +100,6 @@ onBeforeUnmount(() => {
       <RouterLink :to="{ path: '/', hash: '#hero' }">首页</RouterLink>
       <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">文章</RouterLink>
       <RouterLink to="/about">关于我</RouterLink>
-      <RouterLink :to="{ path: '/', hash: '#timeline' }">航海日志</RouterLink>
     </nav>
   </header>
   <SiteSearchDialog :open="searchOpen" @close="searchOpen = false" />

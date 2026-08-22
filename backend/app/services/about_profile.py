@@ -13,6 +13,8 @@ DEFAULT_ABOUT_PROFILE = AboutProfileUpdate(
         "项目复盘和生活观察，希望这里不仅是一份履历，也是一张持续更新的个人航海图。"
     ),
     avatar_url="http://127.0.0.1:8000/uploads/eaed8b38790549ea926f1112d6435e46.jpg",
+    resume_url="",
+    resume_filename="",
     status_text="正在航行，欢迎交流",
     email=None,
     location_name="中国 · 上海",

@@ -6,9 +6,9 @@ import DashboardPage from "../pages/DashboardPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
 import MediaPage from "../pages/MediaPage.vue";
 import SiteSettingsPage from "../pages/SiteSettingsPage.vue";
-import { hasAuthSession } from "../stores/auth";
+import { hasAuthSession, useAuthStore } from "../stores/auth";
 export const router = createRouter({
-    history: createWebHistory(),
+    history: createWebHistory(import.meta.env.BASE_URL),
     routes: [
         {
             path: "/login",
@@ -30,8 +30,8 @@ export const router = createRouter({
         },
     ],
 });
-router.beforeEach((to) => {
-    const authed = hasAuthSession();
+router.beforeEach(async (to) => {
+    const authed = await hasAuthSession();
     if (to.meta.requiresAuth && !authed) {
         return {
             path: "/login",
@@ -42,4 +42,13 @@ router.beforeEach((to) => {
         return "/";
     }
     return true;
+});
+window.addEventListener("personal-blog-admin-unauthorized", () => {
+    const authStore = useAuthStore();
+    const redirect = router.currentRoute.value.fullPath;
+    authStore.clearSession();
+    if (router.currentRoute.value.path === "/login") {
+        return;
+    }
+    void router.push({ path: "/login", query: { redirect } });
 });

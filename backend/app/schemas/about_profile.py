@@ -42,6 +42,8 @@ class AboutProfileBase(BaseModel):
     headline: str = Field(..., min_length=1, max_length=160)
     bio: str = Field(..., min_length=1, max_length=2000)
     avatar_url: str = Field(..., min_length=1, max_length=2048)
+    resume_url: str = Field(default="", max_length=2048)
+    resume_filename: str = Field(default="", max_length=255)
     status_text: str = Field(..., min_length=1, max_length=100)
     email: str | None = Field(default=None, max_length=254)
     location_name: str = Field(..., min_length=1, max_length=100)

@@ -37,6 +37,8 @@ export type AboutProfilePayload = {
   headline: string;
   bio: string;
   avatar_url: string;
+  resume_url: string;
+  resume_filename: string;
   status_text: string;
   email: string | null;
   location_name: string;

@@ -13,14 +13,14 @@ const router = useRouter();
 const loading = ref(false);
 const form = reactive({
   username: "admin",
-  password: "123456",
+  password: "",
 });
 
 async function handleLogin() {
   loading.value = true;
 
   try {
-    authStore.login(form);
+    await authStore.login(form);
     ElMessage.success("登录成功，欢迎进入后台。");
     const redirect = typeof route.query.redirect === "string" ? route.query.redirect : "/";
     await router.push(redirect);

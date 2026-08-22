@@ -12,9 +12,39 @@ from backend.app.core.cache import (
     set_cache_value,
 )
 from backend.app.models.article import Article, ArticleLikeRecord
-from backend.app.schemas.article import ArticleCreate, ArticleListResponse, ArticleUpdate
+from backend.app.schemas.article import (
+    ArticleCountItem,
+    ArticleCreate,
+    ArticleListResponse,
+    ArticleListStats,
+    ArticleMonthCount,
+    ArticleUpdate,
+)
 
 ArticleListCacheStatus = Literal["HIT", "MISS", "BYPASS"]
+
+
+def build_article_filters(
+    *,
+    category: str | None = None,
+    tag: str | None = None,
+    search: str | None = None,
+) -> list:
+    filters = []
+    if category:
+        filters.append(Article.category == category)
+    if tag:
+        filters.append(Article.tags.contains(tag))
+    if search:
+        keyword = f"%{search.strip()}%"
+        filters.append(
+            or_(
+                Article.title.like(keyword),
+                Article.summary.like(keyword),
+                Article.content_markdown.like(keyword),
+            )
+        )
+    return filters
 
 
 def list_articles(
@@ -29,21 +59,8 @@ def list_articles(
 ) -> tuple[list[Article], int]:
     query = select(Article)
     count_query = select(func.count(Article.id))
-    filters = []
     # 文章不区分草稿和发布状态，public_only 参数保留用于兼容调用方。
-    if category:
-        filters.append(Article.category == category)
-    if tag:
-        filters.append(Article.tags.contains([tag]))
-    if search:
-        keyword = f"%{search.strip()}%"
-        filters.append(
-            or_(
-                Article.title.like(keyword),
-                Article.summary.like(keyword),
-                Article.content_markdown.like(keyword),
-            )
-        )
+    filters = build_article_filters(category=category, tag=tag, search=search)
 
     # 归档按发表时间形成唯一时间线；未填写发表时间时回退到创建时间。
     query = query.where(*filters).order_by(
@@ -56,6 +73,50 @@ def list_articles(
     total = session.scalar(count_query) or 0
     items = list(session.scalars(query.offset((page - 1) * page_size).limit(page_size)))
     return items, total
+
+
+def get_article_list_stats(
+    session: Session,
+    *,
+    category: str | None = None,
+    tag: str | None = None,
+    search: str | None = None,
+) -> ArticleListStats:
+    filtered_articles = list(
+        session.scalars(
+            select(Article).where(*build_article_filters(category=category, tag=tag, search=search))
+        )
+    )
+    all_articles = list(session.scalars(select(Article)))
+
+    month_counts: dict[str, int] = {}
+    for article in filtered_articles:
+        archive_date = article.published_at or article.created_at
+        key = f"{archive_date.year}-{archive_date.month:02d}"
+        month_counts[key] = month_counts.get(key, 0) + 1
+
+    category_counts: dict[str, int] = {}
+    tag_counts: dict[str, int] = {}
+    for article in all_articles:
+        category_name = article.category or "未分类"
+        category_counts[category_name] = category_counts.get(category_name, 0) + 1
+        for article_tag in article.tags or []:
+            tag_counts[article_tag] = tag_counts.get(article_tag, 0) + 1
+
+    return ArticleListStats(
+        categories=[
+            ArticleCountItem(name=name, count=count)
+            for name, count in sorted(category_counts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        tags=[
+            ArticleCountItem(name=name, count=count)
+            for name, count in sorted(tag_counts.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        months=[
+            ArticleMonthCount(key=key, count=count)
+            for key, count in sorted(month_counts.items(), reverse=True)
+        ],
+    )
 
 
 def get_article_list_response(
@@ -79,7 +140,8 @@ def get_article_list_response(
     cached_value = get_cache_value(cache_key)
     if cached_value is not None:
         try:
-            return ArticleListResponse.model_validate_json(cached_value), "HIT"
+            if '"stats"' in cached_value:
+                return ArticleListResponse.model_validate_json(cached_value), "HIT"
         except ValueError:
             # 缓存内容与当前响应模型不兼容时，直接回源数据库重建。
             pass
@@ -93,7 +155,13 @@ def get_article_list_response(
         tag=tag,
         search=search,
     )
-    response = ArticleListResponse(items=items, total=total, page=page, page_size=page_size)
+    response = ArticleListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        stats=get_article_list_stats(session, category=category, tag=tag, search=search),
+    )
     set_cache_value(cache_key, response.model_dump_json())
     return response, "MISS" if cache_key is not None else "BYPASS"
 

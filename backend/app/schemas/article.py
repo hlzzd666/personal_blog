@@ -41,11 +41,28 @@ class ArticleResponse(ArticlePayload):
     model_config = {"from_attributes": True}
 
 
+class ArticleCountItem(BaseModel):
+    name: str
+    count: int
+
+
+class ArticleMonthCount(BaseModel):
+    key: str
+    count: int
+
+
+class ArticleListStats(BaseModel):
+    categories: list[ArticleCountItem] = Field(default_factory=list)
+    tags: list[ArticleCountItem] = Field(default_factory=list)
+    months: list[ArticleMonthCount] = Field(default_factory=list)
+
+
 class ArticleListResponse(BaseModel):
     items: list[ArticleResponse]
     total: int
     page: int
     page_size: int
+    stats: ArticleListStats = Field(default_factory=ArticleListStats)
 
 
 class ArticleLikeResponse(BaseModel):

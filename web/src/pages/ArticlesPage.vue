@@ -11,7 +11,8 @@ import {
 } from "vue";
 import { onBeforeRouteLeave, useRoute } from "vue-router";
 
-import { fetchArticles, type Article } from "../api/articles";
+import { fetchArticles, type Article, type ArticleListStats } from "../api/articles";
+import { fetchSiteSettings, type SiteSettings, type VisualAssetItem } from "../api/site-settings";
 
 type ArticleView = "archive" | "tags" | "categories";
 
@@ -27,15 +28,20 @@ const pageRoot = ref<HTMLElement | null>(null);
 const loadMoreSentinel = ref<HTMLElement | null>(null);
 const visibleArticleIds = ref<Set<number>>(new Set());
 const showBackToTop = ref(false);
+const archiveVisualAssets = ref<VisualAssetItem[]>([]);
+const activeVisualAssetIndex = ref(0);
 let revealFrame: number | undefined;
+let visualAssetTimer: number | undefined;
 let savedScrollY = 0;
 let hasBeenDeactivated = false;
 let pageObserver: IntersectionObserver | undefined;
 let pageIsActive = false;
 const pageSize = 20;
+const visualAssetRotationMs = 6000;
 const currentPage = ref(0);
 const totalArticles = ref(0);
 const allPagesLoaded = ref(false);
+const articleStats = ref<ArticleListStats>(createEmptyArticleStats());
 const views: Array<{ key: ArticleView; label: string; caption: string }> = [
   { key: "archive", label: "归档", caption: "按发表时间回看全部记录" },
   { key: "tags", label: "标签", caption: "沿主题找到相关记录" },
@@ -52,14 +58,34 @@ const pageTitle = computed(
 const pageCaption = computed(
   () => views.find((view) => view.key === currentView.value)?.caption ?? "按发表时间回看全部记录",
 );
-const categories = computed(() => [...new Set(articles.value.map((article) => article.category))]);
-const tags = computed(() =>
-  [...new Set(articles.value.flatMap((article) => article.tags))].slice(0, 16),
+const categories = computed(() => articleStats.value.categories.map((category) => category.name));
+const tags = computed(() => articleStats.value.tags.map((tag) => tag.name).slice(0, 16));
+const categoryCountMap = computed(() =>
+  new Map(articleStats.value.categories.map((category) => [category.name, category.count])),
+);
+const allArticleTotal = computed(() =>
+  articleStats.value.categories.reduce((total, category) => total + category.count, 0) || totalArticles.value,
+);
+const tagCountMap = computed(() =>
+  new Map(articleStats.value.tags.map((tag) => [tag.name, tag.count])),
+);
+const monthCountMap = computed(() =>
+  new Map(articleStats.value.months.map((month) => [month.key, month.count])),
 );
 const publishedYears = computed(
-  () => new Set(articles.value.map((article) => new Date(archiveDate(article)).getFullYear())).size,
+  () => new Set(articleStats.value.months.map((month) => Number(month.key.slice(0, 4)))).size,
 );
 const hasMoreArticles = computed(() => !allPagesLoaded.value && articles.value.length < totalArticles.value);
+const archiveVisualStyle = computed(() => {
+  if (!archiveVisualAssets.value.length) {
+    return {
+      "--archive-visual-opacity": "0",
+    };
+  }
+  return {
+    "--archive-visual-opacity": "1",
+  };
+});
 const routeMarkers = computed(() =>
   Array.from({ length: Math.max(8, Math.ceil(articles.value.length / 8)) }, (_, index) => ({
     id: index + 1,
@@ -85,7 +111,6 @@ const visibleArticles = computed(() => {
         Date.parse(archiveDate(right)) - Date.parse(archiveDate(left)) || right.id - left.id,
     );
 });
-
 const archiveGroups = computed(() => {
   const groups = new Map<string, Article[]>();
   visibleArticles.value.forEach((article) => {
@@ -96,11 +121,29 @@ const archiveGroups = computed(() => {
   return [...groups.entries()].map(([key, entries]) => ({
     key,
     entries,
+    total: monthCountMap.value.get(key) ?? entries.length,
     label: new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(
       new Date(`${key}-01T12:00:00`),
     ),
   }));
 });
+
+function createEmptyArticleStats(): ArticleListStats {
+  return {
+    categories: [],
+    tags: [],
+    months: [],
+  };
+}
+
+function getArticleQueryParams(page: number) {
+  return {
+    page,
+    page_size: pageSize,
+    category: activeCategory.value || undefined,
+    tag: activeTag.value || undefined,
+  };
+}
 
 function formatDay(value: string) {
   return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" })
@@ -120,16 +163,98 @@ function formatFullDate(value: string | null) {
 function clearFilters() {
   activeCategory.value = "";
   activeTag.value = "";
+  void loadArticles();
 }
 
 function selectCategory(category: string) {
   activeCategory.value = category;
   activeTag.value = "";
+  void loadArticles();
 }
 
 function selectTag(tag: string) {
   activeTag.value = tag;
   activeCategory.value = "";
+  void loadArticles();
+}
+
+function getVisualAssetLayerStyle(asset: VisualAssetItem) {
+  const visualOpacity = Number.isFinite(asset.opacity) ? asset.opacity : 0.68;
+  return {
+    "--archive-visual-image": `url("${asset.image_url.replace(/"/g, "%22")}")`,
+    "--archive-visual-layer-opacity": String(Math.min(0.88, Math.max(0, visualOpacity * 0.82))),
+  };
+}
+
+function pickArchiveVisualAssets(settings: SiteSettings) {
+  const enabledAssets = settings.visual_assets.filter(
+    (asset) => asset.enabled && asset.image_url && asset.usage === "background",
+  );
+  const seenAssets = new Set<string>();
+  const uniqueAssets = enabledAssets.filter((asset) => {
+    const identity = `${asset.key}:${asset.image_url}`;
+    if (seenAssets.has(identity)) return false;
+    seenAssets.add(identity);
+    return true;
+  });
+  const shuffledAssets = [...uniqueAssets];
+
+  for (let index = shuffledAssets.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffledAssets[index], shuffledAssets[swapIndex]] = [
+      shuffledAssets[swapIndex],
+      shuffledAssets[index],
+    ];
+  }
+
+  return shuffledAssets;
+}
+
+function shouldRotateVisualAssets() {
+  return (
+    archiveVisualAssets.value.length > 1 &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function stopVisualAssetRotation() {
+  if (visualAssetTimer === undefined) return;
+  window.clearInterval(visualAssetTimer);
+  visualAssetTimer = undefined;
+}
+
+function startVisualAssetRotation() {
+  stopVisualAssetRotation();
+  if (!shouldRotateVisualAssets()) return;
+
+  visualAssetTimer = window.setInterval(() => {
+    activeVisualAssetIndex.value = (activeVisualAssetIndex.value + 1) % archiveVisualAssets.value.length;
+  }, visualAssetRotationMs);
+}
+
+function handleVisualAssetVisibilityChange() {
+  if (document.hidden) {
+    stopVisualAssetRotation();
+    return;
+  }
+  startVisualAssetRotation();
+}
+
+async function loadVisualAsset() {
+  try {
+    const settings = await fetchSiteSettings();
+    archiveVisualAssets.value = pickArchiveVisualAssets(settings);
+    activeVisualAssetIndex.value = 0;
+    if (archiveVisualAssets.value.length) {
+      startVisualAssetRotation();
+      return;
+    }
+  } catch {
+    // Ignore visual asset loading failures and keep the fallback background.
+  }
+  stopVisualAssetRotation();
+  archiveVisualAssets.value = [];
+  activeVisualAssetIndex.value = 0;
 }
 
 async function loadArticles() {
@@ -138,13 +263,15 @@ async function loadArticles() {
   loadMoreError.value = "";
   currentPage.value = 0;
   totalArticles.value = 0;
+  articleStats.value = createEmptyArticleStats();
   allPagesLoaded.value = false;
   articles.value = [];
   try {
-    const result = await fetchArticles({ page: 1, page_size: pageSize });
+    const result = await fetchArticles(getArticleQueryParams(1));
     articles.value = result.items;
     currentPage.value = result.page;
     totalArticles.value = result.total;
+    articleStats.value = result.stats;
     allPagesLoaded.value = result.items.length >= result.total;
     await nextTick();
     revealVisibleEntries();
@@ -163,13 +290,14 @@ async function loadMoreArticles() {
   loadingMore.value = true;
   loadMoreError.value = "";
   try {
-    const result = await fetchArticles({ page: currentPage.value + 1, page_size: pageSize });
+    const result = await fetchArticles(getArticleQueryParams(currentPage.value + 1));
     const loadedIds = new Set(articles.value.map((article) => article.id));
     const nextArticles = result.items.filter((article) => !loadedIds.has(article.id));
 
     articles.value = [...articles.value, ...nextArticles];
     currentPage.value = result.page;
     totalArticles.value = result.total;
+    articleStats.value = result.stats;
     allPagesLoaded.value = nextArticles.length === 0 || articles.value.length >= result.total;
     await nextTick();
     revealVisibleEntries();
@@ -245,11 +373,14 @@ function observeLoadMoreSentinel() {
 }
 
 onMounted(() => {
+  document.addEventListener("visibilitychange", handleVisualAssetVisibilityChange);
   void loadArticles();
+  void loadVisualAsset();
 });
 
 onActivated(async () => {
   pageIsActive = true;
+  startVisualAssetRotation();
   addPageListeners();
   if (!hasBeenDeactivated) {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -271,6 +402,7 @@ onDeactivated(() => {
   pageIsActive = false;
   pageObserver?.disconnect();
   pageObserver = undefined;
+  stopVisualAssetRotation();
   removePageListeners();
 });
 
@@ -285,16 +417,31 @@ watch([activeCategory, activeTag, currentView], async () => {
 });
 onBeforeUnmount(() => {
   pageObserver?.disconnect();
+  document.removeEventListener("visibilitychange", handleVisualAssetVisibilityChange);
+  stopVisualAssetRotation();
   removePageListeners();
 });
 </script>
 
 <template>
-  <div ref="pageRoot" class="article-page">
+  <div ref="pageRoot" class="article-page" :style="archiveVisualStyle">
     <div class="sea-chart-motion" aria-hidden="true">
       <span class="chart-bearing chart-bearing-one"></span>
       <span class="chart-bearing chart-bearing-two"></span>
       <span class="chart-ping"></span>
+      <span class="chart-current chart-current-one"></span>
+      <span class="chart-current chart-current-two"></span>
+      <span class="chart-current chart-current-three"></span>
+      <span class="chart-signal chart-signal-one"></span>
+      <span class="chart-signal chart-signal-two"></span>
+    </div>
+    <div class="archive-visual-stack" aria-hidden="true">
+      <div
+        v-for="(asset, index) in archiveVisualAssets"
+        :key="`${asset.key}-${asset.image_url}`"
+        :class="['archive-visual-layer', { active: index === activeVisualAssetIndex }]"
+        :style="getVisualAssetLayerStyle(asset)"
+      ></div>
     </div>
     <div class="archive-route-field" aria-hidden="true">
       <svg class="archive-route-map" viewBox="0 0 1440 1900" preserveAspectRatio="xMidYMin meet">
@@ -344,9 +491,11 @@ onBeforeUnmount(() => {
       </div>
       <span class="chart-depth-band chart-depth-band-one"></span>
       <span class="chart-depth-band chart-depth-band-two"></span>
+      <span class="chart-depth-band chart-depth-band-three"></span>
       <span class="chart-sweep"></span>
       <span class="chart-readout chart-readout-one"><b>SECTOR 07</b><i></i><b>COURSE 118</b></span>
       <span class="chart-readout chart-readout-two"><b>DEPTH 042</b><i></i><b>TIDE +02</b></span>
+      <span class="chart-readout chart-readout-three"><b>SIGNAL LIVE</b><i></i><b>WAVE 031</b></span>
     </div>
     <header class="archive-masthead">
       <div class="archive-masthead-copy">
@@ -362,7 +511,7 @@ onBeforeUnmount(() => {
       <dl class="archive-ledger" aria-label="归档统计">
         <div>
           <dt>记录总数</dt>
-          <dd>{{ articles.length }}</dd>
+          <dd>{{ totalArticles }}</dd>
         </div>
         <div>
           <dt>航行年份</dt>
@@ -387,7 +536,12 @@ onBeforeUnmount(() => {
             {{ view.label }}
           </RouterLink>
         </nav>
-        <p>{{ visibleArticles.length }} 条已定位记录</p>
+        <div class="archive-locate-meter" aria-label="文章定位统计">
+          <span>
+            <b>{{ totalArticles }}</b>
+            <small>总记录</small>
+          </span>
+        </div>
       </div>
 
       <div class="archive-layout">
@@ -405,7 +559,7 @@ onBeforeUnmount(() => {
               type="button"
               @click="clearFilters"
             >
-              全部分类 <small>{{ articles.length }}</small>
+              全部分类 <small>{{ allArticleTotal }}</small>
             </button>
             <button
               v-for="category in categories"
@@ -414,7 +568,7 @@ onBeforeUnmount(() => {
               type="button"
               @click="selectCategory(category)"
             >
-              {{ category }}
+              {{ category }} <small>{{ categoryCountMap.get(category) ?? 0 }}</small>
             </button>
           </section>
           <section v-if="currentView !== 'categories'" class="filter-group filter-tags">
@@ -426,7 +580,7 @@ onBeforeUnmount(() => {
               type="button"
               @click="selectTag(tag)"
             >
-              # {{ tag }}
+              # {{ tag }} <small>{{ tagCountMap.get(tag) ?? 0 }}</small>
             </button>
           </section>
         </aside>
@@ -445,7 +599,10 @@ onBeforeUnmount(() => {
               <section v-for="group in archiveGroups" :key="group.key" class="archive-month-group">
                 <header class="archive-month-heading">
                   <p>{{ group.label }}</p>
-                  <span>{{ String(group.entries.length).padStart(2, "0") }} RECORDS</span>
+                  <div class="archive-month-count" aria-label="本月文章统计">
+                    <strong>{{ group.total }}</strong>
+                    <span>本月总数</span>
+                  </div>
                 </header>
                 <div class="archive-timeline">
                   <article
@@ -513,13 +670,24 @@ onBeforeUnmount(() => {
 .article-page {
   --archive-scroll-shift: 0px;
   --archive-counter-shift: 0px;
+  --archive-visual-image: none;
+  --archive-visual-opacity: 0;
+  --archive-visual-layer-opacity: 0;
+  --archive-ink: #f4f3e9;
+  --archive-signal: #f7c951;
+  --archive-current: #86d3c6;
+  --archive-coral: #e38363;
+  --archive-steel: rgba(207, 225, 217, 0.18);
   position: relative;
   isolation: isolate;
   min-height: 100vh;
   overflow: clip;
   padding: 7.5rem 0 7rem;
-  color: #f4f3e9;
+  color: var(--archive-ink);
   background:
+    radial-gradient(circle at 72% 10%, rgba(247, 201, 81, 0.12), transparent 18rem),
+    radial-gradient(circle at 18% 62%, rgba(134, 211, 198, 0.11), transparent 25rem),
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.03), transparent 28rem),
     linear-gradient(118deg, rgba(112, 63, 49, 0.22) 0, rgba(112, 63, 49, 0) 31%),
     linear-gradient(180deg, #061d28 0%, #0a2c35 43%, #071c27 100%);
 }
@@ -567,6 +735,124 @@ onBeforeUnmount(() => {
     5rem 5rem;
   opacity: 0.82;
   animation: chart-drift 32s linear infinite;
+}
+.archive-visual-stack {
+  position: fixed;
+  inset: 0;
+  z-index: -5;
+  pointer-events: none;
+  opacity: var(--archive-visual-opacity, 0);
+}
+.archive-visual-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--archive-visual-image, none);
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: 0;
+  filter: saturate(1.08) contrast(1.03) brightness(1.04);
+  transform: translate3d(0, calc(var(--archive-scroll-shift) * -0.18), 0) scale(1.02);
+  transition:
+    opacity 1.6s cubic-bezier(0.25, 1, 0.5, 1),
+    transform 8s linear;
+}
+.archive-visual-layer.active {
+  opacity: var(--archive-visual-layer-opacity, 0);
+  transform: translate3d(0, calc(var(--archive-scroll-shift) * -0.18), 0) scale(1.045);
+}
+.archive-visual-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(6, 18, 26, 0.72) 0%, rgba(6, 18, 26, 0.34) 46%, rgba(6, 18, 26, 0.62) 100%),
+    linear-gradient(180deg, rgba(6, 18, 26, 0.14) 0%, rgba(6, 18, 26, 0.42) 54%, rgba(6, 18, 26, 0.86) 100%);
+}
+.sea-chart-motion::before,
+.sea-chart-motion::after {
+  content: "";
+  position: fixed;
+  inset: -12%;
+  pointer-events: none;
+}
+.sea-chart-motion::before {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(247, 201, 81, 0.08), transparent 10rem),
+    radial-gradient(circle at 82% 42%, rgba(134, 211, 198, 0.1), transparent 13rem),
+    repeating-linear-gradient(90deg, transparent 0 7.8rem, rgba(244, 243, 233, 0.025) 7.85rem 7.9rem);
+  opacity: 0.68;
+  transform: translate3d(0, 0, 0);
+  animation: atmosphere-drift 26s cubic-bezier(0.25, 1, 0.5, 1) infinite alternate;
+}
+.sea-chart-motion::after {
+  background:
+    linear-gradient(180deg, transparent 0 49%, rgba(134, 211, 198, 0.06) 50%, transparent 51%),
+    repeating-linear-gradient(0deg, rgba(244, 243, 233, 0.018) 0 1px, transparent 1px 5px);
+  opacity: 0.45;
+  transform: translate3d(0, -8%, 0);
+  animation: atmosphere-scan 12s linear infinite;
+}
+.chart-current {
+  position: absolute;
+  left: -12%;
+  display: block;
+  width: 124%;
+  height: 8rem;
+  background:
+    linear-gradient(90deg, transparent, rgba(134, 211, 198, 0.18), transparent),
+    repeating-linear-gradient(168deg, transparent 0 1.2rem, rgba(244, 243, 233, 0.04) 1.25rem 1.3rem);
+  opacity: 0.45;
+  transform: rotate(-8deg) translateX(-5%);
+  animation: current-slip 18s cubic-bezier(0.25, 1, 0.5, 1) infinite alternate;
+}
+.chart-current-one {
+  top: 20rem;
+}
+.chart-current-two {
+  top: 62rem;
+  opacity: 0.32;
+  animation-delay: -6s;
+}
+.chart-current-three {
+  top: 108rem;
+  opacity: 0.24;
+  animation-delay: -11s;
+}
+.chart-signal {
+  position: fixed;
+  right: 7%;
+  display: grid;
+  width: 9rem;
+  height: 6.5rem;
+  opacity: 0.58;
+}
+.chart-signal::before,
+.chart-signal::after {
+  content: "";
+  display: block;
+  align-self: end;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--archive-signal), transparent);
+  transform-origin: right;
+  animation: signal-blink 2.8s ease-in-out infinite;
+}
+.chart-signal::after {
+  align-self: start;
+  width: 62%;
+  justify-self: end;
+  animation-delay: -1.4s;
+}
+.chart-signal-one {
+  top: 28rem;
+}
+.chart-signal-two {
+  top: 86rem;
+  right: auto;
+  left: 8%;
+  color: var(--archive-current);
+  animation-delay: -2s;
 }
 .archive-route-field {
   position: absolute;
@@ -771,6 +1057,18 @@ onBeforeUnmount(() => {
   transform: translate3d(0, var(--archive-counter-shift), 0);
   animation: depth-band-two 21s ease-in-out infinite alternate;
 }
+.chart-depth-band-three {
+  top: 94rem;
+  right: -18%;
+  width: 58%;
+  height: 18rem;
+  clip-path: polygon(12% 0, 100% 22%, 88% 100%, 0 72%);
+  background:
+    repeating-linear-gradient(144deg, transparent 0 1.1rem, rgba(247, 201, 81, 0.07) 1.15rem 1.2rem),
+    linear-gradient(120deg, rgba(247, 201, 81, 0.08), rgba(134, 211, 198, 0.06));
+  opacity: 0.34;
+  animation: depth-band-three 18s ease-in-out infinite alternate;
+}
 .chart-sweep {
   position: absolute;
   top: -22rem;
@@ -815,6 +1113,12 @@ onBeforeUnmount(() => {
   bottom: 14rem;
   left: 3%;
   animation-delay: -4.5s;
+}
+.chart-readout-three {
+  top: 84rem;
+  right: 10%;
+  color: rgba(134, 211, 198, 0.24);
+  animation-delay: -7.5s;
 }
 .chart-bearing {
   position: absolute;
@@ -873,11 +1177,48 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1fr) 27rem;
   gap: 4rem;
   align-items: end;
-  padding: 3.5rem 0 3rem;
+  padding: 3.65rem 0 3rem;
   border-bottom: 1px solid rgba(207, 225, 217, 0.2);
 }
+.archive-masthead::before {
+  content: "";
+  position: absolute;
+  right: 1.4rem;
+  bottom: -1px;
+  width: min(28rem, 42vw);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--archive-coral), var(--archive-signal));
+  box-shadow: 0 0 1.1rem rgba(247, 201, 81, 0.48);
+  transform-origin: right;
+  animation: masthead-signal 4.8s 0.7s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+.archive-masthead::after {
+  content: "";
+  position: absolute;
+  right: -0.04em;
+  bottom: -0.16em;
+  z-index: -1;
+  color: rgba(244, 243, 233, 0.035);
+  font-family: var(--display-font);
+  font-size: clamp(7rem, 17vw, 17rem);
+  line-height: 0.8;
+  pointer-events: none;
+}
 .archive-masthead-copy {
+  position: relative;
+  padding-right: 1rem;
   animation: masthead-rise 0.85s cubic-bezier(0.2, 0.76, 0.26, 1) both;
+}
+.archive-masthead-copy::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0.35rem;
+  width: 0.2rem;
+  height: 3.8rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(247, 201, 81, 0.72), rgba(134, 211, 198, 0.08));
+  box-shadow: 0 0 1rem rgba(247, 201, 81, 0.32);
 }
 .article-back-link {
   display: inline-flex;
@@ -913,12 +1254,15 @@ onBeforeUnmount(() => {
   border: 1px solid #f7c951;
   border-radius: 50%;
   box-shadow: 0 0 0 0.24rem rgba(247, 201, 81, 0.1);
+  animation: eyebrow-ping 2.8s ease-out infinite;
 }
 .archive-masthead h1 {
   margin: 0;
   font-size: clamp(3rem, 6vw, 5.25rem);
   line-height: 1;
-  text-shadow: 0 0.8rem 2.2rem rgba(0, 0, 0, 0.24);
+  text-shadow:
+    0 0.8rem 2.2rem rgba(0, 0, 0, 0.24),
+    0.08em 0.06em 0 rgba(227, 131, 99, 0.18);
   animation: title-settle 0.9s 0.1s cubic-bezier(0.2, 0.76, 0.26, 1) both;
 }
 .archive-description {
@@ -930,9 +1274,11 @@ onBeforeUnmount(() => {
   line-height: 1.9;
 }
 .archive-ledger {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
+  border-radius: 1rem;
   margin: 0;
   overflow: hidden;
   background: rgba(207, 225, 217, 0.18);
@@ -943,10 +1289,26 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(0.65rem);
   animation: ledger-arrive 0.75s 0.28s cubic-bezier(0.2, 0.76, 0.26, 1) both;
 }
+.archive-ledger::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(120deg, transparent, rgba(244, 243, 233, 0.08), transparent),
+    repeating-linear-gradient(90deg, transparent 0 2.4rem, rgba(134, 211, 198, 0.045) 2.45rem 2.5rem);
+  opacity: 0.32;
+  transform: translateX(-42%);
+  animation: ledger-glint 7s 1.1s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  pointer-events: none;
+}
 .archive-ledger div {
+  position: relative;
   min-width: 0;
   padding: 1rem 0.85rem;
   background: rgba(9, 43, 56, 0.82);
+  transition:
+    background-color 0.22s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .archive-ledger div:nth-child(1) {
   animation: ledger-cell 0.55s 0.42s ease both;
@@ -973,12 +1335,19 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+@media (hover: hover) and (pointer: fine) {
+  .archive-ledger div:hover {
+    background: rgba(14, 60, 69, 0.9);
+    transform: translateY(-0.12rem);
+  }
+}
 .archive-workspace {
   position: relative;
   z-index: 1;
-  padding-top: 1.7rem;
+  padding-top: 1.9rem;
 }
 .archive-control-bar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -987,11 +1356,40 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid rgba(207, 225, 217, 0.15);
   animation: control-unfold 0.7s 0.45s ease both;
 }
-.archive-control-bar > p {
-  margin: 0;
-  color: rgba(244, 243, 233, 0.45);
+.archive-control-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto -1px 0;
+  width: 7.5rem;
+  border-bottom: 1px solid rgba(247, 201, 81, 0.62);
+  opacity: 0.7;
+  transform: translateX(calc(var(--archive-scroll-shift) * 0.36));
+}
+.archive-locate-meter {
+  display: inline-grid;
+  align-items: center;
+  min-width: 5.6rem;
+  padding: 0.48rem 0.76rem;
+  border: 1px solid rgba(134, 211, 198, 0.18);
+  border-radius: 0.65rem;
+  background:
+    linear-gradient(90deg, rgba(247, 201, 81, 0.08), rgba(134, 211, 198, 0.06)),
+    rgba(6, 29, 40, 0.34);
   font-family: "Noto Sans SC", sans-serif;
-  font-size: 0.75rem;
+}
+.archive-locate-meter span {
+  display: grid;
+  gap: 0.08rem;
+}
+.archive-locate-meter b {
+  color: #f7c951;
+  font-size: 0.96rem;
+  line-height: 1;
+}
+.archive-locate-meter small {
+  color: rgba(244, 243, 233, 0.48);
+  font-size: 0.58rem;
+  white-space: nowrap;
 }
 .archive-view-switcher {
   display: flex;
@@ -1002,45 +1400,86 @@ onBeforeUnmount(() => {
   position: relative;
   display: grid;
   place-items: center;
+  min-width: 3rem;
   color: rgba(244, 243, 233, 0.48);
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.82rem;
   font-weight: 700;
   text-decoration: none;
+  transition:
+    color 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .archive-view-switcher a::after {
   content: "";
   position: absolute;
-  right: 50%;
   bottom: -1px;
-  left: 50%;
+  left: 0;
+  width: 100%;
   height: 2px;
   background: #f7c951;
-  transition:
-    right 0.2s ease,
-    left 0.2s ease;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.2s ease;
 }
 .archive-view-switcher a:hover,
 .archive-view-switcher a.active {
   color: #f7c951;
 }
+.archive-view-switcher a:hover {
+  transform: translateY(-0.12rem);
+}
 .archive-view-switcher a.active::after {
-  right: 0;
-  left: 0;
+  transform: scaleX(1);
 }
 .archive-layout {
   display: grid;
-  grid-template-columns: 13rem minmax(0, 1fr);
-  gap: 4rem;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: 2.6rem;
   padding-top: 2.5rem;
 }
 .archive-filter-rail {
   position: sticky;
   top: 6.2rem;
   align-self: start;
-  padding-right: 1.5rem;
-  border-right: 1px solid rgba(207, 225, 217, 0.14);
+  max-height: calc(100vh - 7.4rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.15rem 1.1rem;
+  border: 1px solid rgba(207, 225, 217, 0.12);
+  border-radius: 1.3rem;
+  background:
+    linear-gradient(180deg, rgba(9, 43, 56, 0.32), rgba(9, 43, 56, 0.12)),
+    rgba(7, 29, 40, 0.12);
+  box-shadow:
+    0 1.5rem 2.8rem rgba(1, 10, 14, 0.1),
+    inset 0 0 0 1px rgba(244, 243, 233, 0.03);
+  backdrop-filter: blur(6px);
+  scrollbar-color: rgba(134, 211, 198, 0.38) transparent;
+  scrollbar-width: thin;
   animation: rail-rise 0.75s 0.6s ease both;
+}
+.archive-filter-rail::-webkit-scrollbar {
+  width: 5px;
+}
+.archive-filter-rail::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(247, 201, 81, 0.55), rgba(134, 211, 198, 0.42));
+}
+.archive-filter-rail::-webkit-scrollbar-track {
+  background: transparent;
+}
+.archive-filter-rail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(9, 43, 56, 0.2), rgba(9, 43, 56, 0.02)),
+    repeating-linear-gradient(180deg, transparent 0 2.2rem, rgba(134, 211, 198, 0.018) 2.25rem 2.3rem);
+  opacity: 0.45;
+  border-radius: inherit;
 }
 .archive-filter-rail::after {
   content: "";
@@ -1076,47 +1515,84 @@ onBeforeUnmount(() => {
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.7rem;
   cursor: pointer;
+  transition:
+    color 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.filter-rail-heading button:hover,
+.filter-rail-heading button:focus-visible {
+  color: #f7c951;
+  transform: translateX(-0.18rem);
 }
 .filter-group + .filter-group {
   margin-top: 2.4rem;
 }
 .filter-group > p {
   margin-bottom: 0.8rem;
-  color: rgba(244, 243, 233, 0.42);
+  color: rgba(244, 243, 233, 0.58);
   letter-spacing: 0.08em;
 }
 .filter-group button {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
   min-height: 2rem;
-  padding: 0.2rem 0;
-  border: 0;
-  color: rgba(244, 243, 233, 0.7);
-  background: none;
+  padding: 0.45rem 0.7rem 0.45rem 0.95rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: rgba(244, 243, 233, 0.82);
+  background: transparent;
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.82rem;
   text-align: left;
   cursor: pointer;
   transition:
     color 0.18s ease,
-    padding-left 0.18s ease;
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    text-shadow 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.filter-group button::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -0.75rem;
+  width: 0.28rem;
+  height: 0.28rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.45);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .filter-group button:hover,
 .filter-group button.active {
   color: #f7c951;
+  text-shadow: 0 0 0.7rem rgba(247, 201, 81, 0.22);
+  border-color: rgba(247, 201, 81, 0.28);
+  background: rgba(247, 201, 81, 0.045);
+}
+.filter-group button:hover::before,
+.filter-group button.active::before {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
 }
 .filter-group:not(.filter-tags) button:hover,
 .filter-group:not(.filter-tags) button.active {
-  padding-left: 0.35rem;
+  transform: translateX(0.2rem);
 }
 .filter-group small {
-  color: rgba(244, 243, 233, 0.35);
+  color: rgba(244, 243, 233, 0.5);
   font-size: 0.65rem;
 }
 .filter-tags button {
   display: inline-flex;
+  gap: 0.32rem;
   width: auto;
   margin-right: 0.7rem;
   transition:
@@ -1124,18 +1600,58 @@ onBeforeUnmount(() => {
     transform 0.18s ease,
     text-shadow 0.18s ease;
 }
+.filter-tags button::before {
+  content: none;
+}
 .filter-tags button:hover,
 .filter-tags button.active {
   transform: translateY(-0.08rem);
   text-shadow: 0 0 0.65rem rgba(247, 201, 81, 0.32);
 }
+.archive-results {
+  position: relative;
+  isolation: isolate;
+  padding: 0.9rem 0 0.15rem;
+  border-radius: 1.4rem;
+  background:
+    linear-gradient(180deg, rgba(7, 29, 40, 0.18), rgba(7, 29, 40, 0.04)),
+    rgba(7, 29, 40, 0.025);
+  box-shadow:
+    0 1.6rem 2.8rem rgba(1, 10, 14, 0.07),
+    inset 0 0 0 1px rgba(244, 243, 233, 0.025);
+  backdrop-filter: blur(3px);
+}
+.archive-results::before {
+  content: "";
+  position: absolute;
+  inset: -1.5rem -2rem -2.5rem;
+  z-index: -2;
+  background:
+    linear-gradient(90deg, rgba(5, 25, 35, 0.08), rgba(8, 38, 48, 0.12), transparent 86%),
+    radial-gradient(circle at 18% 18%, rgba(244, 243, 233, 0.035), transparent 18rem);
+  opacity: 0.48;
+  pointer-events: none;
+}
+.archive-results::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5.35rem;
+  z-index: -1;
+  width: 8rem;
+  background: linear-gradient(90deg, rgba(247, 201, 81, 0.045), transparent);
+  opacity: 0.48;
+  pointer-events: none;
+}
 .archive-groups {
   display: grid;
-  gap: 3.3rem;
+  gap: 3rem;
 }
 .archive-month-group {
   position: relative;
   isolation: isolate;
+  padding-top: 0.1rem;
 }
 .archive-month-group::before {
   content: "";
@@ -1154,12 +1670,26 @@ onBeforeUnmount(() => {
   transform: translateX(-3%);
   animation: month-current 12s ease-in-out infinite alternate;
 }
+.archive-month-group::after {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  top: 3.2rem;
+  right: 6%;
+  width: 10rem;
+  aspect-ratio: 1;
+  border: 1px solid rgba(134, 211, 198, 0.08);
+  border-radius: 50%;
+  opacity: 0.8;
+  transform: rotate(0deg);
+  animation: month-orbit 22s linear infinite;
+}
 .archive-month-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  padding-bottom: 1rem;
+  padding: 0 0.2rem 1rem;
   border-bottom: 1px solid rgba(207, 225, 217, 0.18);
   animation: month-heading-in 0.65s ease both;
 }
@@ -1168,15 +1698,34 @@ onBeforeUnmount(() => {
   color: #f4f3e9;
   font-size: 1.35rem;
 }
-.archive-month-heading span {
-  color: rgba(134, 211, 198, 0.78);
+.archive-month-count {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.1rem 0.55rem;
+  align-items: baseline;
+  justify-content: end;
+  min-width: 6.4rem;
+  padding: 0.48rem 0.68rem;
+  border: 1px solid rgba(134, 211, 198, 0.2);
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(135deg, rgba(134, 211, 198, 0.1), rgba(247, 201, 81, 0.05)),
+    rgba(6, 29, 40, 0.38);
   font-family: "Noto Sans SC", sans-serif;
-  font-size: 0.65rem;
-  letter-spacing: 0.12em;
+}
+.archive-month-count strong {
+  color: #f7c951;
+  font-size: 1rem;
+  line-height: 1;
+}
+.archive-month-count span {
+  color: rgba(134, 211, 198, 0.86);
+  font-size: 0.64rem;
 }
 .archive-timeline {
   position: relative;
   overflow: hidden;
+  padding-top: 0.15rem;
 }
 .archive-timeline::before {
   content: "";
@@ -1202,14 +1751,24 @@ onBeforeUnmount(() => {
   position: relative;
   display: grid;
   grid-template-columns: 4.3rem 2.1rem minmax(0, 1fr);
-  padding: 1.75rem 0;
-  border-bottom: 1px solid rgba(207, 225, 217, 0.14);
+  margin: 0.95rem 0;
+  padding: 1.4rem 1.2rem 1.35rem 0.95rem;
+  border: 1px solid rgba(207, 225, 217, 0.12);
+  border-radius: 1.2rem;
+  background:
+    linear-gradient(145deg, rgba(9, 43, 56, 0.48), rgba(6, 24, 34, 0.28)),
+    rgba(9, 43, 56, 0.1);
+  box-shadow:
+    0 0.9rem 2rem rgba(1, 10, 14, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(5px);
   opacity: 0;
   transform: translate3d(1.35rem, 0.65rem, 0);
   transition:
     opacity 0.65s ease,
     transform 0.65s cubic-bezier(0.2, 0.76, 0.26, 1),
-    border-color 0.35s ease;
+    border-color 0.35s ease,
+    background-color 0.35s ease;
 }
 .archive-entry.visible {
   opacity: 1;
@@ -1218,22 +1777,50 @@ onBeforeUnmount(() => {
 .archive-entry::before {
   content: "";
   position: absolute;
-  inset: 0.35rem 0;
+  inset: 0.45rem 0.45rem 0.45rem 0.45rem;
   z-index: -1;
-  background: linear-gradient(90deg, transparent, rgba(134, 211, 198, 0.055), transparent);
+  border-left: 1px solid rgba(247, 201, 81, 0.24);
+  background:
+    linear-gradient(90deg, rgba(247, 201, 81, 0.08), rgba(134, 211, 198, 0.08), transparent 82%),
+    repeating-linear-gradient(90deg, transparent 0 3.8rem, rgba(244, 243, 233, 0.022) 3.85rem 3.9rem);
   opacity: 0;
-  transform: scaleX(0.88);
+  transform: translateX(-0.4rem) scaleX(0.92);
+  transform-origin: left;
   transition:
     opacity 0.35s ease,
-    transform 0.45s ease;
+    transform 0.45s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.archive-entry::after {
+  content: "READ";
+  position: absolute;
+  top: 1.4rem;
+  right: 0.6rem;
+  color: rgba(134, 211, 198, 0.28);
+  font-family: "Noto Sans SC", sans-serif;
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  opacity: 0;
+  transform: translateX(0.7rem);
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .archive-entry:hover::before,
 .archive-entry:focus-within::before {
   opacity: 1;
-  transform: scaleX(1);
+  transform: translateX(0) scaleX(1);
+}
+.archive-entry:hover::after,
+.archive-entry:focus-within::after {
+  opacity: 1;
+  transform: translateX(0);
 }
 .archive-entry:hover {
-  border-color: rgba(134, 211, 198, 0.3);
+  border-color: rgba(134, 211, 198, 0.34);
+  background:
+    linear-gradient(145deg, rgba(12, 58, 66, 0.56), rgba(6, 26, 36, 0.38)),
+    rgba(5, 22, 30, 0.08);
+  transform: translate3d(0.1rem, -0.18rem, 0);
 }
 .archive-entry time {
   padding-top: 0.15rem;
@@ -1290,18 +1877,19 @@ onBeforeUnmount(() => {
 }
 .archive-entry:hover .archive-entry-body,
 .archive-entry:focus-within .archive-entry-body {
-  transform: translateX(0.45rem);
+  transform: translateX(0.35rem);
 }
 .archive-entry-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
-  color: rgba(244, 243, 233, 0.42);
+  color: rgba(244, 243, 233, 0.58);
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.71rem;
 }
 .archive-entry-meta span:first-child {
-  color: #86d3c6;
+  color: #9ae6da;
+  text-shadow: 0 0 0.7rem rgba(134, 211, 198, 0.16);
 }
 .archive-entry h2 {
   margin: 0.5rem 0 0.45rem;
@@ -1309,20 +1897,28 @@ onBeforeUnmount(() => {
   line-height: 1.2;
 }
 .archive-entry h2 a {
-  color: #f4f3e9;
+  position: relative;
+  color: #fff9e9;
   text-decoration: none;
-  transition: color 0.18s ease;
+  text-shadow:
+    0 0.1rem 0.3rem rgba(0, 0, 0, 0.28),
+    0.06em 0.05em 0 rgba(5, 25, 35, 0.35);
+  transition:
+    color 0.18s ease,
+    text-shadow 0.22s ease;
 }
 .archive-entry h2 a:hover {
   color: #f7c951;
+  text-shadow: 0 0 1rem rgba(247, 201, 81, 0.22);
 }
 .archive-entry-body > p {
   max-width: 43rem;
   margin: 0;
-  color: rgba(244, 243, 233, 0.68);
+  color: rgba(244, 243, 233, 0.84);
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.86rem;
   line-height: 1.75;
+  text-shadow: 0 0.08rem 0.25rem rgba(0, 0, 0, 0.2);
 }
 .archive-entry footer {
   display: flex;
@@ -1331,7 +1927,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 0.8rem;
   margin-top: 1rem;
-  color: rgba(244, 243, 233, 0.43);
+  color: rgba(244, 243, 233, 0.62);
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.7rem;
   padding-right: 0.7rem;
@@ -1349,24 +1945,44 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
-  color: #86d3c6;
+  color: #9ae6da;
 }
 .article-tags b {
+  position: relative;
   font-weight: 500;
+  transition:
+    color 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.article-tags b:hover {
+  color: #fff0a7;
+  transform: translateY(-0.08rem);
 }
 .article-empty-state {
+  position: relative;
   display: grid;
   min-height: 22rem;
   place-items: center;
   color: rgba(244, 243, 233, 0.55);
   font-family: "Noto Sans SC", sans-serif;
 }
+.article-empty-state::before {
+  content: "";
+  width: 3.8rem;
+  aspect-ratio: 1;
+  margin-bottom: -5.6rem;
+  border: 1px solid rgba(247, 201, 81, 0.38);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1rem rgba(134, 211, 198, 0.035);
+  animation: empty-radar 2.2s linear infinite;
+}
 .archive-load-more {
+  position: relative;
   display: grid;
   min-height: 7rem;
   margin-top: 2.4rem;
   place-items: center;
-  color: rgba(134, 211, 198, 0.7);
+  color: rgba(134, 211, 198, 0.82);
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.75rem;
   letter-spacing: 0.08em;
@@ -1377,21 +1993,36 @@ onBeforeUnmount(() => {
   height: 1px;
   margin-bottom: -2.5rem;
   background: linear-gradient(90deg, transparent, rgba(247, 201, 81, 0.55), transparent);
+  animation: load-line 2.8s cubic-bezier(0.25, 1, 0.5, 1) infinite alternate;
+}
+.archive-load-more::after {
+  content: "";
+  width: 0.42rem;
+  aspect-ratio: 1;
+  margin-top: -2.35rem;
+  border-radius: 50%;
+  background: #f7c951;
+  box-shadow: 0 0 1rem rgba(247, 201, 81, 0.56);
+  animation: load-beacon 1.8s ease-in-out infinite;
 }
 .archive-load-more button {
   padding: 0.45rem 0.75rem;
   border: 1px solid rgba(247, 201, 81, 0.4);
-  border-radius: 4px;
+  border-radius: 999px;
   color: #f7c951;
-  background: rgba(6, 29, 40, 0.48);
+  background: rgba(6, 29, 40, 0.62);
   font: inherit;
   cursor: pointer;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .archive-load-more button:hover,
 .archive-load-more button:focus-visible {
   border-color: #f7c951;
   background: rgba(247, 201, 81, 0.12);
+  transform: translateY(-0.08rem);
 }
 .archive-back-to-top {
   position: fixed;
@@ -1475,6 +2106,44 @@ onBeforeUnmount(() => {
       5rem 5rem;
   }
 }
+@keyframes atmosphere-drift {
+  from {
+    opacity: 0.48;
+    transform: translate3d(-1.5rem, 0, 0);
+  }
+  to {
+    opacity: 0.72;
+    transform: translate3d(1.5rem, 1rem, 0);
+  }
+}
+@keyframes atmosphere-scan {
+  from {
+    transform: translate3d(0, -18%, 0);
+  }
+  to {
+    transform: translate3d(0, 18%, 0);
+  }
+}
+@keyframes current-slip {
+  from {
+    transform: rotate(-8deg) translateX(-5%);
+  }
+  to {
+    transform: rotate(-8deg) translateX(5%);
+  }
+}
+@keyframes signal-blink {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scaleX(0.45);
+  }
+  45%,
+  62% {
+    opacity: 0.95;
+    transform: scaleX(1);
+  }
+}
 @keyframes chart-sheet-drift {
   from {
     transform: translate3d(-1rem, var(--archive-counter-shift), 0);
@@ -1537,6 +2206,14 @@ onBeforeUnmount(() => {
     transform: translate3d(2rem, calc(var(--archive-counter-shift) - 1rem), 0);
   }
 }
+@keyframes depth-band-three {
+  from {
+    transform: translate3d(1rem, -0.6rem, 0) rotate(1deg);
+  }
+  to {
+    transform: translate3d(-2rem, 0.9rem, 0) rotate(-1deg);
+  }
+}
 @keyframes chart-sweep {
   from {
     transform: translateY(-15rem) rotate(-6deg);
@@ -1555,6 +2232,18 @@ onBeforeUnmount(() => {
     transform: translateX(0.8rem);
   }
 }
+@keyframes masthead-signal {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scaleX(0.28);
+  }
+  42%,
+  62% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
 @keyframes masthead-rise {
   from {
     opacity: 0;
@@ -1563,6 +2252,15 @@ onBeforeUnmount(() => {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+@keyframes eyebrow-ping {
+  0% {
+    box-shadow: 0 0 0 0 rgba(247, 201, 81, 0.28);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.72rem rgba(247, 201, 81, 0);
   }
 }
 @keyframes title-settle {
@@ -1583,6 +2281,21 @@ onBeforeUnmount(() => {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+@keyframes ledger-glint {
+  0%,
+  35% {
+    opacity: 0;
+    transform: translateX(-58%);
+  }
+  52% {
+    opacity: 0.42;
+  }
+  82%,
+  100% {
+    opacity: 0;
+    transform: translateX(58%);
   }
 }
 @keyframes ledger-cell {
@@ -1649,6 +2362,11 @@ onBeforeUnmount(() => {
     transform: translateX(3%);
   }
 }
+@keyframes month-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
 @keyframes timeline-scan {
   0% {
     transform: translateY(-5rem);
@@ -1675,6 +2393,32 @@ onBeforeUnmount(() => {
     transform: scale(1.8);
   }
 }
+@keyframes empty-radar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes load-line {
+  from {
+    opacity: 0.38;
+    transform: scaleX(0.62);
+  }
+  to {
+    opacity: 0.9;
+    transform: scaleX(1);
+  }
+}
+@keyframes load-beacon {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0) scale(0.78);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-0.12rem) scale(1);
+  }
+}
 @media (max-width: 900px) {
   .article-page {
     padding-top: 8.5rem;
@@ -1698,6 +2442,15 @@ onBeforeUnmount(() => {
     opacity: 0.78;
   }
   .chart-readout {
+    display: none;
+  }
+  .chart-current {
+    width: 150%;
+    height: 6rem;
+    opacity: 0.25;
+  }
+  .chart-signal,
+  .chart-depth-band-three {
     display: none;
   }
   .chart-depth-band-one {
@@ -1738,6 +2491,10 @@ onBeforeUnmount(() => {
     flex-direction: column;
     padding: 0.8rem 0;
   }
+  .archive-locate-meter {
+    width: 100%;
+    justify-content: start;
+  }
   .archive-view-switcher {
     min-height: 2.4rem;
   }
@@ -1749,9 +2506,16 @@ onBeforeUnmount(() => {
     position: static;
     display: grid;
     grid-template-columns: 1fr;
+    max-height: none;
+    overflow: visible;
+    overscroll-behavior: auto;
     padding: 0 0 1.4rem;
     border-right: 0;
     border-bottom: 1px solid rgba(207, 225, 217, 0.14);
+  }
+  .archive-filter-rail::before {
+    inset: -0.7rem -0.7rem 0;
+    border-right: 1px solid rgba(207, 225, 217, 0.08);
   }
   .archive-filter-rail::after {
     top: auto;
@@ -1775,6 +2539,13 @@ onBeforeUnmount(() => {
   }
   .filter-group button {
     width: auto;
+  }
+  .archive-month-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .archive-month-count {
+    justify-content: start;
   }
   .filter-group button:hover,
   .filter-group button.active {
@@ -1819,7 +2590,14 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .article-page::before,
   .article-page::after,
+  .archive-visual-stack,
+  .archive-visual-layer,
   .sea-chart-motion,
+  .sea-chart-motion::before,
+  .sea-chart-motion::after,
+  .chart-current,
+  .chart-signal::before,
+  .chart-signal::after,
   .chart-bearing,
   .chart-ping,
   .route-flow,
@@ -1832,32 +2610,53 @@ onBeforeUnmount(() => {
   .route-marker-fix,
   .route-marker-orbit,
   .archive-masthead-copy,
+  .archive-masthead::before,
   .archive-masthead h1,
+  .archive-eyebrow span,
   .archive-ledger,
+  .archive-ledger::before,
   .archive-ledger div,
   .archive-control-bar,
   .archive-filter-rail,
   .archive-filter-rail::after,
   .archive-month-group::before,
+  .archive-month-group::after,
   .archive-month-heading,
   .archive-timeline::after,
-  .archive-node::after {
+  .archive-node::after,
+  .article-empty-state::before,
+  .archive-load-more::before,
+  .archive-load-more::after {
     animation: none;
   }
   .archive-route-field,
+  .archive-visual-stack,
+  .archive-visual-layer,
+  .archive-visual-layer.active,
   .article-page::before,
-  .chart-depth-band-two {
+  .chart-depth-band-two,
+  .chart-depth-band-three,
+  .sea-chart-motion::before,
+  .sea-chart-motion::after,
+  .chart-current {
     transform: none;
   }
   .article-back-link::before,
+  .archive-visual-layer,
   .archive-view-switcher a::after,
+  .archive-view-switcher a,
   .filter-group button,
+  .filter-group button::before,
+  .filter-rail-heading button,
+  .archive-ledger div,
   .archive-entry,
   .archive-entry::before,
+  .archive-entry::after,
   .archive-entry time,
   .archive-node,
   .archive-entry-body,
-  .archive-entry h2 a {
+  .archive-entry h2 a,
+  .article-tags b {
     transition: none;
   }
   .archive-entry {

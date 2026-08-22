@@ -10,7 +10,9 @@ const fallbackProfile: AboutProfile = {
   role: "全栈开发者 / 独立创作者",
   headline: "把复杂问题拆成清晰产品，也把沿途的思考写成航海日志。",
   bio: "我关注产品体验、前后端工程与长期可维护的软件设计。工作之外，我会记录技术实践、项目复盘和生活观察，希望这里不仅是一份履历，也是一张持续更新的个人航海图。",
-  avatar_url: "http://127.0.0.1:8000/uploads/eaed8b38790549ea926f1112d6435e46.jpg",
+  avatar_url: "/owner-avatar.jpg",
+  resume_url: "",
+  resume_filename: "",
   status_text: "正在航行，欢迎交流",
   email: null,
   location_name: "中国 · 上海",
@@ -66,6 +68,7 @@ const loading = ref(true);
 const errorText = ref("");
 const mastRoot = ref<HTMLElement | null>(null);
 const boardRoot = ref<HTMLElement | null>(null);
+const resumePreviewOpen = ref(false);
 let revealObserver: IntersectionObserver | undefined;
 let activeCard: HTMLElement | null = null;
 let tiltFrame = 0;
@@ -100,6 +103,22 @@ const updatedDate = computed(() =>
   ),
 );
 
+const hasResume = computed(() => Boolean(profile.value.resume_url.trim()));
+const resumeFileName = computed(() => profile.value.resume_filename || `${profile.value.display_name}-简历.pdf`);
+const resumeDownloadUrl = computed(() => {
+  if (!hasResume.value) return "";
+  try {
+    const url = new URL(profile.value.resume_url);
+    const filename = url.pathname.split("/").pop();
+    if (filename && url.pathname.includes("/uploads/resumes/")) {
+      return `${url.origin}/api/v1/media/resumes/${encodeURIComponent(filename)}`;
+    }
+  } catch {
+    // 非标准地址直接交给浏览器处理。
+  }
+  return profile.value.resume_url;
+});
+
 function skillMark(skill: string) {
   const ascii = skill.match(/[A-Za-z0-9]+/)?.[0];
   return ascii ? ascii.slice(0, 2).toUpperCase() : skill.slice(0, 1);
@@ -110,6 +129,15 @@ function handleSkillIconError(event: Event) {
   image.hidden = true;
   const fallback = image.nextElementSibling as HTMLElement | null;
   if (fallback) fallback.hidden = false;
+}
+
+function openResumePreview() {
+  if (!hasResume.value) return;
+  resumePreviewOpen.value = true;
+}
+
+function closeResumePreview() {
+  resumePreviewOpen.value = false;
 }
 
 function updateMastPerspective(event: PointerEvent) {
@@ -257,6 +285,10 @@ onBeforeUnmount(() => {
           ><span>/</span>{{ profile.role }}
         </p>
         <small>{{ profile.status_text }}</small>
+        <div v-if="hasResume" class="mast-resume-actions" aria-label="简历入口">
+          <button type="button" @click="openResumePreview">预览简历</button>
+          <a :href="resumeDownloadUrl" :download="resumeFileName">下载 PDF</a>
+        </div>
       </div>
 
       <div class="mast-chip-cloud mast-chip-cloud-right" aria-label="能力标签">
@@ -299,8 +331,7 @@ onBeforeUnmount(() => {
       <article
         class="bento-card skills-card card-span-7"
         style="--card-index: 2"
-        tabindex="0"
-        aria-label="技术栈，聚焦后显示技术名称"
+        aria-label="技术栈，鼠标移入后显示技术名称"
       >
         <header class="card-heading">
           <div>
@@ -373,7 +404,6 @@ onBeforeUnmount(() => {
           <details
             v-for="(work, index) in profile.work_experiences"
             :key="`${work.organization}-${work.period}`"
-            :open="index === 0"
           >
             <summary>
               <span>{{ String(index + 1).padStart(2, "0") }}</span>
@@ -445,7 +475,7 @@ onBeforeUnmount(() => {
         />
       </article>
 
-      <article class="bento-card site-card card-span-8" style="--card-index: 6">
+      <article class="bento-card site-card card-span-6" style="--card-index: 6">
         <div class="site-stamp" aria-hidden="true">航</div>
         <div>
           <p class="card-kicker">THIS WEBSITE</p>
@@ -461,7 +491,25 @@ onBeforeUnmount(() => {
         </div>
       </article>
 
-      <article class="bento-card connect-card card-span-4" style="--card-index: 7">
+      <article
+        v-if="hasResume"
+        class="bento-card resume-card card-span-3"
+        style="--card-index: 7"
+      >
+        <div class="resume-doc-mark" aria-hidden="true">
+          <span></span>
+          <i></i>
+        </div>
+        <p class="card-kicker">RESUME</p>
+        <h2>简历</h2>
+        <p>{{ resumeFileName }}</p>
+        <div class="resume-actions">
+          <button type="button" @click="openResumePreview">在线预览</button>
+          <a :href="resumeDownloadUrl" :download="resumeFileName">下载 PDF</a>
+        </div>
+      </article>
+
+      <article class="bento-card connect-card card-span-3" style="--card-index: 8">
         <p class="card-kicker">KEEP IN TOUCH</p>
         <h2>保持联系</h2>
         <p>{{ profile.status_text }}</p>
@@ -486,6 +534,34 @@ onBeforeUnmount(() => {
         </div>
       </article>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="resumePreviewOpen && hasResume"
+        class="resume-preview-layer"
+        role="presentation"
+        @click.self="closeResumePreview"
+      >
+        <section
+          class="resume-preview-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-label="在线预览简历"
+        >
+          <header>
+            <div>
+              <p class="card-kicker">RESUME PREVIEW</p>
+              <h2>{{ resumeFileName }}</h2>
+            </div>
+            <button type="button" aria-label="关闭简历预览" @click="closeResumePreview">×</button>
+          </header>
+          <iframe :src="profile.resume_url" title="在线预览简历"></iframe>
+          <footer>
+            <a :href="resumeDownloadUrl" :download="resumeFileName">下载 PDF</a>
+          </footer>
+        </section>
+      </div>
+    </Teleport>
 
     <footer class="about-footer">
       <span>ABOUT / {{ profile.display_name }}</span>
@@ -617,6 +693,51 @@ onBeforeUnmount(() => {
   color: var(--sea);
   font-size: 0.72rem;
   font-weight: 700;
+}
+
+.mast-resume-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: center;
+  margin-top: 0.85rem;
+}
+
+.mast-resume-actions a,
+.mast-resume-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0.42rem 0.72rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 6px 16px rgba(16, 42, 54, 0.08);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.mast-resume-actions button {
+  border-color: rgba(21, 147, 155, 0.32);
+  color: #fff;
+  background: var(--sea);
+}
+
+.mast-resume-actions a:hover,
+.mast-resume-actions button:hover,
+.mast-resume-actions a:focus-visible,
+.mast-resume-actions button:focus-visible {
+  transform: translateY(-2px);
 }
 
 .mast-chip-cloud {
@@ -765,6 +886,10 @@ onBeforeUnmount(() => {
   grid-column: span 4;
 }
 
+.card-span-3 {
+  grid-column: span 3;
+}
+
 .card-span-5 {
   grid-column: span 5;
 }
@@ -824,17 +949,24 @@ onBeforeUnmount(() => {
 
 .site-card {
   --card-rotate: -0.28deg;
-  grid-column: 1 / span 8;
+  grid-column: 1 / span 6;
   grid-row: 4;
   margin-top: 1.25rem;
 }
 
+.resume-card {
+  --card-rotate: 0.48deg;
+  grid-column: 7 / span 3;
+  grid-row: 4;
+  margin: 2.1rem 0 0 -0.15rem;
+}
+
 .connect-card {
   --card-rotate: 0.72deg;
-  grid-column: 9 / span 4;
+  grid-column: 10 / span 3;
   grid-row: 4;
   align-self: end;
-  margin: 0 0 1.2rem -0.7rem;
+  margin: 0 0 1.2rem -0.35rem;
 }
 
 .card-kicker {
@@ -1143,25 +1275,19 @@ onBeforeUnmount(() => {
   transform: translateY(-2px);
 }
 
-.skills-card:hover .skill-icon-stage,
-.skills-card:focus .skill-icon-stage,
-.skills-card:focus-within .skill-icon-stage {
+.skills-card:hover .skill-icon-stage {
   opacity: 0;
   pointer-events: none;
   transform: translateY(-10px) scale(0.97);
 }
 
-.skills-card:hover .skill-tag-stage,
-.skills-card:focus .skill-tag-stage,
-.skills-card:focus-within .skill-tag-stage {
+.skills-card:hover .skill-tag-stage {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0) scale(1);
 }
 
-.skills-card:hover .skill-marquee-track,
-.skills-card:focus .skill-marquee-track,
-.skills-card:focus-within .skill-marquee-track {
+.skills-card:hover .skill-marquee-track {
   animation-play-state: paused;
 }
 
@@ -1261,30 +1387,67 @@ onBeforeUnmount(() => {
 
 .project-list {
   display: grid;
+  gap: 0.35rem;
   max-height: 248px;
   margin-top: 1rem;
+  padding: 0 0.45rem 0.1rem 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
 
 .project-list > article {
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr) auto;
   gap: 0.7rem;
-  padding: 0.85rem 0;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 0.85rem 0.6rem 0.85rem 0.5rem;
   border-top: 1px solid var(--border);
   border-radius: 6px;
+  transform: translate3d(0, 0, 0);
   transition:
-    padding 200ms ease,
     background-color 200ms ease,
-    transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow 200ms ease,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.project-list > article:hover {
-  padding-right: 0.6rem;
-  padding-left: 0.6rem;
-  background: #f4f7f8;
-  transform: translateX(5px);
+.project-list > article::before {
+  content: "";
+  position: absolute;
+  inset: 0.2rem 0;
+  z-index: -1;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(236, 111, 83, 0.12), transparent 36%),
+    linear-gradient(100deg, rgba(244, 247, 248, 0.92), rgba(232, 241, 245, 0.64));
+  opacity: 0;
+  transform: scaleX(0.985);
+  transform-origin: left center;
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .project-list > article:hover {
+    background: transparent;
+    box-shadow: inset 3px 0 0 rgba(236, 111, 83, 0.7);
+    transform: translate3d(3px, -1px, 0);
+  }
+
+  .project-list > article:hover::before {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+.project-list > article > div {
+  min-width: 0;
 }
 
 .project-index,
@@ -1311,6 +1474,7 @@ onBeforeUnmount(() => {
   font:
     400 0.7rem/1.65 "Noto Sans SC",
     sans-serif;
+  overflow-wrap: anywhere;
 }
 
 .project-list > article > a {
@@ -1328,15 +1492,20 @@ onBeforeUnmount(() => {
 
 .project-tags {
   margin-top: 0.55rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .project-tags span,
 .site-stack span {
+  max-width: 100%;
   padding: 0.25rem 0.45rem;
+  overflow: hidden;
   border-radius: 4px;
   background: #eef3f5;
   font-size: 0.6rem;
   font-weight: 700;
+  text-overflow: ellipsis;
 }
 
 .location-card {
@@ -1417,6 +1586,204 @@ onBeforeUnmount(() => {
 }
 
 .site-stack span {
+  color: #fff;
+  background: var(--sea);
+}
+
+.resume-card {
+  min-height: 250px;
+  color: #f9fbfb;
+  background:
+    linear-gradient(150deg, rgba(239, 115, 91, 0.14), transparent 46%),
+    #176b73;
+  border-color: #176b73;
+}
+
+.resume-card .card-kicker {
+  color: #f1c66e;
+}
+
+.resume-doc-mark {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 72px;
+  border: 1px solid rgba(249, 251, 251, 0.36);
+  border-radius: 6px 6px 12px;
+  background: rgba(249, 251, 251, 0.12);
+  transform: rotate(5deg);
+  transition:
+    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 220ms ease;
+}
+
+.resume-doc-mark::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  border-top: 18px solid rgba(249, 251, 251, 0.76);
+  border-left: 18px solid transparent;
+  border-radius: 0 6px 0 0;
+}
+
+.resume-doc-mark span,
+.resume-doc-mark i {
+  display: block;
+  width: 26px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(249, 251, 251, 0.72);
+}
+
+.resume-doc-mark i {
+  width: 18px;
+  margin-top: -0.9rem;
+}
+
+.resume-card:hover .resume-doc-mark {
+  background: rgba(249, 251, 251, 0.18);
+  transform: rotate(-4deg) translateY(-3px);
+}
+
+.resume-card h2 {
+  margin-top: 2.1rem;
+}
+
+.resume-card > p:not(.card-kicker) {
+  max-width: 11rem;
+  margin: 0.55rem 0 0;
+  overflow: hidden;
+  color: rgba(249, 251, 251, 0.72);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-actions {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1.35rem;
+}
+
+.resume-actions a,
+.resume-actions button,
+.resume-preview-dialog footer a,
+.resume-preview-dialog header button {
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+}
+
+.resume-actions a,
+.resume-actions button,
+.resume-preview-dialog footer a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0.48rem 0.72rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.resume-actions button {
+  color: var(--ink);
+  background: var(--brass);
+}
+
+.resume-actions a {
+  color: #f9fbfb;
+  background: rgba(249, 251, 251, 0.14);
+}
+
+.resume-actions a:hover,
+.resume-actions button:hover,
+.resume-actions a:focus-visible,
+.resume-actions button:focus-visible {
+  transform: translateY(-2px);
+}
+
+.resume-preview-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(8, 27, 35, 0.72);
+  backdrop-filter: blur(14px);
+  animation: preview-fade 180ms ease both;
+}
+
+.resume-preview-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(100%, 980px);
+  height: min(88vh, 780px);
+  overflow: hidden;
+  border: 1px solid rgba(249, 251, 251, 0.16);
+  border-radius: 8px;
+  background: #f7fafb;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+  animation: preview-rise 220ms cubic-bezier(0.16, 0.85, 0.2, 1) both;
+}
+
+.resume-preview-dialog header,
+.resume-preview-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  background: #fff;
+}
+
+.resume-preview-dialog header {
+  border-bottom: 1px solid var(--border);
+}
+
+.resume-preview-dialog header h2 {
+  margin: 0.25rem 0 0;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.resume-preview-dialog header button {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--ink);
+  background: #edf2f5;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.resume-preview-dialog iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #dce5ea;
+}
+
+.resume-preview-dialog footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+}
+
+.resume-preview-dialog footer a {
   color: #fff;
   background: var(--sea);
 }
@@ -1521,6 +1888,19 @@ onBeforeUnmount(() => {
   }
 }
 
+@keyframes preview-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes preview-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+}
+
 @media (max-width: 900px) {
   .about-mast {
     grid-template-columns: 1fr auto 1fr;
@@ -1538,6 +1918,7 @@ onBeforeUnmount(() => {
   .project-card,
   .location-card,
   .site-card,
+  .resume-card,
   .connect-card {
     grid-row: auto;
     align-self: auto;
@@ -1545,6 +1926,7 @@ onBeforeUnmount(() => {
   }
 
   .card-span-4,
+  .card-span-3,
   .card-span-5,
   .card-span-6,
   .card-span-7,
@@ -1608,6 +1990,7 @@ onBeforeUnmount(() => {
   }
 
   .card-span-4,
+  .card-span-3,
   .card-span-5,
   .card-span-6,
   .card-span-7,
@@ -1622,6 +2005,7 @@ onBeforeUnmount(() => {
   .project-card,
   .location-card,
   .site-card,
+  .resume-card,
   .connect-card {
     --card-rotate: 0deg;
     margin: 0;
@@ -1630,6 +2014,7 @@ onBeforeUnmount(() => {
   .intro-card,
   .headline-card,
   .site-card,
+  .resume-card,
   .connect-card {
     min-height: 220px;
   }
@@ -1665,6 +2050,14 @@ onBeforeUnmount(() => {
   .site-stack {
     grid-column: 1 / -1;
   }
+
+  .resume-preview-layer {
+    padding: 0.65rem;
+  }
+
+  .resume-preview-dialog {
+    height: 90vh;
+  }
 }
 
 @media (max-width: 380px) {
@@ -1699,6 +2092,7 @@ onBeforeUnmount(() => {
   }
 
   .project-list > article:hover {
+    box-shadow: none;
     transform: none;
   }
 
@@ -1707,6 +2101,10 @@ onBeforeUnmount(() => {
     background: transparent;
     transform: rotate(-7deg);
   }
+
+  .resume-card:hover .resume-doc-mark {
+    transform: rotate(5deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1714,7 +2112,9 @@ onBeforeUnmount(() => {
   .mast-chip,
   .bento-card,
   .headline-status i,
-  .compact-log-detail {
+  .compact-log-detail,
+  .resume-preview-layer,
+  .resume-preview-dialog {
     animation: none;
   }
 
@@ -1731,7 +2131,13 @@ onBeforeUnmount(() => {
   .skill-tag-stage,
   .skill-pill,
   .site-stamp,
-  .project-list > article {
+  .resume-doc-mark,
+  .mast-resume-actions a,
+  .mast-resume-actions button,
+  .resume-actions a,
+  .resume-actions button,
+  .project-list > article,
+  .project-list > article::before {
     transition: none;
   }
 

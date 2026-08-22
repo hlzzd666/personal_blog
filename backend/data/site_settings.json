@@ -29,6 +29,44 @@
       "text": "如果连船长都保护不了，还谈什么野心"
     }
   ],
+  "visual_assets": [
+    {
+      "key": "article_list_background",
+      "name": "文章列表页背景",
+      "usage": "background",
+      "image_url": "https://images.hdqwalls.com/download/roronoa-zoro-from-one-piece-5k-gc-1366x768.jpg",
+      "enabled": true,
+      "opacity": 0.78,
+      "note": "用于文章列表页背景，建议上传清晰横图。"
+    },
+    {
+      "key": "asset_1787383735848",
+      "name": "新的背景图",
+      "usage": "background",
+      "image_url": "https://images.hdqwalls.com/download/monkey-d-luffy-in-sea-peace-we-1366x768.jpg",
+      "enabled": true,
+      "opacity": 0.68,
+      "note": "用于文章列表页背景，建议上传清晰横图。"
+    },
+    {
+      "key": "asset_1787383946023",
+      "name": "新的背景图",
+      "usage": "background",
+      "image_url": "https://images.hdqwalls.com/download/netflix-one-piece-laboon-e9-1366x768.jpg",
+      "enabled": true,
+      "opacity": 0.68,
+      "note": "用于文章列表页背景，建议上传清晰横图。"
+    },
+    {
+      "key": "asset_1787383958762",
+      "name": "新的背景图",
+      "usage": "background",
+      "image_url": "https://images.hdqwalls.com/wallpapers/bthumb/monkey-d-luffy-tk.jpg",
+      "enabled": true,
+      "opacity": 0.68,
+      "note": "用于文章列表页背景，建议上传清晰横图。"
+    }
+  ],
   "owner_location_name": "江苏省南京市",
   "owner_latitude": 31.23,
   "owner_longitude": 121.47

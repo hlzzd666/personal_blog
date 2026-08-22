@@ -14,6 +14,17 @@ DEFAULT_SITE_SETTINGS = SiteSettings(
     owner_location_name="未设置站长地址",
     owner_latitude=None,
     owner_longitude=None,
+    visual_assets=[
+        {
+            "key": "article_list_background",
+            "name": "文章列表页背景",
+            "usage": "background",
+            "image_url": "",
+            "enabled": False,
+            "opacity": 0.28,
+            "note": "用于文章列表页的氛围底图，建议上传抽象海图、纹理或低对比度照片。",
+        },
+    ],
     quotes=[
         {
             "author": "路飞",

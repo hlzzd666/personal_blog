@@ -23,3 +23,14 @@ export async function uploadImage(file) {
         timeout: 30000,
     });
 }
+export async function uploadResume(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request({
+        method: "POST",
+        url: "/media/resumes",
+        data: formData,
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 30000,
+    });
+}

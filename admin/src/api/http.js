@@ -33,15 +33,32 @@ export class ApiError extends Error {
         this.requestId = payload.request_id;
     }
 }
-const API_BASE = "http://127.0.0.1:8000/api/v1";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+const CSRF_COOKIE_NAME = "personal_blog_admin_csrf";
+const CSRF_HEADER_NAME = "X-CSRF-Token";
+const CSRF_METHODS = new Set(["post", "put", "patch", "delete"]);
 export const http = axios.create({
     baseURL: API_BASE,
     timeout: 10000,
+    withCredentials: true,
 });
+function readCookie(name) {
+    const encodedName = `${encodeURIComponent(name)}=`;
+    return (document.cookie
+        .split(";")
+        .map((item) => item.trim())
+        .find((item) => item.startsWith(encodedName))
+        ?.slice(encodedName.length) ?? "");
+}
 http.interceptors.request.use((config) => {
     const headers = config.headers;
     if (!headers.get("X-Request-Id")) {
         headers.set("X-Request-Id", crypto.randomUUID());
+    }
+    const method = config.method?.toLowerCase() ?? "get";
+    const csrfToken = readCookie(CSRF_COOKIE_NAME);
+    if (CSRF_METHODS.has(method) && csrfToken && !headers.get(CSRF_HEADER_NAME)) {
+        headers.set(CSRF_HEADER_NAME, decodeURIComponent(csrfToken));
     }
     return config;
 });
@@ -61,6 +78,12 @@ http.interceptors.response.use((response) => {
     return response;
 }, (error) => {
     if (axios.isAxiosError(error) && error.response?.data) {
+        const requestUrl = String(error.config?.url ?? "");
+        if (error.response.status === 401 &&
+            !requestUrl.includes("/auth/login") &&
+            !requestUrl.includes("/auth/me")) {
+            window.dispatchEvent(new CustomEvent("personal-blog-admin-unauthorized"));
+        }
         return Promise.reject(new ApiError(error.response.data));
     }
     return Promise.reject(new ApiError({
