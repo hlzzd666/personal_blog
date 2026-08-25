@@ -29,3 +29,8 @@ Thumbs.db
 
 # Runtime uploads
 backend/uploads/
+
+# Deployment artifacts
+/web.tar.gz
+/admin.tar.gz
+/backend.tar.gz

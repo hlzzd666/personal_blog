@@ -10,7 +10,7 @@ import "./styles.css";
 const HomeRoute = { name: "HomeRoute", render: () => null };
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   scrollBehavior(to, from) {
     if (to.hash) {
       return { el: to.hash, behavior: "smooth" };

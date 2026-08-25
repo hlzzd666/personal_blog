@@ -34,6 +34,9 @@ npm run build:web
 tar -czf web.tar.gz -C web/dist .
 ```
 
+前台生产构建固定使用 `/web/` 基路径，本地开发仍使用根路径。不要覆盖该构建配置，
+否则线上静态资源或前端路由可能出现 404。
+
 生成：
 
 ```text
@@ -204,10 +207,25 @@ curl -i http://127.0.0.1:8000/api/v1/health
 
 看到 `200 OK` 表示后端正常。
 
+检查前台路径和重定向：
+
+```bash
+curl -I http://114.215.205.44/
+curl -I http://114.215.205.44/web
+curl -I http://114.215.205.44/web/
+curl -I http://114.215.205.44/web/about
+```
+
+预期结果：
+
+- `/` 返回 `301` 并跳转到 `/web/`。
+- `/web` 返回 `301` 并跳转到 `/web/`。
+- `/web/` 和 `/web/about` 返回 `200`。
+
 浏览器打开：
 
 ```text
-前台：http://114.215.205.44/
+前台：http://114.215.205.44/web/
 后台：http://114.215.205.44/admin/login
 ```
 
@@ -218,6 +236,15 @@ curl -i http://127.0.0.1:8000/api/v1/health
 ```bash
 rm -f /tmp/web.tar.gz /tmp/admin.tar.gz /tmp/backend.tar.gz
 ```
+
+然后回到本地 PowerShell，删除已经上传的发布包，避免下次误传旧版本：
+
+```powershell
+Remove-Item web.tar.gz, admin.tar.gz, backend.tar.gz -ErrorAction SilentlyContinue
+```
+
+这三个根目录发布包已配置在 `.gitignore` 中，不会进入 Git；即使如此，
+每次完成线上验收后仍应执行本地清理，避免长期占用空间或混淆版本。
 
 ## 5. 只更新一个项目
 
@@ -272,6 +299,31 @@ systemctl restart personal-blog-backend
 ```text
 /etc/nginx/sites-available/personal-blog-backend
 ```
+
+当前前台路径规则如下。`/api/`、`/uploads/` 和 `/admin/` 的原有规则必须保留：
+
+```nginx
+location = / {
+    return 301 /web/;
+}
+
+location = /web {
+    return 301 /web/;
+}
+
+location ^~ /web/ {
+    alias /var/www/personal_blog/web-current/;
+    try_files $uri $uri/ /web/index.html;
+}
+
+location / {
+    return 404;
+}
+```
+
+前台正式入口固定为 `http://114.215.205.44/web/`。Vue Router 子路由也位于该前缀下，
+例如文章列表为 `/web/articles`、关于页面为 `/web/about`。根路径只负责跳转，
+不再直接提供前台文件。
 
 修改后执行：
 
@@ -367,5 +419,6 @@ MySQL 中的 personal_blog 数据库
 -> 后端复制旧 .env 和 data
 -> 执行数据库迁移
 -> 切换 current 软链接
+-> 确认前台从 /web/ 访问
 -> 重启后端并刷新浏览器
 ```
