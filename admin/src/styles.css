@@ -273,6 +273,22 @@ body {
   width: 100%;
 }
 
+.site-date-field {
+  display: grid;
+  width: 100%;
+  gap: 0.45rem;
+}
+
+.site-date-field .el-date-editor {
+  width: 100%;
+}
+
+.site-date-field > span {
+  color: var(--admin-muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
 .coordinate-hint {
   margin: -0.4rem 0 0.25rem;
   color: var(--admin-muted);

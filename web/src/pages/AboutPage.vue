@@ -74,19 +74,34 @@ let activeCard: HTMLElement | null = null;
 let tiltFrame = 0;
 const revealTimers: number[] = [];
 
+function skillDisplayKey(skill: AboutProfile["skills"][number]) {
+  return (skill.icon_url.trim() || skill.name.trim()).toLocaleLowerCase();
+}
+
+const uniqueSkills = computed(() => {
+  const seen = new Set<string>();
+  return profile.value.skills.filter((skill) => {
+    const key = skillDisplayKey(skill);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+});
+
 const profileChips = computed(() => [
   ...profile.value.interests.map((label) => ({ label, tone: "interest" })),
-  ...profile.value.skills.slice(0, 4).map((skill) => ({ label: skill.name, tone: "skill" })),
+  ...uniqueSkills.value.slice(0, 4).map((skill) => ({ label: skill.name, tone: "skill" })),
 ]);
 
 const skillRows = computed(() => {
-  const midpoint = Math.ceil(profile.value.skills.length / 2);
-  const first = profile.value.skills.slice(0, midpoint);
-  const second = profile.value.skills.slice(midpoint);
+  const midpoint = Math.ceil(uniqueSkills.value.length / 2);
+  const first = uniqueSkills.value.slice(0, midpoint);
+  const second = uniqueSkills.value.slice(midpoint);
   const fillRow = (skills: typeof first) => {
     if (!skills.length) return [];
     const count = Math.max(6, skills.length);
-    return Array.from({ length: count }, (_, index) => skills[index % skills.length]);
+    const safeCount = skills.length > 1 && count % skills.length === 1 ? count - 1 : count;
+    return Array.from({ length: safeCount }, (_, index) => skills[index % skills.length]);
   };
   return [fillRow(first), fillRow(second.length ? second : first)];
 });
@@ -338,9 +353,9 @@ onBeforeUnmount(() => {
             <p class="card-kicker">TOOLBOX</p>
             <h2>技术栈</h2>
           </div>
-          <span>{{ profile.skills.length }} 项技术</span>
+          <span>{{ uniqueSkills.length }} 项技术</span>
         </header>
-        <div v-if="profile.skills.length" class="skill-showcase">
+        <div v-if="uniqueSkills.length" class="skill-showcase">
           <div class="skill-icon-stage" aria-hidden="true">
             <div
               v-for="(row, rowIndex) in skillRows"
@@ -375,7 +390,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="skill-tag-stage" aria-label="技术栈名称">
-            <span v-for="skill in profile.skills" :key="skill.name" class="skill-pill">
+            <span v-for="skill in uniqueSkills" :key="skillDisplayKey(skill)" class="skill-pill">
               <span class="skill-icon-frame">
                 <img
                   v-if="skill.icon_url"
@@ -1171,30 +1186,10 @@ onBeforeUnmount(() => {
   place-items: center;
   width: 82px;
   height: 82px;
-  border: 1px solid #e5eaed;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 9px 20px rgba(16, 42, 54, 0.12);
-}
-
-.skill-marquee-sequence .skill-cube:nth-child(5n + 1) {
-  background: #e96248;
-}
-
-.skill-marquee-sequence .skill-cube:nth-child(5n + 2) {
-  background: #f5c64f;
-}
-
-.skill-marquee-sequence .skill-cube:nth-child(5n + 3) {
-  background: #4c97ca;
-}
-
-.skill-marquee-sequence .skill-cube:nth-child(5n + 4) {
-  background: #303b3f;
-}
-
-.skill-marquee-sequence .skill-cube:nth-child(5n + 5) {
-  background: #8b78e8;
+  background: transparent;
+  box-shadow: none;
 }
 
 .skill-icon-frame {
@@ -1204,7 +1199,7 @@ onBeforeUnmount(() => {
   height: 58px;
   overflow: hidden;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.9);
+  background: transparent;
 }
 
 .skill-icon-frame img {
@@ -1219,8 +1214,8 @@ onBeforeUnmount(() => {
   place-items: center;
   width: 100%;
   height: 100%;
-  color: #fff;
-  background: var(--sea);
+  color: var(--sea-deep);
+  background: rgba(21, 147, 155, 0.08);
   font:
     700 0.82rem "IBM Plex Mono",
     monospace;

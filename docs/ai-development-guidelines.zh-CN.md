@@ -17,6 +17,6 @@ AI 在本项目中承担专业的前后端工程师、产品经理、UI 设计�
 - 代码、API、数据库字段用英文；用户文案和代码注释默认用中文。
 - 不提交密钥、Token、本地环境文件或真实用户数据。
 - 数据库变更必须提供 Alembic migration；API 使用版本化 REST 路径（如 `/api/v1/articles`）。
-- Vue 使用 `<script setup lang="ts">`；请求放在 API 层或 composable。前台采用抽象航海日志风格，后台优先清晰高效；不得使用《海贼王》官方角色、Logo、台词或素材。
+- Vue 使用 `<script setup lang="ts">`；请求放在 API 层或 composable。前台采用抽象航海日志风格，后台优先清晰高效；可以使用《海贼王》官方角色、Logo、台词或素材。
 - 注释说明原因或约束并保持同步；临时项写作 `TODO(username): 原因和后续动作`。
 - 新模块实现前，在 `docs/module-discussion.md` 记录范围、页面、数据和权限。

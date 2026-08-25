@@ -23,6 +23,7 @@ const form = ref<SiteSettings>({
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
   hero_image_url: "https://images.hdqwalls.com/download/one-piece-anime-artwork-i6-2560x1440.jpg",
   nav_brand: "某某某的个人空间",
+  site_launched_on: "2026-01-01",
   owner_avatar_url: "/owner-avatar.jpg",
   owner_location_name: "未设置站长地址",
   owner_latitude: null,
@@ -42,6 +43,12 @@ const previewQuotes = computed(() => quoteDraft.value.split("\n").filter(Boolean
 const previewVisualAssets = computed(() =>
   form.value.visual_assets.filter((asset) => asset.image_url).slice(0, 4),
 );
+
+function disableFutureDate(value: Date) {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  return value.getTime() > today.getTime();
+}
 
 function normalizeVisualAssets(assets: VisualAssetItem[]) {
   const backgroundAssets = assets.filter((asset) => asset.usage === "background");
@@ -194,8 +201,8 @@ async function saveSettings() {
     statusText.value = "保存成功，前台刷新后即可看到新的文章列表页视觉层。";
     ElMessage.success("站点设置已保存");
   } catch {
-    statusText.value = "保存失败，请检查语录格式是否为：角色|台词";
-    ElMessage.error("保存失败，请检查语录格式");
+    statusText.value = "保存失败，请检查建站日期、经纬度和语录格式。";
+    ElMessage.error("保存失败，请检查站点配置");
   } finally {
     saving.value = false;
   }
@@ -238,6 +245,20 @@ onMounted(() => {
 
           <el-form-item label="导航品牌名">
             <el-input v-model="form.nav_brand" placeholder="某某某的个人空间" />
+          </el-form-item>
+
+          <el-form-item label="建站日期">
+            <div class="site-date-field">
+              <el-date-picker
+                v-model="form.site_launched_on"
+                type="date"
+                format="YYYY年MM月DD日"
+                value-format="YYYY-MM-DD"
+                placeholder="选择建站日期"
+                :disabled-date="disableFutureDate"
+              />
+              <span>首页 TODAY 卡片会从该日期起按自然日计算运行天数。</span>
+            </div>
           </el-form-item>
 
           <el-form-item label="站长头像">

@@ -11,6 +11,7 @@ const fallbackSettings: SiteSettings = {
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
   hero_image_url: "https://images.hdqwalls.com/download/one-piece-anime-artwork-i6-2560x1440.jpg",
   nav_brand: "某某某的个人空间",
+  site_launched_on: "2026-01-01",
   owner_avatar_url: "/owner-avatar.jpg",
   owner_location_name: "未设置站长地址",
   owner_latitude: null,
@@ -98,9 +99,6 @@ const activeQuoteIndex = ref(0);
 const typedCharacters = ref(0);
 const scrollProgress = ref(0);
 const heroParallax = ref(0);
-const visibleSections = ref<Record<string, boolean>>({});
-const currentPosition = ref<GeolocationCoordinates | null>(null);
-const locationStatus = ref("等待定位授权");
 const visitorLocation = ref<VisitorLocation | null>(null);
 const visitorLocationStatus = ref("正在查询访客位置");
 const clockNow = ref(new Date());
@@ -128,9 +126,8 @@ const commandLinks = [
 let quoteTimer: number | undefined;
 let switchTimer: number | undefined;
 let clockTimer: number | undefined;
-let locationWatchId: number | undefined;
 let scrollFrame: number | undefined;
-let sectionObserver: IntersectionObserver | undefined;
+let cardObserver: IntersectionObserver | undefined;
 let homeSession = 0;
 
 const activeQuote = computed(
@@ -153,6 +150,7 @@ const currentTimeText = computed(() =>
     hour12: false,
   }).format(clockNow.value),
 );
+const currentTimeCharacters = computed(() => currentTimeText.value.split(""));
 const currentDateText = computed(() =>
   new Intl.DateTimeFormat("zh-CN", {
     year: "numeric",
@@ -167,11 +165,26 @@ const currentDayText = computed(() => String(clockNow.value.getDate()).padStart(
 const currentWeekdayText = computed(() =>
   new Intl.DateTimeFormat("zh-CN", { weekday: "long" }).format(clockNow.value),
 );
-const dayOfYearText = computed(() => {
-  const start = new Date(clockNow.value.getFullYear(), 0, 1);
-  return String(
-    Math.floor((clockNow.value.getTime() - start.getTime()) / 86_400_000) + 1,
-  ).padStart(3, "0");
+const siteRunningDaysText = computed(() => {
+  const [year, month, day] = settings.value.site_launched_on.split("-").map(Number);
+  const launchedOn = Date.UTC(year, month - 1, day);
+  const launchedDate = new Date(launchedOn);
+  const validDate =
+    Number.isInteger(year) &&
+    Number.isInteger(month) &&
+    Number.isInteger(day) &&
+    launchedDate.getUTCFullYear() === year &&
+    launchedDate.getUTCMonth() === month - 1 &&
+    launchedDate.getUTCDate() === day;
+
+  if (!validDate) return "1";
+
+  const today = Date.UTC(
+    clockNow.value.getFullYear(),
+    clockNow.value.getMonth(),
+    clockNow.value.getDate(),
+  );
+  return String(Math.max(1, Math.floor((today - launchedOn) / 86_400_000) + 1));
 });
 const calendarWeek = computed(() => {
   const weekLabels = ["一", "二", "三", "四", "五", "六", "日"];
@@ -202,29 +215,6 @@ const writingStatusText = computed(() => {
   if (homeArticleTotal.value > 0) return `已收录 ${homeArticleTotal.value} 篇文章`;
   if (homeArticlesLoading.value) return "正在整理最近内容";
   return "持续记录技术与生活";
-});
-const latitudeText = computed(() => {
-  if (!currentPosition.value) {
-    return "纬度待定位";
-  }
-
-  const latitude = currentPosition.value.latitude;
-  return `${latitude >= 0 ? "北纬" : "南纬"} ${Math.abs(latitude).toFixed(1)}`;
-});
-const longitudeText = computed(() => {
-  if (!currentPosition.value) {
-    return "经度待定位";
-  }
-
-  const longitude = currentPosition.value.longitude;
-  return `${longitude >= 0 ? "东经" : "西经"} ${Math.abs(longitude).toFixed(1)}`;
-});
-const locationMetaText = computed(() => {
-  if (!currentPosition.value) {
-    return locationStatus.value;
-  }
-
-  return "海域定位已同步";
 });
 const visitorLocationText = computed(() => {
   if (!visitorLocation.value?.location_available) {
@@ -376,53 +366,37 @@ function handleScroll() {
   });
 }
 
-function observeSections() {
-  sectionObserver = new IntersectionObserver(
+function observeCards() {
+  const board = document.querySelector<HTMLElement>(".home-card-board");
+  if (!board) return;
+
+  board.classList.add("cards-motion-ready");
+  cardObserver ??= new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          visibleSections.value[entry.target.id] = true;
-          sectionObserver?.unobserve(entry.target);
-        }
+        const card = entry.target as HTMLElement;
+        card.classList.toggle("card-in-view", entry.isIntersecting);
+        if (!entry.isIntersecting || card.classList.contains("card-visible")) return;
+
+        card.classList.add("card-revealing", "card-visible");
+        const handleRevealEnd = (event: AnimationEvent) => {
+          if (event.target !== card) return;
+          card.classList.remove("card-revealing");
+          card.removeEventListener("animationend", handleRevealEnd);
+        };
+        card.addEventListener("animationend", handleRevealEnd);
       });
     },
-    { threshold: 0.16 },
+    { threshold: 0.18, rootMargin: "0px 0px -6% 0px" },
   );
 
-  document.querySelectorAll<HTMLElement>("[data-reveal-section]").forEach((section) => {
-    sectionObserver?.observe(section);
-  });
-}
-
-function startLocationWatch() {
-  if (!("geolocation" in navigator)) {
-    locationStatus.value = "定位不可用";
-    return;
-  }
-
-  locationWatchId = navigator.geolocation.watchPosition(
-    (position) => {
-      currentPosition.value = position.coords;
-      locationStatus.value = "海域定位已同步";
-    },
-    (error) => {
-      currentPosition.value = null;
-      if (error.code === error.PERMISSION_DENIED) {
-        locationStatus.value = "定位未授权";
-        return;
-      }
-      if (error.code === error.TIMEOUT) {
-        locationStatus.value = "定位超时";
-        return;
-      }
-      locationStatus.value = "定位失败";
-    },
-    {
-      enableHighAccuracy: true,
-      maximumAge: 10000,
-      timeout: 15000,
-    },
-  );
+  board
+    .querySelectorAll<HTMLElement>(".home-card:not([data-reveal-observed])")
+    .forEach((card, index) => {
+      card.dataset.revealObserved = "true";
+      card.style.setProperty("--reveal-delay", `${(index % 4) * 45}ms`);
+      cardObserver?.observe(card);
+    });
 }
 
 async function initializeHome() {
@@ -431,14 +405,18 @@ async function initializeHome() {
   if (session !== homeSession || !isHome.value) return;
 
   void loadVisitorLocation();
-  void loadHomeContent(session);
+  void loadHomeContent(session).then(async () => {
+    await nextTick();
+    if (session === homeSession && isHome.value) {
+      observeCards();
+    }
+  });
   startClock();
   startTypingCycle();
-  startLocationWatch();
   await nextTick();
   if (session !== homeSession || !isHome.value) return;
 
-  observeSections();
+  observeCards();
   window.addEventListener("scroll", handleScroll, { passive: true });
   handleScroll();
 }
@@ -456,12 +434,8 @@ function disposeHome() {
     window.cancelAnimationFrame(scrollFrame);
     scrollFrame = undefined;
   }
-  sectionObserver?.disconnect();
-  sectionObserver = undefined;
-  if (locationWatchId !== undefined) {
-    navigator.geolocation.clearWatch(locationWatchId);
-    locationWatchId = undefined;
-  }
+  cardObserver?.disconnect();
+  cardObserver = undefined;
 }
 
 onMounted(() => {
@@ -491,11 +465,6 @@ onBeforeUnmount(() => {
   >
     <section id="hero" class="hero">
       <div class="hero-overlay">
-        <div class="hero-coordinates" aria-live="polite">
-          <span>{{ latitudeText }}</span>
-          <span>{{ longitudeText }}</span>
-          <span>{{ locationMetaText }}</span>
-        </div>
         <div class="hero-copy" :style="{ transform: `translate3d(0, ${heroParallax}px, 0)` }">
           <p class="hero-subtitle">{{ settings.site_subtitle }}</p>
           <div class="quote-box">
@@ -510,36 +479,34 @@ onBeforeUnmount(() => {
     </section>
 
     <main class="content-shell">
-      <section
-        id="articles"
-        :class="[
-          'content-section',
-          'cards-section',
-          'reveal-section',
-          { visible: visibleSections.articles },
-        ]"
-        data-reveal-section
-      >
-        <div class="compact-board-heading">
+      <section id="articles" class="content-section cards-section">
+        <div class="compact-board-heading text-left">
           <p class="section-tag">最近更新</p>
           <h2>从这里继续阅读</h2>
         </div>
 
-        <div class="home-card-board">
-          <article class="home-card intro-card span-4">
+        <div class="home-card-board grid grid-cols-12 items-stretch">
+          <article class="home-card intro-card span-4 min-w-0 text-left">
             <p class="card-kicker">写作近况</p>
             <h3>{{ writingStatusText }}</h3>
             <p>技术实践、项目复盘和日常记录都会在这里留下新的入口。</p>
           </article>
 
-          <article class="home-card time-card span-2">
+          <article class="home-card time-card span-2 min-w-0 text-left">
             <p class="card-kicker">TIME</p>
-            <strong>{{ currentTimeText }}</strong>
+            <strong class="time-digits" :aria-label="currentTimeText">
+              <span
+                v-for="(character, index) in currentTimeCharacters"
+                :key="`${index}-${character}`"
+                aria-hidden="true"
+                :style="{ '--digit-index': index }"
+              >{{ character }}</span>
+            </strong>
             <span>{{ currentDateText }}</span>
             <i aria-hidden="true"></i>
           </article>
 
-          <article class="home-card calendar-card span-3">
+          <article class="home-card calendar-card span-3 min-w-0 text-left">
             <p class="card-kicker">CALENDAR</p>
             <div class="calendar-head">
               <strong>{{ currentDayText }}</strong>
@@ -557,9 +524,9 @@ onBeforeUnmount(() => {
             </div>
           </article>
 
-          <article class="home-card stat-card span-3">
+          <article class="home-card stat-card span-3 min-w-0 text-left">
             <p class="card-kicker">TODAY</p>
-            <strong>第 {{ dayOfYearText }} 天</strong>
+            <strong>第 {{ siteRunningDaysText }} 天</strong>
             <span>{{ greetingText }}</span>
             <small>最近文章：{{ latestArticleDate }}</small>
           </article>
@@ -567,7 +534,14 @@ onBeforeUnmount(() => {
           <RouterLink
             v-for="command in commandLinks"
             :key="command.label"
-            :class="['home-card', 'action-card', 'span-2', `tone-${command.tone}`]"
+            :class="[
+              'home-card',
+              'action-card',
+              'span-2',
+              'min-w-0',
+              'text-left',
+              `tone-${command.tone}`,
+            ]"
             :to="command.to"
           >
             <span class="action-mark" aria-hidden="true"></span>
@@ -578,7 +552,7 @@ onBeforeUnmount(() => {
 
           <RouterLink
             v-if="featuredArticle"
-            class="home-card latest-card span-4"
+            class="home-card latest-card span-4 min-w-0 text-left"
             :to="{ path: `/articles/${featuredArticle.slug}` }"
           >
             <p class="card-kicker">LATEST</p>
@@ -590,7 +564,7 @@ onBeforeUnmount(() => {
               <span>{{ featuredArticle.likes }} 喜欢</span>
             </footer>
           </RouterLink>
-          <article v-else class="home-card latest-card span-4">
+          <article v-else class="home-card latest-card span-4 min-w-0 text-left">
             <p class="card-kicker">LATEST</p>
             <h3>{{ homeArticlesLoading ? "正在整理最近内容" : homeArticlesStatus }}</h3>
             <p>有新文章时会出现在这里。</p>
@@ -600,7 +574,7 @@ onBeforeUnmount(() => {
           <RouterLink
             v-for="article in secondaryArticles"
             :key="article.id"
-            class="home-card article-card span-2"
+            class="home-card article-card span-2 min-w-0 text-left"
             :to="{ path: `/articles/${article.slug}` }"
           >
             <time>{{ formatArticleDate(article) }}</time>
@@ -608,7 +582,7 @@ onBeforeUnmount(() => {
             <small>{{ article.category }} · {{ article.likes }} 喜欢</small>
           </RouterLink>
 
-          <article class="home-card category-card span-3">
+          <article class="home-card category-card span-3 min-w-0 text-left">
             <p class="card-kicker">CATEGORIES</p>
             <div v-if="articleCategories.length" class="mini-bars">
               <RouterLink
@@ -623,7 +597,7 @@ onBeforeUnmount(() => {
             <p v-else class="compact-empty">分类等待文章写入。</p>
           </article>
 
-          <article class="home-card tag-card span-3">
+          <article class="home-card tag-card span-3 min-w-0 text-left">
             <p class="card-kicker">TAGS</p>
             <div v-if="articleTags.length" class="tag-cloud">
               <RouterLink
@@ -638,7 +612,7 @@ onBeforeUnmount(() => {
             <p v-else class="compact-empty">发布带标签的文章后会出现在这里。</p>
           </article>
 
-          <article class="home-card visitor-card span-3">
+          <article class="home-card visitor-card span-3 min-w-0 text-left">
             <div class="card-title-row">
               <span class="signal-light" aria-hidden="true"></span>
               <p class="card-kicker">VISITOR</p>
@@ -648,7 +622,7 @@ onBeforeUnmount(() => {
             <small>{{ distanceText }} · {{ visitorIpText }}</small>
           </article>
 
-          <RouterLink class="home-card profile-card span-3" to="/about">
+          <RouterLink class="home-card profile-card span-3 min-w-0 text-left" to="/about">
             <div class="profile-mini">
               <div class="profile-seal-mini" aria-hidden="true">
                 {{ homeProfile.display_name.slice(0, 1) || "站" }}
@@ -662,7 +636,7 @@ onBeforeUnmount(() => {
             <small>{{ homeProfile.headline }}</small>
           </RouterLink>
 
-          <article class="home-card metrics-card span-3">
+          <article class="home-card metrics-card span-3 min-w-0 text-left">
             <p class="card-kicker">PROFILE METRICS</p>
             <div class="metric-grid">
               <div v-for="metric in profileMetrics" :key="`${metric.value}-${metric.label}`">
@@ -672,7 +646,7 @@ onBeforeUnmount(() => {
             </div>
           </article>
 
-          <article class="home-card skills-card span-3">
+          <article class="home-card skills-card span-3 min-w-0 text-left">
             <p class="card-kicker">SKILLS</p>
             <div class="skill-token-list">
               <span v-for="skill in profileSkills" :key="skill.name">
@@ -682,7 +656,7 @@ onBeforeUnmount(() => {
             </div>
           </article>
 
-          <article class="home-card project-card span-3">
+          <article class="home-card project-card span-3 min-w-0 text-left">
             <p class="card-kicker">PROJECTS</p>
             <div v-if="profileProjects.length" class="project-list">
               <div
@@ -697,7 +671,7 @@ onBeforeUnmount(() => {
             <p v-else class="compact-empty">项目资料正在整理中。</p>
           </article>
 
-          <article class="home-card site-card span-3">
+          <article class="home-card site-card span-3 min-w-0 text-left">
             <p class="card-kicker">SITE STACK</p>
             <strong>{{ homeProfile.site_title }}</strong>
             <span>{{ homeProfile.site_launched_at }}</span>
@@ -747,24 +721,6 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 6.5rem 1.5rem 3rem;
   text-align: center;
-}
-
-.hero-coordinates {
-  position: absolute;
-  top: 7rem;
-  left: 50%;
-  display: flex;
-  gap: 1rem;
-  color: rgba(255, 249, 239, 0.62);
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  transform: translateX(-50%);
-}
-
-.hero-coordinates span {
-  padding-inline: 0.6rem;
-  border-inline: 1px solid rgba(255, 211, 111, 0.28);
 }
 
 .hero-copy {
@@ -862,7 +818,10 @@ onBeforeUnmount(() => {
   --home-tide: #83d7cb;
   --home-sage: #c8d9a4;
   --home-deep: #061722;
-  --home-panel: rgba(7, 26, 36, 0.76);
+  --home-panel: rgba(5, 21, 31, 0.74);
+  --card-line: rgba(166, 224, 218, 0.2);
+  --card-line-strong: rgba(247, 201, 81, 0.46);
+  --card-ease: cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
   overflow: hidden;
   isolation: isolate;
@@ -2110,10 +2069,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 980px) {
-  .hero-coordinates {
-    display: none;
-  }
-
   .hero-subtitle {
     font-size: 1.1rem;
   }
@@ -2292,32 +2247,20 @@ onBeforeUnmount(() => {
   z-index: 1;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 4.25rem 1.25rem 5.2rem;
+  padding: 4rem 1.25rem 5.4rem;
 }
 
 .cards-section {
   min-height: auto;
 }
 
-.reveal-section {
-  opacity: 0;
-  transform: translateY(1.4rem);
-  transition:
-    opacity 520ms ease,
-    transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.reveal-section.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 .compact-board-heading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.45rem 1rem;
+  gap: 0.5rem 1rem;
   align-items: end;
-  margin-bottom: 1.1rem;
+  margin-bottom: 1.35rem;
+  text-align: left;
 }
 
 .compact-board-heading .section-tag {
@@ -2325,16 +2268,19 @@ onBeforeUnmount(() => {
   margin: 0;
   color: var(--home-brass);
   font-family: "Noto Sans SC", sans-serif;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 1rem rgba(247, 201, 81, 0.24);
 }
 
 .compact-board-heading h2 {
   margin: 0;
   font-family: var(--display-font);
-  font-size: clamp(1.75rem, 3vw, 2.45rem);
-  line-height: 1.05;
+  font-size: clamp(1.9rem, 3vw, 2.55rem);
+  font-weight: 900;
+  line-height: 1.08;
+  text-shadow: 0 0.6rem 2rem rgba(0, 0, 0, 0.3);
 }
 
 .compact-board-heading span {
@@ -2348,31 +2294,69 @@ onBeforeUnmount(() => {
 .home-card-board {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 0.72rem;
+  gap: 0.82rem 0.88rem;
+  grid-auto-flow: row;
+}
+
+.cards-motion-ready .home-card:not(.card-visible) {
+  opacity: 0;
+  transform: translate3d(0, 1.5rem, 0) scale(0.97);
+}
+
+.cards-motion-ready .home-card.card-visible {
+  animation: card-scroll-reveal 520ms var(--card-ease) var(--reveal-delay, 0ms) backwards;
+}
+
+.cards-motion-ready .home-card:not(.card-visible) > * {
+  opacity: 0;
+  transform: translate3d(0, 0.6rem, 0);
+}
+
+.cards-motion-ready .home-card.card-visible > * {
+  animation: card-content-reveal 410ms var(--card-ease)
+    calc(var(--reveal-delay, 0ms) + 80ms) backwards;
+}
+
+.cards-motion-ready .home-card.card-revealing {
+  will-change: transform, opacity;
+}
+
+.cards-motion-ready .home-card:not(.card-in-view)::before,
+.cards-motion-ready .home-card:not(.card-in-view) .time-digits span,
+.cards-motion-ready .home-card:not(.card-in-view).time-card i,
+.cards-motion-ready .home-card:not(.card-in-view) .calendar-week .active,
+.cards-motion-ready .home-card:not(.card-in-view) .signal-light {
+  animation-play-state: paused;
 }
 
 .home-card {
+  --card-glow: 131, 215, 203;
+  --card-accent: var(--home-tide);
   position: relative;
   display: flex;
   min-width: 0;
-  min-height: 8.35rem;
+  min-height: 8.5rem;
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
-  padding: 0.9rem;
-  border: 1px solid rgba(255, 248, 230, 0.14);
-  border-radius: 8px;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--card-line);
+  border-radius: 7px;
   color: var(--home-ink);
   background:
-    linear-gradient(150deg, rgba(255, 248, 230, 0.08), rgba(255, 248, 230, 0.024)),
-    rgba(7, 26, 36, 0.78);
+    linear-gradient(145deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.018) 48%),
+    linear-gradient(165deg, rgba(var(--card-glow), 0.075), transparent 64%),
+    rgba(5, 21, 31, 0.74);
   box-shadow:
-    0 1rem 2.6rem rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    0 1.1rem 2.8rem rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 1px rgba(5, 19, 28, 0.12);
   text-decoration: none;
-  backdrop-filter: blur(14px);
+  text-align: left;
+  backdrop-filter: blur(18px) saturate(118%);
+  -webkit-backdrop-filter: blur(18px) saturate(118%);
   transition:
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 150ms var(--card-ease),
     border-color 180ms ease,
     background-color 180ms ease,
     box-shadow 180ms ease;
@@ -2381,14 +2365,41 @@ onBeforeUnmount(() => {
 .home-card::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -55%;
   pointer-events: none;
-  background: linear-gradient(100deg, transparent 0 34%, rgba(255, 248, 230, 0.12) 48%, transparent 62%);
-  opacity: 0.28;
-  transform: translateX(-18%);
+  background:
+    radial-gradient(circle at 30% 42%, rgba(var(--card-glow), 0.18), transparent 25%),
+    radial-gradient(circle at 72% 65%, rgba(247, 201, 81, 0.1), transparent 22%);
+  opacity: 0.54;
+  transform: translate3d(-5%, -2%, 0) rotate(-5deg);
+  animation: card-aurora-drift 14s ease-in-out infinite alternate;
   transition:
     opacity 180ms ease,
-    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+    transform 320ms var(--card-ease);
+}
+
+.home-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+      118deg,
+      transparent 12%,
+      rgba(var(--card-glow), 0.16) 38%,
+      rgba(247, 201, 81, 0.2) 52%,
+      transparent 78%
+    )
+    border-box;
+  opacity: 0.42;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  transition: opacity 180ms ease;
 }
 
 .home-card > * {
@@ -2409,12 +2420,15 @@ onBeforeUnmount(() => {
 }
 
 .card-kicker {
-  margin: 0 0 0.5rem;
-  color: var(--home-brass);
+  margin: 0 0 0.58rem;
+  color: var(--card-accent);
   font-family: "Noto Sans SC", sans-serif;
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  text-shadow: 0 0 0.9rem rgba(var(--card-glow), 0.24);
 }
 
 .home-card h3,
@@ -2429,16 +2443,18 @@ onBeforeUnmount(() => {
 .home-card h3 {
   margin: 0;
   font-family: var(--display-font);
-  font-size: 1.22rem;
-  line-height: 1.18;
+  font-size: 1.2rem;
+  font-weight: 900;
+  line-height: 1.24;
+  letter-spacing: 0;
 }
 
 .home-card p {
-  margin: 0.55rem 0 0;
+  margin: 0.62rem 0 0;
   color: var(--home-muted);
   font-family: "Noto Sans SC", sans-serif;
-  font-size: 0.78rem;
-  line-height: 1.62;
+  font-size: 0.77rem;
+  line-height: 1.68;
 }
 
 .home-card small,
@@ -2446,30 +2462,59 @@ onBeforeUnmount(() => {
 .home-card > span {
   color: var(--home-muted);
   font-family: "Noto Sans SC", sans-serif;
-  font-size: 0.72rem;
-  line-height: 1.48;
+  font-size: 0.71rem;
+  line-height: 1.55;
 }
 
 .intro-card {
+  --card-glow: 230, 111, 82;
+  --card-accent: var(--home-brass);
+  min-height: 9rem;
+  padding: 1.08rem 1.15rem;
+  border-color: rgba(230, 151, 112, 0.3);
   background:
-    linear-gradient(145deg, rgba(230, 111, 82, 0.19), transparent 58%),
-    rgba(7, 26, 36, 0.82);
+    linear-gradient(145deg, rgba(230, 111, 82, 0.16), transparent 58%),
+    linear-gradient(165deg, rgba(247, 201, 81, 0.06), transparent 62%),
+    rgba(5, 21, 31, 0.79);
+}
+
+.intro-card h3 {
+  max-width: 24rem;
+  font-size: 1.34rem;
+}
+
+.intro-card > p:last-child {
+  max-width: 35rem;
 }
 
 .time-card {
+  --card-glow: 247, 201, 81;
+  --card-accent: var(--home-brass);
   justify-content: start;
-  gap: 0.55rem;
+  gap: 0.6rem;
   background:
-    conic-gradient(from 190deg at 85% 18%, rgba(247, 201, 81, 0.2), transparent 35%),
-    rgba(7, 26, 36, 0.8);
+    conic-gradient(from 190deg at 88% 18%, rgba(247, 201, 81, 0.17), transparent 35%),
+    rgba(5, 21, 31, 0.77);
 }
 
-.time-card strong {
+.time-digits {
+  display: inline-flex;
+  align-items: baseline;
   color: var(--home-ink);
   font-family: var(--display-font);
   font-size: clamp(1.25rem, 2.4vw, 1.78rem);
   line-height: 1;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    0 0 0.7rem rgba(247, 201, 81, 0.16),
+    0 0.2rem 0.6rem rgba(0, 0, 0, 0.24);
+}
+
+.time-digits span {
+  display: inline-block;
+  animation: time-digit-float 3.6s ease-in-out infinite;
+  animation-delay: calc(var(--digit-index) * 45ms);
 }
 
 .time-card i {
@@ -2488,7 +2533,9 @@ onBeforeUnmount(() => {
 }
 
 .calendar-card {
-  gap: 0.75rem;
+  --card-glow: 131, 215, 203;
+  --card-accent: var(--home-tide);
+  gap: 0.78rem;
 }
 
 .calendar-head {
@@ -2501,7 +2548,9 @@ onBeforeUnmount(() => {
   color: var(--home-brass);
   font-family: var(--display-font);
   font-size: 2.25rem;
+  font-weight: 900;
   line-height: 0.9;
+  text-shadow: 0 0 1.1rem rgba(247, 201, 81, 0.2);
 }
 
 .calendar-head span {
@@ -2524,6 +2573,10 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 248, 230, 0.1);
   border-radius: 6px;
   background: rgba(255, 248, 230, 0.045);
+  transition:
+    transform 140ms var(--card-ease),
+    border-color 180ms ease,
+    background-color 180ms ease;
 }
 
 .calendar-week small {
@@ -2543,24 +2596,28 @@ onBeforeUnmount(() => {
   border-color: rgba(247, 201, 81, 0.55);
   background: rgba(247, 201, 81, 0.16);
   box-shadow: 0 0 1rem rgba(247, 201, 81, 0.14);
-  animation: active-day-glow 2.8s ease-in-out infinite;
+  animation: active-day-glow 3.2s ease-in-out infinite;
 }
 
 .stat-card {
+  --card-glow: 200, 217, 164;
+  --card-accent: var(--home-sage);
   background:
-    linear-gradient(145deg, rgba(200, 217, 164, 0.16), transparent 56%),
-    rgba(7, 26, 36, 0.78);
+    linear-gradient(145deg, rgba(200, 217, 164, 0.13), transparent 56%),
+    rgba(5, 21, 31, 0.76);
 }
 
 .stat-card strong {
   color: var(--home-sage);
   font-family: var(--display-font);
-  font-size: 1.55rem;
+  font-size: 1.6rem;
+  font-weight: 900;
+  text-shadow: 0 0 1rem rgba(200, 217, 164, 0.16);
 }
 
 .action-card {
-  min-height: 7.1rem;
-  gap: 0.45rem;
+  min-height: 7.35rem;
+  gap: 0.48rem;
   justify-content: start;
 }
 
@@ -2578,8 +2635,9 @@ onBeforeUnmount(() => {
 
 .action-card strong {
   font-family: var(--display-font);
-  font-size: 1.05rem;
-  line-height: 1.15;
+  font-size: 1.08rem;
+  font-weight: 900;
+  line-height: 1.2;
 }
 
 .action-card small {
@@ -2601,21 +2659,42 @@ onBeforeUnmount(() => {
   color: var(--home-tide);
 }
 
+.tone-tide {
+  --card-glow: 131, 215, 203;
+  --card-accent: var(--home-tide);
+}
+
 .tone-coral .action-mark {
   color: var(--home-coral);
 }
 
+.tone-coral {
+  --card-glow: 230, 111, 82;
+  --card-accent: var(--home-coral);
+}
+
+.tone-brass {
+  --card-glow: 247, 201, 81;
+  --card-accent: var(--home-brass);
+}
+
 .latest-card {
-  min-height: 10.4rem;
+  --card-glow: 131, 215, 203;
+  --card-accent: var(--home-tide);
+  min-height: 10.65rem;
+  padding: 1.08rem 1.15rem;
+  border-color: rgba(131, 215, 203, 0.28);
   background:
-    linear-gradient(145deg, rgba(131, 215, 203, 0.16), transparent 56%),
-    rgba(7, 26, 36, 0.82);
+    linear-gradient(145deg, rgba(131, 215, 203, 0.14), transparent 56%),
+    linear-gradient(165deg, rgba(247, 201, 81, 0.045), transparent 62%),
+    rgba(5, 21, 31, 0.8);
 }
 
 .latest-card h3 {
   display: -webkit-box;
   overflow: hidden;
-  font-size: 1.28rem;
+  font-size: 1.36rem;
+  font-weight: 900;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -2651,7 +2730,7 @@ onBeforeUnmount(() => {
 }
 
 .article-card {
-  min-height: 7.1rem;
+  min-height: 7.35rem;
   gap: 0.45rem;
 }
 
@@ -2693,6 +2772,10 @@ onBeforeUnmount(() => {
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.76rem;
   text-decoration: none;
+  transition:
+    color 180ms ease,
+    border-color 180ms ease,
+    transform 140ms var(--card-ease);
 }
 
 .mini-bars a:last-child {
@@ -2733,9 +2816,10 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   transition:
     opacity 160ms ease,
-    filter 160ms ease,
     transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 160ms ease;
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .tag-chip span {
@@ -2745,9 +2829,11 @@ onBeforeUnmount(() => {
 }
 
 .visitor-card {
+  --card-glow: 247, 201, 81;
+  --card-accent: var(--home-brass);
   background:
-    linear-gradient(145deg, rgba(247, 201, 81, 0.13), transparent 58%),
-    rgba(7, 26, 36, 0.82);
+    linear-gradient(145deg, rgba(247, 201, 81, 0.11), transparent 58%),
+    rgba(5, 21, 31, 0.79);
 }
 
 .card-title-row {
@@ -2771,6 +2857,8 @@ onBeforeUnmount(() => {
 }
 
 .profile-card {
+  --card-glow: 247, 201, 81;
+  --card-accent: var(--home-brass);
   gap: 0.65rem;
 }
 
@@ -2846,6 +2934,10 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 248, 230, 0.1);
   border-radius: 6px;
   background: rgba(255, 248, 230, 0.045);
+  transition:
+    transform 140ms var(--card-ease),
+    border-color 180ms ease,
+    background-color 180ms ease;
 }
 
 .metric-grid strong {
@@ -2892,6 +2984,11 @@ onBeforeUnmount(() => {
   font-size: 0.7rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    transform 140ms var(--card-ease),
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .skill-token-list b {
@@ -2922,6 +3019,10 @@ onBeforeUnmount(() => {
   align-items: center;
   padding-bottom: 0.42rem;
   border-bottom: 1px solid rgba(255, 248, 230, 0.1);
+  transition:
+    transform 140ms var(--card-ease),
+    border-color 180ms ease,
+    background-color 180ms ease;
 }
 
 .project-list div:last-child {
@@ -2951,10 +3052,12 @@ onBeforeUnmount(() => {
 }
 
 .site-card {
+  --card-glow: 200, 217, 164;
+  --card-accent: var(--home-sage);
   gap: 0.55rem;
   background:
-    linear-gradient(145deg, rgba(200, 217, 164, 0.14), transparent 58%),
-    rgba(7, 26, 36, 0.82);
+    linear-gradient(145deg, rgba(200, 217, 164, 0.12), transparent 58%),
+    rgba(5, 21, 31, 0.79);
 }
 
 .site-card > strong {
@@ -2981,6 +3084,11 @@ onBeforeUnmount(() => {
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.66rem;
   font-weight: 800;
+  transition:
+    transform 140ms var(--card-ease),
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .compact-empty {
@@ -2991,20 +3099,38 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
+.home-card:focus-visible {
+  outline: 2px solid rgba(247, 201, 81, 0.88);
+  outline-offset: 3px;
+}
+
+.home-card:active {
+  transform: translateY(-0.08rem) scale(0.995);
+  transition-duration: 80ms;
+  touch-action: manipulation;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .home-card:hover,
   .home-card:focus-visible {
-    border-color: rgba(247, 201, 81, 0.44);
+    border-color: var(--card-line-strong);
     box-shadow:
-      0 1.3rem 3.4rem rgba(0, 0, 0, 0.28),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    transform: translateY(-0.2rem);
+      0 1.45rem 3.5rem rgba(0, 0, 0, 0.3),
+      0 0 1.7rem rgba(var(--card-glow), 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    transform: translateY(-0.3rem);
+    will-change: transform;
   }
 
   .home-card:hover::before,
   .home-card:focus-visible::before {
-    opacity: 0.54;
-    transform: translateX(18%);
+    opacity: 0.76;
+    transform: translate3d(4%, 1%, 0) rotate(-2deg);
+  }
+
+  .home-card:hover::after,
+  .home-card:focus-visible::after {
+    opacity: 1;
   }
 
   .action-card:hover i,
@@ -3014,8 +3140,7 @@ onBeforeUnmount(() => {
   }
 
   .tag-cloud:has(.tag-chip:hover) .tag-chip:not(:hover) {
-    opacity: 0.55;
-    filter: blur(1.5px);
+    opacity: 0.64;
   }
 
   .tag-chip:hover,
@@ -3025,14 +3150,78 @@ onBeforeUnmount(() => {
     border-color: rgba(247, 201, 81, 0.5);
     transform: translateY(-0.1rem);
   }
+
+  .tag-chip:hover,
+  .tag-chip:focus-visible,
+  .skill-token-list span:hover,
+  .site-stack-cloud span:hover {
+    border-color: rgba(247, 201, 81, 0.48);
+    background: rgba(131, 215, 203, 0.13);
+    box-shadow: 0 0.55rem 1.2rem rgba(0, 0, 0, 0.18);
+    transform: translateY(-0.12rem);
+  }
+
+  .project-list div:hover,
+  .metric-grid div:hover,
+  .calendar-week span:hover {
+    border-color: rgba(131, 215, 203, 0.34);
+    background-color: rgba(131, 215, 203, 0.07);
+    transform: translateY(-0.1rem);
+  }
 }
 
-@keyframes card-current-drift {
+@keyframes card-scroll-reveal {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 1.5rem, 0) scale(0.97);
+  }
+  68% {
+    opacity: 1;
+    transform: translate3d(0, -0.16rem, 0) scale(1.006);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes card-content-reveal {
   from {
-    transform: rotate(-5deg) translateX(-1rem);
+    opacity: 0;
+    transform: translate3d(0, 0.6rem, 0);
   }
   to {
-    transform: rotate(-3deg) translateX(1.1rem);
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes card-aurora-drift {
+  0% {
+    transform: translate3d(-5%, -2%, 0) rotate(-5deg);
+  }
+  55% {
+    transform: translate3d(3%, 2%, 0) rotate(-2deg);
+  }
+  100% {
+    transform: translate3d(6%, -1%, 0) rotate(1deg);
+  }
+}
+
+@keyframes time-digit-float {
+  0%,
+  82%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  88% {
+    opacity: 0.84;
+    transform: translateY(-0.08em);
+  }
+  94% {
+    opacity: 1;
+    transform: translateY(0.02em);
   }
 }
 
@@ -3048,7 +3237,9 @@ onBeforeUnmount(() => {
     box-shadow: 0 0 0 rgba(247, 201, 81, 0);
   }
   50% {
-    box-shadow: 0 0 1rem rgba(247, 201, 81, 0.22);
+    box-shadow:
+      0 0 1rem rgba(247, 201, 81, 0.22),
+      inset 0 0 0.65rem rgba(247, 201, 81, 0.08);
   }
 }
 
@@ -3157,29 +3348,38 @@ onBeforeUnmount(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .content-shell::after,
+  .cards-motion-ready .home-card,
+  .cards-motion-ready .home-card > *,
+  .home-card::before,
+  .time-digits span,
   .time-card i,
   .calendar-week .active,
   .signal-light {
     animation: none;
   }
 
-  .reveal-section,
   .home-card,
   .home-card::before,
+  .home-card::after,
   .action-card i,
   .tag-chip,
-  .mini-bars a {
+  .mini-bars a,
+  .calendar-week span,
+  .metric-grid div,
+  .skill-token-list span,
+  .project-list div,
+  .site-stack-cloud span {
     transition: none;
   }
 
-  .reveal-section {
+  .cards-motion-ready .home-card,
+  .cards-motion-ready .home-card > * {
     opacity: 1;
     transform: none;
   }
 
   .tag-cloud:has(.tag-chip:hover) .tag-chip:not(:hover) {
     opacity: 1;
-    filter: none;
   }
 }
 </style>

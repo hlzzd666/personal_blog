@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
@@ -27,12 +28,20 @@ class SiteSettings(BaseModel):
     site_subtitle: str = Field(..., min_length=1, max_length=120)
     hero_image_url: HttpUrl
     nav_brand: str = Field(..., min_length=1, max_length=60)
+    site_launched_on: date = Field(default=date(2026, 1, 1))
     owner_avatar_url: str = Field(default="/owner-avatar.jpg", min_length=1, max_length=2048)
     quotes: list[QuoteItem] = Field(default_factory=list, min_length=1)
     visual_assets: list[SiteVisualAsset] = Field(default_factory=list)
     owner_location_name: str = Field(default="未设置站长地址", min_length=1, max_length=80)
     owner_latitude: float | None = Field(default=None, ge=-90, le=90)
     owner_longitude: float | None = Field(default=None, ge=-180, le=180)
+
+    @field_validator("site_launched_on")
+    @classmethod
+    def validate_site_launched_on(cls, value: date) -> date:
+        if value > date.today():
+            raise ValueError("建站日期不能晚于今天")
+        return value
 
     @model_validator(mode="after")
     def validate_owner_coordinates(self) -> "SiteSettings":

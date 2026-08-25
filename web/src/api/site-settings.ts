@@ -19,6 +19,7 @@ export type SiteSettings = {
   site_subtitle: string;
   hero_image_url: string;
   nav_brand: string;
+  site_launched_on: string;
   owner_avatar_url: string;
   quotes: QuoteItem[];
   visual_assets: VisualAssetItem[];
