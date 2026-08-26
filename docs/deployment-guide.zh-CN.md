@@ -279,6 +279,9 @@ nano /opt/personal_blog/backend/.env
 ```env
 DATABASE_URL=数据库连接地址
 PUBLIC_BASE_URL=http://114.215.205.44
+SITE_URL=http://114.215.205.44
+WEB_BASE_PATH=/web
+WEB_DIST_DIR=/var/www/personal_blog/web-current
 UPLOAD_DIR=/data/personal_blog/uploads
 REDIS_URL=redis://127.0.0.1:6379/0
 ADMIN_USERNAME=管理员用户名
@@ -311,7 +314,28 @@ location = /web {
     return 301 /web/;
 }
 
-location ^~ /web/ {
+# 文章、专题和短动态详情由后端返回带 metadata 的 Vue HTML 外壳。
+# API 服务地址按实际 systemd 监听地址调整。
+location ~ ^/web/(articles|series|notes)/[^/]+/?$ {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+
+location = /robots.txt {
+    proxy_pass http://127.0.0.1:8000;
+}
+
+location = /sitemap.xml {
+    proxy_pass http://127.0.0.1:8000;
+}
+
+location = /feed.xml {
+    proxy_pass http://127.0.0.1:8000;
+}
+
+location /web/ {
     alias /var/www/personal_blog/web-current/;
     try_files $uri $uri/ /web/index.html;
 }
@@ -323,7 +347,9 @@ location / {
 
 前台正式入口固定为 `http://114.215.205.44/web/`。Vue Router 子路由也位于该前缀下，
 例如文章列表为 `/web/articles`、关于页面为 `/web/about`。根路径只负责跳转，
-不再直接提供前台文件。
+不再直接提供前台文件。详情页的 HTML 外壳由后端读取 `WEB_DIST_DIR/index.html` 后注入
+canonical、Open Graph 和 JSON-LD；静态资源仍由 Nginx 提供。RSS 位于 `/feed.xml`
+（页脚兼容入口为 `/api/feed.xml`），站点地图位于 `/sitemap.xml`。
 
 修改后执行：
 

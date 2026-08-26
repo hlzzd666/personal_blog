@@ -12,13 +12,17 @@ from backend.app.core.cache import (
     set_cache_value,
 )
 from backend.app.models.article import Article, ArticleLikeRecord
+from backend.app.models.content import Series
 from backend.app.schemas.article import (
+    ArticleContextResponse,
     ArticleCountItem,
     ArticleCreate,
     ArticleListResponse,
     ArticleListStats,
     ArticleMonthCount,
     ArticleUpdate,
+    ArticleSeriesSummary,
+    ArticleSummary,
 )
 
 ArticleListCacheStatus = Literal["HIT", "MISS", "BYPASS"]
@@ -180,12 +184,70 @@ def get_public_article(session: Session, slug: str) -> Article | None:
     return article
 
 
+def get_article_context(session: Session, slug: str) -> ArticleContextResponse | None:
+    article = session.scalar(select(Article).where(Article.slug == slug))
+    if article is None:
+        return None
+
+    all_articles = list(session.scalars(select(Article).where(Article.id != article.id)))
+    series = session.get(Series, article.series_id) if article.series_id else None
+
+    if article.series_id is not None:
+        series_articles = list(
+            session.scalars(
+                select(Article)
+                .where(Article.series_id == article.series_id)
+                .order_by(Article.series_order.is_(None), Article.series_order.asc(), Article.id.asc())
+            )
+        )
+        index = next(index for index, candidate in enumerate(series_articles) if candidate.id == article.id)
+        previous_article = series_articles[index - 1] if index > 0 else None
+        next_article = series_articles[index + 1] if index + 1 < len(series_articles) else None
+    else:
+        ordered = sorted(
+            [article, *all_articles],
+            key=lambda item: (item.published_at or item.created_at, item.id),
+            reverse=True,
+        )
+        index = ordered.index(article)
+        next_article = ordered[index - 1] if index > 0 else None
+        previous_article = ordered[index + 1] if index + 1 < len(ordered) else None
+
+    article_tags = set(article.tags or [])
+    related = sorted(
+        all_articles,
+        key=lambda candidate: (
+            int(article.series_id is not None and candidate.series_id == article.series_id),
+            len(article_tags.intersection(candidate.tags or [])),
+            int(candidate.category == article.category),
+            candidate.published_at or candidate.created_at,
+            candidate.id,
+        ),
+        reverse=True,
+    )[:3]
+
+    return ArticleContextResponse(
+        previous=ArticleSummary.model_validate(previous_article) if previous_article else None,
+        next=ArticleSummary.model_validate(next_article) if next_article else None,
+        related=[ArticleSummary.model_validate(item) for item in related],
+        series=(
+            ArticleSeriesSummary(id=series.id, slug=series.slug, title=series.title)
+            if series
+            else None
+        ),
+    )
+
+
 def get_article(session: Session, article_id: int) -> Article | None:
     return session.get(Article, article_id)
 
 
 def create_article(session: Session, payload: ArticleCreate) -> Article:
     values = payload.model_dump()
+    if values["series_id"] is not None and session.get(Series, values["series_id"]) is None:
+        raise ValueError("所选专题不存在")
+    if values["series_id"] is None:
+        values["series_order"] = None
     if values["source_url"] is not None:
         values["source_url"] = str(values["source_url"])
     article = Article(**values)
@@ -204,6 +266,10 @@ def create_article(session: Session, payload: ArticleCreate) -> Article:
 
 def update_article(session: Session, article: Article, payload: ArticleUpdate) -> Article:
     values = payload.model_dump()
+    if values["series_id"] is not None and session.get(Series, values["series_id"]) is None:
+        raise ValueError("所选专题不存在")
+    if values["series_id"] is None:
+        values["series_order"] = None
     if values["source_url"] is not None:
         values["source_url"] = str(values["source_url"])
     if values["updated_at"] is None:

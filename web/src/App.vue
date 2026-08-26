@@ -2,10 +2,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import SiteNavigation from "./components/SiteNavigation.vue";
+import SiteFooter from "./components/SiteFooter.vue";
 import { fetchAboutProfile, type AboutProfile } from "./api/about";
 import { fetchArticles, type Article, type ArticleListStats } from "./api/articles";
 import { fetchSiteSettings, type SiteSettings } from "./api/site-settings";
 import { fetchVisitorLocation, type VisitorLocation } from "./api/visitor-location";
+import { fetchNotes, fetchSeries, type Note, type Series } from "./api/content";
 
 const fallbackSettings: SiteSettings = {
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
@@ -95,6 +97,9 @@ const homeArticleTotal = ref(0);
 const homeArticlesLoading = ref(false);
 const homeArticlesStatus = ref("最近文章");
 const homeProfile = ref<AboutProfile>(fallbackProfile);
+const homeSeries = ref<Series[]>([]);
+const homeNotes = ref<Note[]>([]);
+const homeDiscoveryRoot = ref<HTMLElement | null>(null);
 const activeQuoteIndex = ref(0);
 const typedCharacters = ref(0);
 const scrollProgress = ref(0);
@@ -121,6 +126,18 @@ const commandLinks = [
     to: "/about",
     tone: "coral",
   },
+  {
+    label: "专题航线",
+    caption: "按顺序连续阅读",
+    to: "/series",
+    tone: "sage",
+  },
+  {
+    label: "短动态",
+    caption: "接收最近的简短信号",
+    to: "/notes",
+    tone: "coral",
+  },
 ];
 
 let quoteTimer: number | undefined;
@@ -128,6 +145,7 @@ let switchTimer: number | undefined;
 let clockTimer: number | undefined;
 let scrollFrame: number | undefined;
 let cardObserver: IntersectionObserver | undefined;
+let discoveryObserver: IntersectionObserver | undefined;
 let homeSession = 0;
 
 const activeQuote = computed(
@@ -138,10 +156,10 @@ const featuredArticle = computed(() => homeArticles.value[0] ?? null);
 const secondaryArticles = computed(() => homeArticles.value.slice(1, 4));
 const articleCategories = computed(() => homeArticleStats.value.categories.slice(0, 5));
 const articleTags = computed(() => homeArticleStats.value.tags.slice(0, 12));
-const profileMetrics = computed(() => homeProfile.value.metrics.slice(0, 4));
 const profileProjects = computed(() => homeProfile.value.project_experiences.slice(0, 3));
-const profileSkills = computed(() => homeProfile.value.skills.slice(0, 10));
 const siteStack = computed(() => homeProfile.value.site_stack.slice(0, 8));
+const featuredSeries = computed(() => homeSeries.value.slice(0, 2));
+const latestNotes = computed(() => homeNotes.value.slice(0, 3));
 const currentTimeText = computed(() =>
   new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
@@ -157,13 +175,6 @@ const currentDateText = computed(() =>
     month: "long",
     day: "numeric",
   }).format(clockNow.value),
-);
-const currentMonthText = computed(() =>
-  new Intl.DateTimeFormat("zh-CN", { month: "long" }).format(clockNow.value),
-);
-const currentDayText = computed(() => String(clockNow.value.getDate()).padStart(2, "0"));
-const currentWeekdayText = computed(() =>
-  new Intl.DateTimeFormat("zh-CN", { weekday: "long" }).format(clockNow.value),
 );
 const siteRunningDaysText = computed(() => {
   const [year, month, day] = settings.value.site_launched_on.split("-").map(Number);
@@ -185,24 +196,6 @@ const siteRunningDaysText = computed(() => {
     clockNow.value.getDate(),
   );
   return String(Math.max(1, Math.floor((today - launchedOn) / 86_400_000) + 1));
-});
-const calendarWeek = computed(() => {
-  const weekLabels = ["一", "二", "三", "四", "五", "六", "日"];
-  const today = clockNow.value;
-  const start = new Date(today);
-  start.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  start.setHours(0, 0, 0, 0);
-
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    return {
-      key: `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`,
-      label: weekLabels[index],
-      day: String(date.getDate()).padStart(2, "0"),
-      active: date.toDateString() === today.toDateString(),
-    };
-  });
 });
 const latestArticleDate = computed(() =>
   featuredArticle.value
@@ -234,14 +227,6 @@ const distanceText = computed(() => {
 
   return distance >= 100 ? `约 ${Math.round(distance)} 公里` : `约 ${distance.toFixed(1)} 公里`;
 });
-const greetingText = computed(() => {
-  const hour = new Date().getHours();
-  if (hour < 6) return "夜深了，注意休息";
-  if (hour < 11) return "早上好，祝你今天顺利";
-  if (hour < 14) return "中午好，记得补充能量";
-  if (hour < 19) return "下午好，继续向前航行";
-  return "晚上好，愿这段阅读陪伴你";
-});
 function formatArticleDate(article: Article) {
   const value = article.published_at ?? article.created_at;
   return new Intl.DateTimeFormat("zh-CN", {
@@ -259,6 +244,15 @@ function formatFullDate(value: string | null) {
     month: "short",
     day: "numeric",
   }).format(new Date(value));
+}
+
+function noteExcerpt(markdown: string) {
+  return markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[#>*_`[\]()!-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 88);
 }
 
 function createEmptyArticleStats(): ArticleListStats {
@@ -311,8 +305,41 @@ async function loadHomeProfile(session: number) {
   }
 }
 
+async function loadHomeSeriesAndNotes(session: number) {
+  const [seriesResult, notesResult] = await Promise.allSettled([
+    fetchSeries(),
+    fetchNotes({ page: 1, page_size: 3 }),
+  ]);
+  if (session !== homeSession || !isHome.value) return;
+  homeSeries.value = seriesResult.status === "fulfilled" ? seriesResult.value.items : [];
+  homeNotes.value = notesResult.status === "fulfilled" ? notesResult.value.items : [];
+}
+
 async function loadHomeContent(session: number) {
-  await Promise.allSettled([loadHomeArticles(session), loadHomeProfile(session)]);
+  await Promise.allSettled([
+    loadHomeArticles(session),
+    loadHomeProfile(session),
+  ]);
+}
+
+function observeHomeDiscovery(session: number) {
+  discoveryObserver?.disconnect();
+  if (!homeDiscoveryRoot.value || typeof IntersectionObserver === "undefined") {
+    void loadHomeSeriesAndNotes(session);
+    return;
+  }
+  discoveryObserver = new IntersectionObserver(
+    (entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      discoveryObserver?.disconnect();
+      void loadHomeSeriesAndNotes(session).then(async () => {
+        await nextTick();
+        if (session === homeSession && isHome.value) observeCards();
+      });
+    },
+    { rootMargin: "320px 0px" },
+  );
+  discoveryObserver.observe(homeDiscoveryRoot.value);
 }
 
 async function loadVisitorLocation() {
@@ -367,7 +394,7 @@ function handleScroll() {
 }
 
 function observeCards() {
-  const board = document.querySelector<HTMLElement>(".home-card-board");
+  const board = document.querySelector<HTMLElement>(".home-content-flow");
   if (!board) return;
 
   board.classList.add("cards-motion-ready");
@@ -391,11 +418,11 @@ function observeCards() {
   );
 
   board
-    .querySelectorAll<HTMLElement>(".home-card:not([data-reveal-observed])")
-    .forEach((card, index) => {
-      card.dataset.revealObserved = "true";
-      card.style.setProperty("--reveal-delay", `${(index % 4) * 45}ms`);
-      cardObserver?.observe(card);
+    .querySelectorAll<HTMLElement>(".home-reveal:not([data-reveal-observed])")
+    .forEach((item, index) => {
+      item.dataset.revealObserved = "true";
+      item.style.setProperty("--reveal-delay", `${(index % 4) * 55}ms`);
+      cardObserver?.observe(item);
     });
 }
 
@@ -417,6 +444,7 @@ async function initializeHome() {
   if (session !== homeSession || !isHome.value) return;
 
   observeCards();
+  observeHomeDiscovery(session);
   window.addEventListener("scroll", handleScroll, { passive: true });
   handleScroll();
 }
@@ -436,6 +464,8 @@ function disposeHome() {
   }
   cardObserver?.disconnect();
   cardObserver = undefined;
+  discoveryObserver?.disconnect();
+  discoveryObserver = undefined;
 }
 
 onMounted(() => {
@@ -485,200 +515,128 @@ onBeforeUnmount(() => {
           <h2>从这里继续阅读</h2>
         </div>
 
-        <div class="home-card-board grid grid-cols-12 items-stretch">
-          <article class="home-card intro-card span-4 min-w-0 text-left">
-            <p class="card-kicker">写作近况</p>
-            <h3>{{ writingStatusText }}</h3>
-            <p>技术实践、项目复盘和日常记录都会在这里留下新的入口。</p>
-          </article>
+        <div class="home-content-flow">
+          <div class="home-lead-row">
+            <RouterLink
+              v-if="featuredArticle"
+              class="home-featured-log home-reveal"
+              :to="{ path: `/articles/${featuredArticle.slug}` }"
+            >
+              <span class="home-eyebrow">LATEST LOG / {{ formatFullDate(featuredArticle.published_at ?? featuredArticle.created_at) }}</span>
+              <h3>{{ featuredArticle.title }}</h3>
+              <p>{{ featuredArticle.summary || "打开文章查看完整记录。" }}</p>
+              <span class="home-featured-meta">{{ featuredArticle.views }} 阅读 <i></i> {{ featuredArticle.likes }} 喜欢</span>
+            </RouterLink>
+            <article v-else class="home-featured-log home-reveal">
+              <span class="home-eyebrow">LATEST LOG</span>
+              <h3>{{ homeArticlesLoading ? "正在整理最近内容" : homeArticlesStatus }}</h3>
+              <p>有新文章时会出现在这里。</p>
+              <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">进入文章归档</RouterLink>
+            </article>
 
-          <article class="home-card time-card span-2 min-w-0 text-left">
-            <p class="card-kicker">TIME</p>
-            <strong class="time-digits" :aria-label="currentTimeText">
-              <span
-                v-for="(character, index) in currentTimeCharacters"
-                :key="`${index}-${character}`"
-                aria-hidden="true"
-                :style="{ '--digit-index': index }"
-              >{{ character }}</span>
-            </strong>
-            <span>{{ currentDateText }}</span>
-            <i aria-hidden="true"></i>
-          </article>
+            <aside class="home-voyage-status home-reveal" aria-label="航行状态">
+              <div class="home-status-heading">
+                <span class="signal-light" aria-hidden="true"></span>
+                <span class="home-eyebrow">VOYAGE STATUS</span>
+              </div>
+              <strong class="home-writing-status">{{ writingStatusText }}</strong>
+              <div class="home-clock-line">
+                <strong class="time-digits" :aria-label="currentTimeText">
+                  <span
+                    v-for="(character, index) in currentTimeCharacters"
+                    :key="`${index}-${character}`"
+                    aria-hidden="true"
+                    :style="{ '--digit-index': index }"
+                  >{{ character }}</span>
+                </strong>
+                <span>{{ currentDateText }}</span>
+              </div>
+              <div class="home-status-grid">
+                <span><b>{{ siteRunningDaysText }}</b> 天运行</span>
+                <span><b>{{ homeArticleTotal }}</b> 篇记录</span>
+                <span><b>{{ latestArticleDate }}</b> 最近更新</span>
+              </div>
+              <div class="home-visitor-line">
+                <span>欢迎靠岸 · {{ visitorLocationText }}</span>
+                <small>{{ distanceText }} · {{ visitorIpText }}</small>
+              </div>
+            </aside>
+          </div>
 
-          <article class="home-card calendar-card span-3 min-w-0 text-left">
-            <p class="card-kicker">CALENDAR</p>
-            <div class="calendar-head">
-              <strong>{{ currentDayText }}</strong>
-              <span>{{ currentMonthText }} · {{ currentWeekdayText }}</span>
-            </div>
-            <div class="calendar-week" aria-label="本周日历">
-              <span
-                v-for="day in calendarWeek"
-                :key="day.key"
-                :class="{ active: day.active }"
-              >
-                <small>{{ day.label }}</small>
-                <b>{{ day.day }}</b>
-              </span>
-            </div>
-          </article>
+          <nav class="home-route-nav home-reveal" aria-label="快捷航线">
+            <span class="home-route-label">QUICK ROUTES</span>
+            <RouterLink
+              v-for="command in commandLinks"
+              :key="command.label"
+              :class="`tone-${command.tone}`"
+              :to="command.to"
+            >
+              <span class="action-mark" aria-hidden="true"></span>
+              <span><strong>{{ command.label }}</strong><small>{{ command.caption }}</small></span>
+            </RouterLink>
+          </nav>
 
-          <article class="home-card stat-card span-3 min-w-0 text-left">
-            <p class="card-kicker">TODAY</p>
-            <strong>第 {{ siteRunningDaysText }} 天</strong>
-            <span>{{ greetingText }}</span>
-            <small>最近文章：{{ latestArticleDate }}</small>
-          </article>
-
-          <RouterLink
-            v-for="command in commandLinks"
-            :key="command.label"
-            :class="[
-              'home-card',
-              'action-card',
-              'span-2',
-              'min-w-0',
-              'text-left',
-              `tone-${command.tone}`,
-            ]"
-            :to="command.to"
-          >
-            <span class="action-mark" aria-hidden="true"></span>
-            <strong>{{ command.label }}</strong>
-            <small>{{ command.caption }}</small>
-            <i aria-hidden="true">↗</i>
-          </RouterLink>
-
-          <RouterLink
-            v-if="featuredArticle"
-            class="home-card latest-card span-4 min-w-0 text-left"
-            :to="{ path: `/articles/${featuredArticle.slug}` }"
-          >
-            <p class="card-kicker">LATEST</p>
-            <time>{{ formatFullDate(featuredArticle.published_at ?? featuredArticle.created_at) }}</time>
-            <h3>{{ featuredArticle.title }}</h3>
-            <p>{{ featuredArticle.summary || "打开文章查看完整记录。" }}</p>
-            <footer>
-              <span>{{ featuredArticle.views }} 阅读</span>
-              <span>{{ featuredArticle.likes }} 喜欢</span>
-            </footer>
-          </RouterLink>
-          <article v-else class="home-card latest-card span-4 min-w-0 text-left">
-            <p class="card-kicker">LATEST</p>
-            <h3>{{ homeArticlesLoading ? "正在整理最近内容" : homeArticlesStatus }}</h3>
-            <p>有新文章时会出现在这里。</p>
-            <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">进入文章归档 ↗</RouterLink>
-          </article>
-
-          <RouterLink
-            v-for="article in secondaryArticles"
-            :key="article.id"
-            class="home-card article-card span-2 min-w-0 text-left"
-            :to="{ path: `/articles/${article.slug}` }"
-          >
-            <time>{{ formatArticleDate(article) }}</time>
-            <strong>{{ article.title }}</strong>
-            <small>{{ article.category }} · {{ article.likes }} 喜欢</small>
-          </RouterLink>
-
-          <article class="home-card category-card span-3 min-w-0 text-left">
-            <p class="card-kicker">CATEGORIES</p>
-            <div v-if="articleCategories.length" class="mini-bars">
+          <div class="home-reading-layout">
+            <section class="home-reading-feed home-reveal" aria-labelledby="home-reading-title">
+              <div class="home-section-heading">
+                <div><span class="home-eyebrow">RECENT LOGS</span><h3 id="home-reading-title">沿航线继续阅读</h3></div>
+                <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">全部文章</RouterLink>
+              </div>
               <RouterLink
-                v-for="category in articleCategories"
-                :key="category.name"
-                :to="{ path: '/articles', query: { view: 'categories' } }"
+                v-for="(article, index) in secondaryArticles"
+                :key="article.id"
+                class="home-article-row"
+                :to="{ path: `/articles/${article.slug}` }"
               >
-                <span>{{ category.name }}</span>
-                <b>{{ category.count }}</b>
+                <span class="home-article-index">{{ String(index + 1).padStart(2, "0") }}</span>
+                <time>{{ formatArticleDate(article) }}</time>
+                <div><strong>{{ article.title }}</strong><small>{{ article.category }}</small></div>
+                <span class="home-article-likes">{{ article.likes }} 喜欢</span>
               </RouterLink>
-            </div>
-            <p v-else class="compact-empty">分类等待文章写入。</p>
-          </article>
+              <p v-if="!secondaryArticles.length" class="compact-empty">更多文章正在靠岸。</p>
+            </section>
 
-          <article class="home-card tag-card span-3 min-w-0 text-left">
-            <p class="card-kicker">TAGS</p>
-            <div v-if="articleTags.length" class="tag-cloud">
-              <RouterLink
-                v-for="tag in articleTags"
-                :key="tag.name"
-                class="tag-chip"
-                :to="{ path: '/articles', query: { view: 'tags' } }"
-              >
-                #{{ tag.name }} <span>{{ tag.count }}</span>
-              </RouterLink>
-            </div>
-            <p v-else class="compact-empty">发布带标签的文章后会出现在这里。</p>
-          </article>
-
-          <article class="home-card visitor-card span-3 min-w-0 text-left">
-            <div class="card-title-row">
-              <span class="signal-light" aria-hidden="true"></span>
-              <p class="card-kicker">VISITOR</p>
-            </div>
-            <h3>欢迎靠岸</h3>
-            <p>{{ visitorLocationText }}</p>
-            <small>{{ distanceText }} · {{ visitorIpText }}</small>
-          </article>
-
-          <RouterLink class="home-card profile-card span-3 min-w-0 text-left" to="/about">
-            <div class="profile-mini">
-              <div class="profile-seal-mini" aria-hidden="true">
-                {{ homeProfile.display_name.slice(0, 1) || "站" }}
+            <aside class="home-index-panel home-reveal" aria-label="文章索引">
+              <div class="home-section-heading"><span class="home-eyebrow">INDEX</span><RouterLink :to="{ path: '/articles', query: { view: 'categories' } }">分类</RouterLink></div>
+              <div v-if="articleCategories.length" class="home-category-lines">
+                <RouterLink v-for="category in articleCategories" :key="category.name" :to="{ path: '/articles', query: { view: 'categories' } }">
+                  <span>{{ category.name }}</span><b>{{ category.count }}</b>
+                </RouterLink>
               </div>
-              <div>
-                <p class="card-kicker">ABOUT</p>
-                <strong>{{ homeProfile.display_name }}</strong>
-                <span>{{ homeProfile.role }}</span>
+              <p v-else class="compact-empty">分类等待文章写入。</p>
+              <div v-if="articleTags.length" class="home-tag-line">
+                <RouterLink v-for="tag in articleTags.slice(0, 8)" :key="tag.name" :to="{ path: '/articles', query: { view: 'tags', tag: tag.name } }">#{{ tag.name }}</RouterLink>
               </div>
-            </div>
-            <small>{{ homeProfile.headline }}</small>
+            </aside>
+          </div>
+
+          <div ref="homeDiscoveryRoot" class="home-discovery-layout">
+            <section class="home-signal-panel home-reveal">
+              <div class="home-section-heading"><span class="home-eyebrow">FEATURED SERIES</span><RouterLink to="/series">全部专题</RouterLink></div>
+              <div v-if="featuredSeries.length" class="home-signal-list">
+                <RouterLink v-for="(series, index) in featuredSeries" :key="series.id" :to="`/series/${series.slug}`">
+                  <span>{{ String(index + 1).padStart(2, "0") }}</span><strong>{{ series.title }}</strong><small>{{ series.description || "进入专题连续阅读" }}</small>
+                </RouterLink>
+              </div>
+              <p v-else class="compact-empty">专题航线正在整理中。</p>
+            </section>
+            <section class="home-signal-panel home-reveal">
+              <div class="home-section-heading"><span class="home-eyebrow">RECENT SIGNALS</span><RouterLink to="/notes">全部动态</RouterLink></div>
+              <div v-if="latestNotes.length" class="home-signal-list home-note-list">
+                <RouterLink v-for="note in latestNotes" :key="note.id" :to="`/notes/${note.slug}`">
+                  <span class="signal-light" aria-hidden="true"></span><strong>{{ noteExcerpt(note.content_markdown) }}</strong>
+                </RouterLink>
+              </div>
+              <p v-else class="compact-empty">最近还没有新的动态信号。</p>
+            </section>
+          </div>
+
+          <RouterLink class="home-profile-strip home-reveal" to="/about">
+            <span class="profile-seal-mini" aria-hidden="true">{{ homeProfile.display_name.slice(0, 1) || "站" }}</span>
+            <span class="home-profile-copy"><span class="home-eyebrow">ABOUT / {{ homeProfile.display_name }}</span><strong>{{ homeProfile.role }}</strong><small>{{ homeProfile.headline }}</small></span>
+            <span class="home-profile-facts"><b>{{ profileProjects[0]?.name || "个人博客系统" }}</b><small>{{ siteStack.slice(0, 4).join(" · ") }}</small></span>
+            <span class="home-profile-action">查看档案</span>
           </RouterLink>
-
-          <article class="home-card metrics-card span-3 min-w-0 text-left">
-            <p class="card-kicker">PROFILE METRICS</p>
-            <div class="metric-grid">
-              <div v-for="metric in profileMetrics" :key="`${metric.value}-${metric.label}`">
-                <strong>{{ metric.value }}</strong>
-                <span>{{ metric.label }}</span>
-              </div>
-            </div>
-          </article>
-
-          <article class="home-card skills-card span-3 min-w-0 text-left">
-            <p class="card-kicker">SKILLS</p>
-            <div class="skill-token-list">
-              <span v-for="skill in profileSkills" :key="skill.name">
-                <b>{{ skill.name.slice(0, 2).toUpperCase() }}</b>
-                {{ skill.name }}
-              </span>
-            </div>
-          </article>
-
-          <article class="home-card project-card span-3 min-w-0 text-left">
-            <p class="card-kicker">PROJECTS</p>
-            <div v-if="profileProjects.length" class="project-list">
-              <div
-                v-for="(project, index) in profileProjects"
-                :key="`${project.name}-${project.period}`"
-              >
-                <span>{{ String(index + 1).padStart(2, "0") }}</span>
-                <strong>{{ project.name }}</strong>
-                <small>{{ project.period }}</small>
-              </div>
-            </div>
-            <p v-else class="compact-empty">项目资料正在整理中。</p>
-          </article>
-
-          <article class="home-card site-card span-3 min-w-0 text-left">
-            <p class="card-kicker">SITE STACK</p>
-            <strong>{{ homeProfile.site_title }}</strong>
-            <span>{{ homeProfile.site_launched_at }}</span>
-            <div class="site-stack-cloud">
-              <span v-for="item in siteStack" :key="item">{{ item }}</span>
-            </div>
-          </article>
         </div>
       </section>
     </main>
@@ -688,6 +646,7 @@ onBeforeUnmount(() => {
       <component :is="Component" />
     </KeepAlive>
   </router-view>
+  <SiteFooter />
 </template>
 
 <style scoped>
@@ -2419,6 +2378,10 @@ onBeforeUnmount(() => {
   grid-column: span 4;
 }
 
+.span-6 {
+  grid-column: span 6;
+}
+
 .card-kicker {
   margin: 0 0 0.58rem;
   color: var(--card-accent);
@@ -2676,6 +2639,15 @@ onBeforeUnmount(() => {
 .tone-brass {
   --card-glow: 247, 201, 81;
   --card-accent: var(--home-brass);
+}
+
+.tone-sage .action-mark {
+  color: var(--home-sage);
+}
+
+.tone-sage {
+  --card-glow: 200, 217, 164;
+  --card-accent: var(--home-sage);
 }
 
 .latest-card {
@@ -3091,6 +3063,105 @@ onBeforeUnmount(() => {
     box-shadow 180ms ease;
 }
 
+.home-series-card,
+.home-notes-card {
+  min-height: 11rem;
+}
+
+.home-series-card {
+  --card-glow: 131, 215, 203;
+  --card-accent: var(--home-tide);
+}
+
+.home-notes-card {
+  --card-glow: 230, 111, 82;
+  --card-accent: var(--home-coral);
+}
+
+.home-series-card .card-title-row,
+.home-notes-card .card-title-row {
+  justify-content: space-between;
+}
+
+.home-series-card .card-title-row > a,
+.home-notes-card .card-title-row > a {
+  color: var(--home-muted);
+  font: 700 0.66rem "Noto Sans SC", sans-serif;
+  text-decoration: none;
+}
+
+.home-series-list,
+.home-note-list {
+  display: grid;
+  gap: 0.42rem;
+  margin-top: 0.8rem;
+}
+
+.home-series-list > a {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.65rem;
+  border: 1px solid rgba(131, 215, 203, 0.13);
+  border-radius: 6px;
+  color: var(--home-ink);
+  background: rgba(131, 215, 203, 0.04);
+  text-decoration: none;
+  transition: transform 140ms var(--card-ease), border-color 180ms ease, background-color 180ms ease;
+}
+
+.home-series-list > a > span {
+  color: var(--home-brass);
+  font: 700 0.68rem "IBM Plex Mono", monospace;
+}
+
+.home-series-list strong,
+.home-series-list small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-series-list small {
+  margin-top: 0.18rem;
+  color: var(--home-muted);
+}
+
+.home-series-list i {
+  color: var(--home-tide);
+  font-style: normal;
+}
+
+.home-note-list > a {
+  display: grid;
+  grid-template-columns: 0.65rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: center;
+  min-height: 2.25rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(255, 248, 230, 0.1);
+  color: var(--home-ink);
+  font: 500 0.74rem "Noto Sans SC", sans-serif;
+  text-decoration: none;
+}
+
+.home-note-list i {
+  width: 0.44rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--home-coral);
+  box-shadow: 0 0 0 0.22rem rgba(230, 111, 82, 0.1);
+  transition: transform 140ms var(--card-ease), box-shadow 180ms ease;
+}
+
+.home-note-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .compact-empty {
   margin: 0.5rem 0 0;
   color: var(--home-muted);
@@ -3167,6 +3238,19 @@ onBeforeUnmount(() => {
     border-color: rgba(131, 215, 203, 0.34);
     background-color: rgba(131, 215, 203, 0.07);
     transform: translateY(-0.1rem);
+  }
+
+  .home-series-list > a:hover,
+  .home-series-list > a:focus-visible {
+    border-color: rgba(247, 201, 81, 0.36);
+    background-color: rgba(131, 215, 203, 0.08);
+    transform: translateX(0.18rem);
+  }
+
+  .home-note-list > a:hover i,
+  .home-note-list > a:focus-visible i {
+    transform: scale(1.18);
+    box-shadow: 0 0 0 0.4rem rgba(230, 111, 82, 0.1);
   }
 }
 
@@ -3252,6 +3336,10 @@ onBeforeUnmount(() => {
     grid-column: span 6;
   }
 
+  .span-6 {
+    grid-column: span 6;
+  }
+
   .span-3 {
     grid-column: span 3;
   }
@@ -3282,6 +3370,7 @@ onBeforeUnmount(() => {
   .span-2,
   .span-3,
   .span-4,
+  .span-6,
   .intro-card,
   .calendar-card,
   .latest-card,
@@ -3334,6 +3423,7 @@ onBeforeUnmount(() => {
   .span-2,
   .span-3,
   .span-4,
+  .span-6,
   .action-card,
   .article-card,
   .time-card,
@@ -3372,6 +3462,11 @@ onBeforeUnmount(() => {
     transition: none;
   }
 
+  .home-series-list > a,
+  .home-note-list i {
+    transition: none;
+  }
+
   .cards-motion-ready .home-card,
   .cards-motion-ready .home-card > * {
     opacity: 1;
@@ -3380,6 +3475,584 @@ onBeforeUnmount(() => {
 
   .tag-cloud:has(.tag-chip:hover) .tag-chip:not(:hover) {
     opacity: 1;
+  }
+}
+
+/* 首页内容区采用编辑式信息流，避免多个独立卡片争夺视觉焦点。 */
+.home-content-flow {
+  --flow-line: rgba(255, 248, 230, 0.16);
+  --flow-soft: rgba(255, 248, 230, 0.58);
+  display: grid;
+  gap: 4.4rem;
+}
+
+.home-reveal {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.cards-motion-ready .home-reveal:not(.card-visible) {
+  opacity: 0;
+  transform: translate3d(0, 1.2rem, 0);
+}
+
+.cards-motion-ready .home-reveal.card-visible {
+  animation: home-flow-reveal 580ms var(--card-ease) var(--reveal-delay, 0ms) backwards;
+}
+
+.home-lead-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(19rem, 0.65fr);
+  min-width: 0;
+  border-top: 1px solid var(--flow-line);
+  border-bottom: 1px solid var(--flow-line);
+}
+
+.home-featured-log {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 20rem;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 2.3rem 2.2rem 2.25rem 0;
+  color: var(--home-ink);
+  text-decoration: none;
+}
+
+.home-featured-log::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 16% 54%, rgba(230, 111, 82, 0.14), transparent 58%);
+  opacity: 0.78;
+  transform: translateX(-2%);
+  transition: transform 520ms var(--card-ease), opacity 260ms ease;
+}
+
+.home-featured-log > * {
+  position: relative;
+  z-index: 1;
+}
+
+.home-eyebrow {
+  color: var(--home-brass);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.home-featured-log h3 {
+  max-width: 40rem;
+  margin: 0.75rem 0 0;
+  font-family: var(--display-font);
+  font-size: clamp(2.5rem, 5vw, 4.75rem);
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.home-featured-log p {
+  max-width: 38rem;
+  margin: 1rem 0 0;
+  color: var(--home-muted);
+  font-size: 0.86rem;
+  line-height: 1.8;
+}
+
+.home-featured-meta {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 1.55rem;
+  color: var(--home-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.66rem;
+}
+
+.home-featured-meta i {
+  width: 2rem;
+  height: 1px;
+  background: var(--home-coral);
+}
+
+.home-voyage-status {
+  display: grid;
+  align-content: end;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 2rem 0 2.25rem 2rem;
+  border-left: 1px solid var(--flow-line);
+}
+
+.home-status-heading {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.home-writing-status {
+  overflow: hidden;
+  color: var(--home-ink);
+  font-family: var(--display-font);
+  font-size: 1.3rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-clock-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.8rem;
+  align-items: baseline;
+}
+
+.home-clock-line > span {
+  color: var(--home-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.64rem;
+}
+
+.home-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--flow-line);
+}
+
+.home-status-grid span,
+.home-visitor-line {
+  min-width: 0;
+  color: var(--home-soft);
+  font-size: 0.63rem;
+  line-height: 1.55;
+}
+
+.home-status-grid b {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 0.15rem;
+  color: var(--home-sage);
+  font-family: var(--display-font);
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-visitor-line {
+  display: grid;
+  gap: 0.15rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--flow-line);
+}
+
+.home-visitor-line span {
+  overflow: hidden;
+  color: var(--home-tide);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-visitor-line small {
+  overflow: hidden;
+  color: var(--home-soft);
+  font-size: 0.6rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-route-nav {
+  display: grid;
+  grid-template-columns: auto repeat(5, minmax(0, 1fr));
+  border-bottom: 1px solid var(--flow-line);
+}
+
+.home-route-label {
+  display: flex;
+  min-height: 5.7rem;
+  align-items: center;
+  padding-right: 1.4rem;
+  color: var(--home-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.59rem;
+  letter-spacing: 0.13em;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.home-route-nav > a {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: center;
+  min-width: 0;
+  min-height: 5.7rem;
+  padding: 0.8rem 0.85rem;
+  border-left: 1px solid var(--flow-line);
+  color: var(--home-ink);
+  text-decoration: none;
+  transition: background-color 220ms ease, transform 180ms var(--card-ease), border-color 220ms ease;
+}
+
+.home-route-nav > a::after {
+  content: "";
+  position: absolute;
+  right: 0.85rem;
+  bottom: -1px;
+  left: 0.85rem;
+  height: 2px;
+  background: var(--home-brass);
+  opacity: 0;
+  transform: scaleX(0.2);
+  transform-origin: left;
+  transition: opacity 200ms ease, transform 320ms var(--card-ease);
+}
+
+.home-route-nav > a > span:nth-child(2) {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.home-route-nav strong,
+.home-route-nav small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-route-nav strong {
+  font-family: var(--display-font);
+  font-size: 0.94rem;
+}
+
+.home-route-nav small {
+  color: var(--home-muted);
+  font-size: 0.61rem;
+}
+
+.home-route-nav .action-mark {
+  flex: 0 0 auto;
+  width: 1.55rem;
+  border-color: currentColor;
+  color: var(--home-brass);
+  background: linear-gradient(currentColor 0 0) center / 1px 58% no-repeat, linear-gradient(90deg, currentColor 0 0) center / 58% 1px no-repeat;
+}
+
+.home-route-nav .tone-tide .action-mark { color: var(--home-tide); }
+.home-route-nav .tone-coral .action-mark { color: var(--home-coral); }
+.home-route-nav .tone-sage .action-mark { color: var(--home-sage); }
+
+.home-reading-layout,
+.home-discovery-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr);
+  gap: 3.5rem;
+  min-width: 0;
+}
+
+.home-discovery-layout {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2.5rem;
+}
+
+.home-section-heading {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--flow-line);
+}
+
+.home-section-heading > div {
+  min-width: 0;
+}
+
+.home-section-heading h3 {
+  margin: 0.35rem 0 0;
+  font-family: var(--display-font);
+  font-size: 1.7rem;
+  line-height: 1.2;
+}
+
+.home-section-heading > a {
+  flex: 0 0 auto;
+  color: var(--home-muted);
+  font-size: 0.67rem;
+  text-decoration: none;
+  transition: color 180ms ease, transform 180ms var(--card-ease);
+}
+
+.home-article-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.2rem 6.5rem minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: center;
+  min-width: 0;
+  min-height: 5.6rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--flow-line);
+  color: var(--home-ink);
+  text-decoration: none;
+  transition: padding 200ms var(--card-ease), color 180ms ease, background-color 180ms ease;
+}
+
+.home-article-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -0.75rem;
+  width: 2px;
+  background: var(--home-brass);
+  opacity: 0;
+  transform: scaleY(0.35);
+  transition: opacity 180ms ease, transform 220ms var(--card-ease);
+}
+
+.home-article-index,
+.home-article-row time,
+.home-article-likes {
+  color: var(--home-soft);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.61rem;
+}
+
+.home-article-index { color: var(--home-coral); }
+
+.home-article-row > div {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.home-article-row strong,
+.home-article-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-article-row strong {
+  font-family: var(--display-font);
+  font-size: 1.06rem;
+}
+
+.home-article-row small { color: var(--home-muted); font-size: 0.66rem; }
+
+.home-index-panel {
+  min-width: 0;
+  padding-left: 2rem;
+  border-left: 1px solid var(--flow-line);
+}
+
+.home-category-lines {
+  display: grid;
+  margin-top: 0.45rem;
+}
+
+.home-category-lines a {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid rgba(255, 248, 230, 0.1);
+  color: var(--home-muted);
+  font-size: 0.75rem;
+  text-decoration: none;
+  transition: color 180ms ease, padding 180ms var(--card-ease);
+}
+
+.home-category-lines a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-category-lines b { color: var(--home-brass); font-family: "IBM Plex Mono", monospace; font-size: 0.65rem; }
+
+.home-tag-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.7rem;
+  margin-top: 1.25rem;
+}
+
+.home-tag-line a {
+  color: var(--home-tide);
+  font-size: 0.68rem;
+  text-decoration: none;
+  transition: color 180ms ease, transform 180ms var(--card-ease);
+}
+
+.home-signal-panel {
+  min-width: 0;
+  padding-top: 1rem;
+  border-top: 2px solid var(--home-tide);
+}
+
+.home-signal-panel:last-child { border-color: var(--home-coral); }
+
+.home-signal-list {
+  display: grid;
+  margin-top: 0.4rem;
+}
+
+.home-signal-list > a {
+  display: grid;
+  grid-template-columns: 2.1rem minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 0.7rem;
+  align-items: center;
+  min-width: 0;
+  min-height: 3.6rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--flow-line);
+  color: var(--home-ink);
+  text-decoration: none;
+  transition: color 180ms ease, padding 180ms var(--card-ease), background-color 180ms ease;
+}
+
+.home-signal-list > a > span:first-child {
+  color: var(--home-brass);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+}
+
+.home-signal-list strong,
+.home-signal-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-signal-list strong { font-family: var(--display-font); font-size: 0.92rem; }
+.home-signal-list small { color: var(--home-muted); font-size: 0.65rem; }
+.home-signal-list .signal-light { display: block; width: 0.46rem; }
+
+.home-profile-strip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1.35fr) minmax(0, 0.9fr) auto;
+  gap: 1rem;
+  align-items: center;
+  min-width: 0;
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--flow-line);
+  border-bottom: 1px solid var(--flow-line);
+  color: var(--home-ink);
+  text-decoration: none;
+  transition: padding 200ms var(--card-ease), border-color 200ms ease;
+}
+
+.home-profile-copy,
+.home-profile-facts {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.home-profile-copy strong,
+.home-profile-copy small,
+.home-profile-facts b,
+.home-profile-facts small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-profile-copy strong { font-family: var(--display-font); font-size: 1.05rem; }
+.home-profile-copy small,
+.home-profile-facts small { color: var(--home-muted); font-size: 0.66rem; }
+.home-profile-facts b { color: var(--home-sage); font-size: 0.74rem; }
+.home-profile-action { color: var(--home-brass); font-size: 0.68rem; white-space: nowrap; transition: transform 180ms var(--card-ease); }
+
+@media (hover: hover) and (pointer: fine) {
+  .home-featured-log:hover::before,
+  .home-featured-log:focus-visible::before { opacity: 1; transform: translateX(0); }
+  .home-route-nav > a:hover,
+  .home-route-nav > a:focus-visible { background: rgba(255, 248, 230, 0.05); transform: translateY(-0.12rem); }
+  .home-route-nav > a:hover::after,
+  .home-route-nav > a:focus-visible::after { opacity: 1; transform: scaleX(1); }
+  .home-section-heading > a:hover,
+  .home-section-heading > a:focus-visible { color: var(--home-brass); transform: translateX(0.15rem); }
+  .home-article-row:hover,
+  .home-article-row:focus-visible { padding-left: 0.65rem; background: rgba(255, 248, 230, 0.035); }
+  .home-article-row:hover::before,
+  .home-article-row:focus-visible::before { opacity: 1; transform: scaleY(1); }
+  .home-category-lines a:hover,
+  .home-category-lines a:focus-visible { padding-left: 0.45rem; color: var(--home-ink); }
+  .home-tag-line a:hover,
+  .home-tag-line a:focus-visible { color: var(--home-brass); transform: translateY(-0.1rem); }
+  .home-signal-list > a:hover,
+  .home-signal-list > a:focus-visible { padding-left: 0.5rem; background: rgba(255, 248, 230, 0.035); }
+  .home-profile-strip:hover .home-profile-action,
+  .home-profile-strip:focus-visible .home-profile-action { transform: translateX(0.2rem); }
+  .home-profile-strip:hover,
+  .home-profile-strip:focus-visible { padding-left: 0.65rem; border-color: rgba(247, 201, 81, 0.42); }
+}
+
+@keyframes home-flow-reveal {
+  from { opacity: 0; transform: translate3d(0, 1.2rem, 0); }
+  70% { opacity: 1; transform: translate3d(0, -0.12rem, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@media (max-width: 900px) {
+  .home-lead-row { grid-template-columns: minmax(0, 1fr); }
+  .home-voyage-status { padding: 1.5rem 0 1.7rem; border-top: 1px solid var(--flow-line); border-left: 0; }
+  .home-route-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .home-route-label { grid-column: 1 / -1; min-height: 2.8rem; padding: 0; border-bottom: 1px solid var(--flow-line); writing-mode: initial; transform: none; }
+  .home-reading-layout { grid-template-columns: minmax(0, 1fr); gap: 2.8rem; }
+  .home-index-panel { padding-left: 0; border-top: 1px solid var(--flow-line); border-left: 0; padding-top: 1.5rem; }
+}
+
+@media (max-width: 620px) {
+  .home-content-flow { gap: 3rem; }
+  .home-featured-log { min-height: 17rem; padding: 1.7rem 0; }
+  .home-featured-log h3 { font-size: clamp(2.15rem, 12vw, 3.3rem); }
+  .home-status-grid { gap: 0.4rem; }
+  .home-route-nav { grid-template-columns: minmax(0, 1fr); }
+  .home-route-nav > a {
+    min-height: 4.7rem;
+    padding: 0.75rem 0;
+    border-left: 0;
+    border-bottom: 1px solid var(--flow-line);
+  }
+  .home-route-nav > a:last-child { border-bottom: 0; }
+  .home-article-row { grid-template-columns: 1.8rem minmax(0, 1fr) auto; gap: 0.55rem; }
+  .home-article-row time { grid-column: 2; grid-row: 2; }
+  .home-article-row > div { grid-column: 2; grid-row: 1; }
+  .home-article-likes { grid-column: 3; grid-row: 1 / span 2; }
+  .home-signal-panel { padding-top: 0.8rem; }
+  .home-signal-list > a { grid-template-columns: 1.4rem minmax(0, 1fr); }
+  .home-signal-list > a small { grid-column: 2; }
+  .home-profile-strip { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .home-profile-facts { display: none; }
+  .home-profile-strip > i { font-size: 0.62rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cards-motion-ready .home-reveal,
+  .home-featured-log::before,
+  .home-route-nav > a,
+  .home-route-nav > a::after,
+  .home-section-heading > a,
+  .home-article-row,
+  .home-article-row::before,
+  .home-category-lines a,
+  .home-tag-line a,
+  .home-signal-list > a,
+  .home-profile-strip,
+  .home-profile-action {
+    animation: none;
+    transition: none;
   }
 }
 </style>

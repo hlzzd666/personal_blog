@@ -29,6 +29,10 @@ class Article(Base):
     likes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     category: Mapped[str] = mapped_column(String(80), default="未分类", server_default="未分类")
+    series_id: Mapped[int | None] = mapped_column(
+        ForeignKey("series.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    series_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

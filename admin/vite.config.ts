@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [vue()],
+    resolve: {
+      extensions: [".ts", ".tsx", ".mjs", ".js", ".mts", ".jsx", ".json"],
+    },
     server: {
       proxy: {
         "/api": {

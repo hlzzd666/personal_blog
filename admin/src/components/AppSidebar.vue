@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import {
+  ChatLineSquare,
+  Collection,
   DataBoard,
   Document,
   Picture,
@@ -15,6 +17,8 @@ const route = useRoute();
 const router = useRouter();
 
 const iconMap = {
+  ChatLineSquare,
+  Collection,
   DataBoard,
   Document,
   Picture,

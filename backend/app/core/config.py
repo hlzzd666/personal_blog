@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     cors_origins: str = ""
     trusted_proxy_ips: str = ""
     public_base_url: str = "http://127.0.0.1:8000"
+    site_url: str = "http://127.0.0.1:5173"
+    web_base_path: str = "/web"
+    web_dist_dir: str = "web/dist"
     upload_dir: str = "backend/uploads"
     redis_url: str = "redis://127.0.0.1:6379/0"
     article_list_cache_ttl: int = 300
@@ -40,6 +43,13 @@ class Settings(BaseSettings):
     @property
     def upload_path(self) -> Path:
         path = Path(self.upload_dir).expanduser()
+        if path.is_absolute():
+            return path
+        return (PROJECT_ROOT / path).resolve()
+
+    @property
+    def web_dist_path(self) -> Path:
+        path = Path(self.web_dist_dir).expanduser()
         if path.is_absolute():
             return path
         return (PROJECT_ROOT / path).resolve()

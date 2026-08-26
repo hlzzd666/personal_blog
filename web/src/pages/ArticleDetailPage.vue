@@ -4,13 +4,23 @@ import { marked } from "marked";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
-import { fetchArticle, likeArticle, type Article } from "../api/articles";
+import {
+  fetchArticle,
+  fetchArticleContext,
+  likeArticle,
+  type Article,
+  type ArticleContext,
+} from "../api/articles";
+import { ApiError } from "../api/http";
+import OceanAtmosphere from "../components/OceanAtmosphere.vue";
+import { useSeo } from "../composables/useSeo";
 
 type TocItem = { id: string; level: number; text: string };
 type PreviewImage = { src: string; alt: string };
 
 const route = useRoute();
 const article = ref<Article | null>(null);
+const articleContext = ref<ArticleContext | null>(null);
 const articleContent = ref("");
 const articleToc = ref<TocItem[]>([]);
 const contentRoot = ref<HTMLElement | null>(null);
@@ -18,6 +28,7 @@ const readingRegion = ref<HTMLElement | null>(null);
 const documentScrollTrack = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const errorText = ref("");
+const notFound = ref(false);
 const liking = ref(false);
 const likeError = ref("");
 const likedRecently = ref(false);
@@ -27,6 +38,9 @@ const documentIsScrollable = ref(false);
 const documentScrollThumbSize = ref(1);
 const pageScrollProgress = ref(0);
 const previewImage = ref<PreviewImage | null>(null);
+const copyState = ref<"idle" | "copied" | "error">("idle");
+const shareState = ref<"idle" | "shared" | "copied" | "error">("idle");
+const { applySeo } = useSeo();
 
 let scrollFrame: number | undefined;
 let revealObserver: IntersectionObserver | undefined;
@@ -34,10 +48,14 @@ let likeTimer: number | undefined;
 let loadVersion = 0;
 let documentScrollbarDragOffset = 0;
 let bodyOverflowBeforePreview: string | null = null;
+let feedbackTimer: number | undefined;
 
 const articleNumber = computed(() => String(article.value?.id ?? 0).padStart(4, "0"));
 const readingPercent = computed(() => Math.round(readingProgress.value * 100));
-const readingProgressStyle = computed(() => ({ "--reading-progress": `${readingProgress.value * 360}deg` }));
+const readingProgressStyle = computed(() => ({
+  "--reading-progress": `${readingProgress.value * 360}deg`,
+  "--reading-ratio": String(readingProgress.value),
+}));
 const documentScrollThumbStyle = computed(() => {
   const size = Math.max(documentScrollThumbSize.value, 0.08);
   return {
@@ -248,25 +266,117 @@ async function loadArticle() {
   const currentLoad = ++loadVersion;
   loading.value = true;
   errorText.value = "";
+  notFound.value = false;
   article.value = null;
+  articleContext.value = null;
   articleContent.value = "";
   articleToc.value = [];
   readingProgress.value = 0;
   revealObserver?.disconnect();
   try {
-    const result = await fetchArticle(String(route.params.slug));
+    const slug = String(route.params.slug);
+    const result = await fetchArticle(slug);
     if (currentLoad !== loadVersion) return;
     article.value = result;
+    const context = await fetchArticleContext(slug).catch(() => null);
+    if (currentLoad !== loadVersion) return;
+    articleContext.value = context;
     buildArticleContent(result.content_markdown);
+    applySeo({
+      title: result.title,
+      description: result.summary || normalizeMarkdown(result.content_markdown).replace(/[#>*_`[\]()!-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 160),
+      canonicalPath: `/articles/${result.slug}`,
+      image: result.cover_image_url,
+      type: "article",
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        headline: result.title,
+        description: result.summary,
+        image: result.cover_image_url,
+        datePublished: result.published_at ?? result.created_at,
+        dateModified: result.updated_at,
+        author: { "@type": "Person", name: result.author },
+      },
+    });
     await nextTick();
     updateReadingState();
     await nextTick();
     setupContentReveal();
-  } catch {
-    if (currentLoad === loadVersion) errorText.value = "这段航行记录不存在，或已经离开当前航线。";
+  } catch (error) {
+    if (currentLoad === loadVersion) {
+      notFound.value = error instanceof ApiError && error.status === 404;
+      errorText.value = notFound.value
+        ? "这段航行记录不存在，或已经离开当前航线。"
+        : "文章航线暂时无法连接，请检查网络后重试。";
+    }
   } finally {
     if (currentLoad === loadVersion) loading.value = false;
   }
+}
+
+function resetFeedback() {
+  window.clearTimeout(feedbackTimer);
+  feedbackTimer = window.setTimeout(() => {
+    copyState.value = "idle";
+    shareState.value = "idle";
+  }, 1600);
+}
+
+async function copyArticleLink() {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(window.location.href);
+    } else {
+      const input = document.createElement("textarea");
+      input.value = window.location.href;
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      const copied = document.execCommand("copy");
+      input.remove();
+      if (!copied) throw new Error("copy command failed");
+    }
+    copyState.value = "copied";
+  } catch {
+    try {
+      const input = document.createElement("textarea");
+      input.value = window.location.href;
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      const copied = document.execCommand("copy");
+      input.remove();
+      copyState.value = copied ? "copied" : "error";
+    } catch {
+      copyState.value = "error";
+    }
+  }
+  resetFeedback();
+}
+
+async function shareArticle() {
+  if (!article.value) return;
+  if (!navigator.share) {
+    await copyArticleLink();
+    shareState.value = copyState.value === "copied" ? "copied" : "error";
+    resetFeedback();
+    return;
+  }
+  try {
+    await navigator.share({
+      title: article.value.title,
+      text: article.value.summary,
+      url: window.location.href,
+    });
+    shareState.value = "shared";
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return;
+    shareState.value = "error";
+  }
+  resetFeedback();
 }
 
 async function handleLike() {
@@ -313,6 +423,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", handlePreviewKeydown);
   if (scrollFrame !== undefined) window.cancelAnimationFrame(scrollFrame);
   window.clearTimeout(likeTimer);
+  window.clearTimeout(feedbackTimer);
   if (bodyOverflowBeforePreview !== null) document.body.style.overflow = bodyOverflowBeforePreview;
   revealObserver?.disconnect();
 });
@@ -320,6 +431,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="article-detail-page" :style="readingProgressStyle">
+    <OceanAtmosphere variant="detail" />
     <div class="reading-progress" aria-hidden="true"><span></span></div>
     <div class="article-chart" aria-hidden="true">
       <span class="chart-orbit chart-orbit-one"></span>
@@ -382,7 +494,15 @@ onBeforeUnmount(() => {
           <div ref="contentRoot" class="markdown-body" @click="handleContentClick" @keydown="handleContentKeydown" v-html="articleContent"></div>
           <p v-if="article.is_repost && article.source_url" class="article-source">本文转载自 <a :href="article.source_url" target="_blank" rel="noreferrer noopener">原始来源</a></p>
           <footer class="article-detail-footer">
-            <div class="article-detail-tags"><span v-for="tag in article.tags" :key="tag"># {{ tag }}</span></div>
+            <div class="article-detail-tags">
+              <RouterLink
+                v-for="tag in article.tags"
+                :key="tag"
+                :to="{ path: '/articles', query: { view: 'tags', tag } }"
+              >
+                # {{ tag }}
+              </RouterLink>
+            </div>
             <div class="article-like-area">
               <button :class="['article-like-button', { celebrated: likedRecently, 'is-liked': article.liked_by_current_visitor }]" type="button" :disabled="liking || article.liked_by_current_visitor" @click="handleLike">
                 <span class="like-symbol" aria-hidden="true">♥</span><span>{{ article.liked_by_current_visitor ? "已点赞" : liking ? "正在送达" : "点赞" }}</span><strong>{{ article.likes }}</strong>
@@ -390,6 +510,39 @@ onBeforeUnmount(() => {
               <small v-if="likeError" role="status">{{ likeError }}</small>
             </div>
           </footer>
+          <section class="article-share-panel" aria-label="分享文章">
+            <div><p>SHARE THIS LOG</p><span>把这段航行记录交给下一位读者。</span></div>
+            <div>
+              <button type="button" :class="{ confirmed: copyState === 'copied' }" @click="copyArticleLink">
+                {{ copyState === "copied" ? "链接已复制" : copyState === "error" ? "复制失败" : "复制链接" }}
+              </button>
+              <button type="button" :class="{ confirmed: shareState === 'shared' || shareState === 'copied' }" @click="shareArticle">
+                {{ shareState === "shared" ? "分享完成" : shareState === "copied" ? "链接已复制" : shareState === "error" ? "分享失败" : "系统分享" }}
+              </button>
+            </div>
+          </section>
+          <section v-if="articleContext" class="article-continuation" aria-label="继续阅读">
+            <RouterLink v-if="articleContext.series" class="article-series-link" :to="`/series/${articleContext.series.slug}`">
+              <span>当前专题</span><strong>{{ articleContext.series.title }}</strong><i aria-hidden="true">查看完整航线 →</i>
+            </RouterLink>
+            <div class="article-adjacent-links">
+              <RouterLink v-if="articleContext.previous" :to="`/articles/${articleContext.previous.slug}`">
+                <span>← 上一篇</span><strong>{{ articleContext.previous.title }}</strong>
+              </RouterLink>
+              <div v-else aria-hidden="true"></div>
+              <RouterLink v-if="articleContext.next" :to="`/articles/${articleContext.next.slug}`">
+                <span>下一篇 →</span><strong>{{ articleContext.next.title }}</strong>
+              </RouterLink>
+            </div>
+            <div v-if="articleContext.related.length" class="related-articles">
+              <p>RELATED LOGS / 相关推荐</p>
+              <div>
+                <RouterLink v-for="related in articleContext.related" :key="related.id" :to="`/articles/${related.slug}`">
+                  <span>{{ related.category }}</span><strong>{{ related.title }}</strong><small>{{ related.summary || "打开文章继续阅读。" }}</small>
+                </RouterLink>
+              </div>
+            </div>
+          </section>
           <div class="document-end" aria-hidden="true"><i></i><span>END OF ENTRY / {{ articleNumber }}</span><i></i></div>
         </article>
         <div
@@ -416,7 +569,9 @@ onBeforeUnmount(() => {
       <span class="state-radar" aria-hidden="true"></span><p>正在读取航行记录</p><small>LOG SIGNAL CONNECTING</small>
     </div>
     <div v-else class="article-detail-state article-detail-error">
-      <p>{{ errorText }}</p><RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">返回文章归档</RouterLink>
+      <p>{{ errorText }}</p>
+      <RouterLink v-if="notFound" :to="{ path: '/articles', query: { view: 'archive' } }">返回文章归档</RouterLink>
+      <button v-else type="button" @click="loadArticle">重新读取</button>
     </div>
 
     <Teleport to="body">
@@ -447,14 +602,14 @@ onBeforeUnmount(() => {
   overflow: clip;
   color: var(--ink);
   background:
-    linear-gradient(rgba(117, 201, 189, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(117, 201, 189, 0.035) 1px, transparent 1px),
+    radial-gradient(ellipse at 82% 18%, rgba(244, 202, 88, 0.08), transparent 30rem),
+    linear-gradient(145deg, rgba(223, 123, 89, 0.09), transparent 36%),
     linear-gradient(160deg, #051923 0%, #0a3039 52%, #061b26 100%);
-  background-size: 5rem 5rem, 5rem 5rem, auto;
 }
 
 .reading-progress { position: fixed; z-index: 30; inset: 0 0 auto; height: 3px; pointer-events: none; }
-.reading-progress span { display: block; width: calc(var(--reading-progress) / 360deg * 100%); height: 100%; background: linear-gradient(90deg, var(--coral), var(--signal), var(--current)); box-shadow: 0 0 0.9rem rgba(244, 202, 88, 0.55); transition: width 0.12s linear; }
+.reading-progress span { display: block; width: 100%; height: 100%; background: linear-gradient(90deg, var(--coral), var(--signal), var(--current)); box-shadow: 0 0 0.9rem rgba(244, 202, 88, 0.55); transform: scaleX(var(--reading-ratio)); transform-origin: left; transition: transform 0.12s linear; }
+.article-hero, .article-reading-layout, .article-detail-state { position: relative; z-index: 1; }
 .article-chart { position: fixed; z-index: -1; inset: 0; overflow: hidden; pointer-events: none; opacity: 0.72; }
 .chart-route { position: absolute; top: 22vh; left: 0; width: 100%; height: 52rem; color: var(--current); transform: rotate(-4deg); }
 .chart-route-base, .chart-route-flow { fill: none; vector-effect: non-scaling-stroke; }
@@ -467,7 +622,7 @@ onBeforeUnmount(() => {
 .chart-orbit-two { bottom: 8rem; left: -11rem; width: 32rem; animation: orbit-turn 52s linear infinite reverse; }
 
 .article-hero { position: relative; min-height: min(48rem, 86vh); display: flex; align-items: flex-end; overflow: hidden; padding: 8.5rem 1.5rem 5.5rem; background: radial-gradient(circle at 82% 22%, rgba(244, 202, 88, 0.13), transparent 17rem), linear-gradient(122deg, rgba(223, 123, 89, 0.18), transparent 35%), #061d28; }
-.article-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(112deg, transparent 0 2.8rem, rgba(117, 201, 189, 0.045) 2.85rem 2.9rem), linear-gradient(90deg, transparent 49.9%, rgba(244, 202, 88, 0.1) 50%, transparent 50.1%); mask-image: linear-gradient(90deg, #000, transparent 78%); }
+.article-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 78% 28%, rgba(117, 201, 189, 0.12), transparent 30rem), linear-gradient(122deg, transparent 0 46%, rgba(244, 202, 88, 0.08) 48%, transparent 52%); mask-image: linear-gradient(90deg, #000, transparent 78%); }
 .article-hero::after { content: "LOG"; position: absolute; right: -0.05em; bottom: -0.22em; color: rgba(244, 240, 223, 0.035); font-family: var(--display-font); font-size: clamp(12rem, 30vw, 32rem); line-height: 0.8; pointer-events: none; }
 .article-hero.has-cover { background-image: linear-gradient(90deg, rgba(5, 25, 35, 0.97) 0%, rgba(5, 25, 35, 0.78) 48%, rgba(5, 25, 35, 0.34) 100%), var(--article-cover); background-position: center; background-size: cover; }
 .hero-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, transparent 58%, #061d28 100%); }
@@ -555,7 +710,7 @@ onBeforeUnmount(() => {
 .article-source a { color: var(--signal); }
 .article-detail-footer { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; margin-top: 5rem; padding-top: 2rem; border-top: 1px solid rgba(244, 240, 223, 0.16); }
 .article-detail-tags { display: flex; flex-wrap: wrap; gap: 0.55rem; }
-.article-detail-tags span { padding: 0.38rem 0; color: var(--current); font-family: "Noto Sans SC", sans-serif; font-size: 0.75rem; }
+.article-detail-tags a { padding: 0.38rem 0; color: var(--current); font-family: "Noto Sans SC", sans-serif; font-size: 0.75rem; text-decoration: none; transition: color 180ms ease, transform 140ms cubic-bezier(0.22, 1, 0.36, 1); }
 .article-like-area { display: grid; justify-items: end; gap: 0.45rem; }
 .article-like-area small { color: #f2a183; font-family: "Noto Sans SC", sans-serif; font-size: 0.68rem; }
 .article-like-button { display: grid; grid-template-columns: auto auto auto; gap: 0.65rem; align-items: center; min-height: 2.9rem; padding: 0.6rem 0.85rem; border: 1px solid rgba(223, 123, 89, 0.68); border-radius: 4px; color: #f3a181; background: rgba(223, 123, 89, 0.06); font-family: "Noto Sans SC", sans-serif; cursor: pointer; transition: color 0.25s ease, background-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease; }
@@ -566,6 +721,35 @@ onBeforeUnmount(() => {
 .article-like-button.is-liked .like-symbol { color: var(--current); }
 .article-like-button.celebrated .like-symbol { animation: like-burst 0.72s cubic-bezier(0.2, 0.76, 0.26, 1); }
 .like-symbol { color: var(--coral); font-size: 1rem; }
+.article-share-panel { display: flex; justify-content: space-between; gap: 1.5rem; align-items: center; margin-top: 1.2rem; padding: 1.2rem; border: 1px solid rgba(117, 201, 189, 0.16); border-radius: 6px; background: rgba(117, 201, 189, 0.04); }
+.article-share-panel p { margin: 0 0 0.25rem; color: var(--signal); font: 700 0.65rem "IBM Plex Mono", monospace; }
+.article-share-panel span { color: var(--muted); font: 500 0.74rem "Noto Sans SC", sans-serif; }
+.article-share-panel > div:last-child { display: flex; gap: 0.55rem; }
+.article-share-panel button { min-width: 6.8rem; padding: 0.58rem 0.8rem; border: 1px solid rgba(117, 201, 189, 0.3); border-radius: 5px; color: var(--ink); background: rgba(117, 201, 189, 0.06); font: 700 0.72rem "Noto Sans SC", sans-serif; cursor: pointer; touch-action: manipulation; transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms ease, background-color 150ms ease; }
+.article-share-panel button.confirmed { color: var(--deep-sea); background: var(--current); }
+.article-share-panel button:active { transform: scale(0.97); transition-duration: 0s; }
+.article-continuation { display: grid; gap: 1rem; margin-top: 4rem; }
+.article-series-link { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1rem; align-items: center; padding: 1rem 1.2rem; border: 1px solid rgba(244, 202, 88, 0.24); border-radius: 6px; color: var(--ink); background: linear-gradient(90deg, rgba(244, 202, 88, 0.08), transparent); text-decoration: none; transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms ease; }
+.article-series-link span, .article-series-link i { color: var(--signal); font: 700 0.68rem "Noto Sans SC", sans-serif; }
+.article-series-link i { font-style: normal; }
+.article-adjacent-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+.article-adjacent-links a { display: grid; gap: 0.45rem; min-height: 6.8rem; padding: 1rem; border: 1px solid rgba(244, 240, 223, 0.13); border-radius: 6px; color: var(--ink); background: rgba(244, 240, 223, 0.025); text-decoration: none; transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms ease, background-color 180ms ease; }
+.article-adjacent-links a:last-child { text-align: right; }
+.article-adjacent-links span { color: var(--current); font: 700 0.68rem "Noto Sans SC", sans-serif; }
+.article-adjacent-links strong { font-family: var(--display-font); font-size: 1.05rem; }
+.related-articles { margin-top: 1.4rem; }
+.related-articles > p { margin: 0 0 0.8rem; color: var(--signal); font: 700 0.66rem "IBM Plex Mono", monospace; }
+.related-articles > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; }
+.related-articles a { display: grid; align-content: start; gap: 0.45rem; min-height: 9rem; padding: 1rem; border: 1px solid rgba(117, 201, 189, 0.14); border-radius: 6px; color: var(--ink); background: rgba(117, 201, 189, 0.035); text-decoration: none; transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms ease; }
+.related-articles a span { color: var(--current); font-size: 0.66rem; }
+.related-articles a strong { font-family: var(--display-font); font-size: 1rem; }
+.related-articles a small { display: -webkit-box; overflow: hidden; color: var(--muted); line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.article-detail-error button { padding: 0.65rem 0.9rem; border: 1px solid rgba(117, 201, 189, 0.3); border-radius: 5px; color: var(--ink); background: rgba(117, 201, 189, 0.08); cursor: pointer; }
+@media (hover: hover) and (pointer: fine) {
+  .article-detail-tags a:hover, .article-detail-tags a:focus-visible { color: var(--signal); transform: translateY(-0.1rem); }
+  .article-series-link:hover, .article-series-link:focus-visible, .article-adjacent-links a:hover, .article-adjacent-links a:focus-visible, .related-articles a:hover, .related-articles a:focus-visible { border-color: rgba(244, 202, 88, 0.42); transform: translateY(-0.18rem); }
+  .article-adjacent-links a:hover, .article-adjacent-links a:focus-visible { background-color: rgba(117, 201, 189, 0.06); }
+}
 .document-end { display: flex; gap: 1rem; align-items: center; margin-top: 5rem; color: rgba(244, 240, 223, 0.26); font-family: "Noto Sans SC", sans-serif; font-size: 0.55rem; letter-spacing: 0.16em; }
 .document-end i { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(117, 201, 189, 0.26)); }
 .document-end i:last-child { transform: scaleX(-1); }
@@ -619,6 +803,11 @@ onBeforeUnmount(() => {
   .article-like-area { justify-items: stretch; }
   .article-like-button { justify-content: center; }
   .document-end { gap: 0.55rem; }
+  .article-share-panel { align-items: stretch; flex-direction: column; }
+  .article-share-panel > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .article-series-link { grid-template-columns: 1fr; gap: 0.35rem; }
+  .article-adjacent-links, .related-articles > div { grid-template-columns: 1fr; }
+  .article-adjacent-links a:last-child { text-align: left; }
   .document-end span { letter-spacing: 0.08em; white-space: nowrap; }
   .document-scrollbar { display: none; }
 }
@@ -626,6 +815,7 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .chart-route-flow, .chart-orbit, .hero-heading, .article-manifest, .article-like-button.celebrated .like-symbol, .state-radar::before { animation: none; }
   .markdown-body.motion-ready > :deep(*) { opacity: 1; transform: none; transition: none; }
+  .article-detail-tags a, .article-share-panel button, .article-series-link, .article-adjacent-links a, .related-articles a { transition: none; }
   .reading-progress span, .article-toc button, .article-back-link, .article-like-button { transition: none; }
 }
 </style>

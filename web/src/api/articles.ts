@@ -17,6 +17,8 @@ export type Article = {
   liked_by_current_visitor: boolean;
   tags: string[];
   category: string;
+  series_id: number | null;
+  series_order: number | null;
   created_at: string;
 };
 
@@ -60,4 +62,20 @@ export function fetchArticle(slug: string) {
 
 export function likeArticle(slug: string) {
   return request<{ likes: number; liked_by_current_visitor: boolean }>({ url: `/articles/${encodeURIComponent(slug)}/like`, method: "POST" });
+}
+
+export type ArticleSummary = Pick<
+  Article,
+  "id" | "slug" | "title" | "summary" | "cover_image_url" | "published_at" | "created_at" | "category" | "tags"
+>;
+
+export type ArticleContext = {
+  previous: ArticleSummary | null;
+  next: ArticleSummary | null;
+  related: ArticleSummary[];
+  series: { id: number; slug: string; title: string } | null;
+};
+
+export function fetchArticleContext(slug: string) {
+  return request<ArticleContext>({ url: `/articles/${encodeURIComponent(slug)}/context`, method: "GET" });
 }

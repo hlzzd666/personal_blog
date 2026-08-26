@@ -14,6 +14,8 @@ export type Article = {
   likes: number;
   tags: string[];
   category: string;
+  series_id: number | null;
+  series_order: number | null;
   created_at: string;
 };
 

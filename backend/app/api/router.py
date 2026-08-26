@@ -20,11 +20,22 @@ from backend.app.services.visitor_location import resolve_visitor_location
 from backend.app.core.database import get_db_session
 from backend.app.models.article import ArticleLikeRecord
 from backend.app.schemas.article import (
+    ArticleContextResponse,
     ArticleCreate,
     ArticleLikeResponse,
     ArticleListResponse,
     ArticleResponse,
     ArticleUpdate,
+)
+from backend.app.schemas.content import (
+    DashboardStatsResponse,
+    NoteListResponse,
+    NotePayload,
+    NoteResponse,
+    SeriesDetailResponse,
+    SeriesListResponse,
+    SeriesPayload,
+    SeriesResponse,
 )
 from backend.app.schemas.media import MediaCleanupResponse, MediaListResponse
 from backend.app.services.articles import (
@@ -33,8 +44,25 @@ from backend.app.services.articles import (
     get_article,
     get_article_list_response,
     get_public_article,
+    get_article_context,
     like_article,
     update_article,
+)
+from backend.app.services.content import (
+    create_note,
+    create_series,
+    delete_note,
+    delete_series,
+    get_dashboard_stats,
+    get_note,
+    get_note_by_slug,
+    get_series,
+    get_series_by_slug,
+    get_series_detail,
+    list_notes,
+    list_series,
+    update_note,
+    update_series,
 )
 from backend.app.services.about_profile import (
     get_about_profile,
@@ -291,6 +319,22 @@ def read_manage_articles(
     )
 
 
+@router.get(
+    "/articles/{slug}/context",
+    tags=["articles"],
+    response_model=ApiResponse[ArticleContextResponse],
+)
+def read_article_context(
+    request: Request,
+    slug: str,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[ArticleContextResponse]:
+    context = get_article_context(session, slug)
+    if context is None:
+        raise HTTPException(status_code=404, detail="文章不存在")
+    return build_success_response(request, context)
+
+
 @router.get("/articles/{slug}", tags=["articles"], response_model=ApiResponse[ArticleResponse])
 def read_public_article(
     request: Request,
@@ -376,6 +420,156 @@ def delete_manage_article(
         raise HTTPException(status_code=404, detail="文章不存在")
     delete_article(session, article)
     return build_success_response(request, {"id": article_id}, message="文章已删除")
+
+
+@router.get("/series", tags=["series"], response_model=ApiResponse[SeriesListResponse])
+def read_series_list(
+    request: Request,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[SeriesListResponse]:
+    return build_success_response(request, list_series(session))
+
+
+@router.get("/series/{slug}", tags=["series"], response_model=ApiResponse[SeriesDetailResponse])
+def read_series_detail(
+    request: Request,
+    slug: str,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[SeriesDetailResponse]:
+    series = get_series_by_slug(session, slug)
+    if series is None:
+        raise HTTPException(status_code=404, detail="专题不存在")
+    return build_success_response(request, get_series_detail(session, series))
+
+
+@router.post("/series", tags=["series"], response_model=ApiResponse[SeriesResponse])
+def create_manage_series(
+    request: Request,
+    payload: SeriesPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[SeriesResponse]:
+    try:
+        result = create_series(session, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, result, message="专题创建成功")
+
+
+@router.put("/series/{series_id}", tags=["series"], response_model=ApiResponse[SeriesResponse])
+def update_manage_series(
+    request: Request,
+    series_id: int,
+    payload: SeriesPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[SeriesResponse]:
+    series = get_series(session, series_id)
+    if series is None:
+        raise HTTPException(status_code=404, detail="专题不存在")
+    try:
+        result = update_series(session, series, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, result, message="专题更新成功")
+
+
+@router.delete("/series/{series_id}", tags=["series"], response_model=ApiResponse[dict[str, int]])
+def delete_manage_series(
+    request: Request,
+    series_id: int,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[dict[str, int]]:
+    series = get_series(session, series_id)
+    if series is None:
+        raise HTTPException(status_code=404, detail="专题不存在")
+    delete_series(session, series)
+    return build_success_response(request, {"id": series_id}, message="专题已删除，文章关联已解除")
+
+
+@router.get("/notes", tags=["notes"], response_model=ApiResponse[NoteListResponse])
+def read_notes(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    tag: str | None = None,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[NoteListResponse]:
+    return build_success_response(
+        request, list_notes(session, page=page, page_size=page_size, tag=tag)
+    )
+
+
+@router.get("/notes/{slug}", tags=["notes"], response_model=ApiResponse[NoteResponse])
+def read_note(
+    request: Request,
+    slug: str,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[NoteResponse]:
+    note = get_note_by_slug(session, slug)
+    if note is None:
+        raise HTTPException(status_code=404, detail="动态不存在")
+    return build_success_response(request, NoteResponse.model_validate(note))
+
+
+@router.post("/notes", tags=["notes"], response_model=ApiResponse[NoteResponse])
+def create_manage_note(
+    request: Request,
+    payload: NotePayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[NoteResponse]:
+    try:
+        note = create_note(session, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, NoteResponse.model_validate(note), message="动态创建成功")
+
+
+@router.put("/notes/{note_id}", tags=["notes"], response_model=ApiResponse[NoteResponse])
+def update_manage_note(
+    request: Request,
+    note_id: int,
+    payload: NotePayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[NoteResponse]:
+    note = get_note(session, note_id)
+    if note is None:
+        raise HTTPException(status_code=404, detail="动态不存在")
+    try:
+        note = update_note(session, note, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, NoteResponse.model_validate(note), message="动态更新成功")
+
+
+@router.delete("/notes/{note_id}", tags=["notes"], response_model=ApiResponse[dict[str, int]])
+def delete_manage_note(
+    request: Request,
+    note_id: int,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[dict[str, int]]:
+    note = get_note(session, note_id)
+    if note is None:
+        raise HTTPException(status_code=404, detail="动态不存在")
+    delete_note(session, note)
+    return build_success_response(request, {"id": note_id}, message="动态已删除")
+
+
+@router.get(
+    "/dashboard/stats",
+    tags=["dashboard"],
+    response_model=ApiResponse[DashboardStatsResponse],
+)
+def read_dashboard_stats(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[DashboardStatsResponse]:
+    return build_success_response(request, get_dashboard_stats(session))
 
 
 @router.post(

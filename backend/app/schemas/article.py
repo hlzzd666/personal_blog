@@ -17,6 +17,8 @@ class ArticlePayload(BaseModel):
     likes: int = Field(default=0, ge=0)
     tags: list[str] = Field(default_factory=list, max_length=20)
     category: str = Field(default="未分类", min_length=1, max_length=80)
+    series_id: int | None = Field(default=None, ge=1)
+    series_order: int | None = Field(default=None, ge=0, le=100000)
 
     @field_validator("tags")
     @classmethod
@@ -68,3 +70,30 @@ class ArticleListResponse(BaseModel):
 class ArticleLikeResponse(BaseModel):
     likes: int
     liked_by_current_visitor: bool
+
+
+class ArticleSummary(BaseModel):
+    id: int
+    slug: str
+    title: str
+    summary: str
+    cover_image_url: str | None
+    published_at: datetime | None
+    created_at: datetime
+    category: str
+    tags: list[str]
+
+    model_config = {"from_attributes": True}
+
+
+class ArticleSeriesSummary(BaseModel):
+    id: int
+    slug: str
+    title: str
+
+
+class ArticleContextResponse(BaseModel):
+    previous: ArticleSummary | None = None
+    next: ArticleSummary | None = None
+    related: list[ArticleSummary] = Field(default_factory=list)
+    series: ArticleSeriesSummary | None = None

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.config import settings
 from backend.app.models.about_profile import AboutProfile
 from backend.app.models.article import Article
+from backend.app.models.content import Note, Series
 from backend.app.schemas.media import (
     MediaCleanupResponse,
     MediaFileItem,
@@ -146,6 +147,20 @@ def _collect_reference_candidates(session: Session) -> list[MediaReferenceCandid
                 article_payload,
                 source="文章",
                 label_prefix=f"文章：{article.title}",
+            )
+        )
+
+    for series in session.scalars(select(Series)).all():
+        candidates.extend(
+            _collect_from_payload(
+                _model_to_payload(series), source="专题", label_prefix=f"专题：{series.title}"
+            )
+        )
+
+    for note in session.scalars(select(Note)).all():
+        candidates.extend(
+            _collect_from_payload(
+                _model_to_payload(note), source="短动态", label_prefix=f"动态：{note.slug}"
             )
         )
 

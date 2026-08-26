@@ -17,7 +17,7 @@ let revealTimer: number | undefined;
 let loadingBrand = false;
 
 const brand = computed(() => props.brand ?? loadedBrand.value);
-const usesLightSurface = computed(() => route.path === "/about");
+const usesLightSurface = computed(() => route.path === "/about" || route.path === "/privacy");
 
 async function loadBrand() {
   if (props.brand || loadingBrand) return;
@@ -99,6 +99,8 @@ onBeforeUnmount(() => {
       </button>
       <RouterLink :to="{ path: '/', hash: '#hero' }">首页</RouterLink>
       <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">文章</RouterLink>
+      <RouterLink to="/series">专题</RouterLink>
+      <RouterLink to="/notes">动态</RouterLink>
       <RouterLink to="/about">关于我</RouterLink>
     </nav>
   </header>
@@ -248,6 +250,7 @@ nav > a:focus-visible,
   nav {
     flex-wrap: wrap;
     justify-content: center;
+    gap: 0.65rem 1rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {

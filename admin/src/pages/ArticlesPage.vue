@@ -6,9 +6,11 @@ import { MdEditor } from "md-editor-v3";
 import "md-editor-v3/lib/style.css";
 
 import { createArticle, deleteArticle, fetchManageArticles, updateArticle } from "../api/articles";
+import { fetchSeries } from "../api/content";
 import { uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type { Article, ArticlePayload } from "../types/article";
+import type { Series } from "../types/content";
 
 const emptyArticle = (): ArticlePayload => ({
   slug: "",
@@ -25,6 +27,8 @@ const emptyArticle = (): ArticlePayload => ({
   likes: 0,
   tags: [],
   category: "随笔",
+  series_id: null,
+  series_order: null,
 });
 
 const articles = ref<Article[]>([]);
@@ -40,6 +44,7 @@ const form = reactive<ArticlePayload>(emptyArticle());
 const drawerTitle = computed(() => (editingId.value === null ? "写一篇新文章" : "编辑文章"));
 const markdownInput = ref<HTMLInputElement | null>(null);
 const importingMarkdown = ref(false);
+const seriesOptions = ref<Series[]>([]);
 
 function formatDate(value: string | null) {
   if (!value) return "未设置";
@@ -68,6 +73,14 @@ async function loadArticles() {
   }
 }
 
+async function loadSeriesOptions() {
+  try {
+    seriesOptions.value = (await fetchSeries()).items;
+  } catch {
+    seriesOptions.value = [];
+  }
+}
+
 function openCreate() {
   editingId.value = null;
   resetForm();
@@ -90,6 +103,7 @@ async function saveArticle() {
     cover_image_url: form.cover_image_url || null,
     source_url: form.source_url || null,
     tags: form.tags.map((tag) => tag.trim()).filter(Boolean),
+    series_order: form.series_id === null ? null : form.series_order,
   };
   saving.value = true;
 
@@ -191,6 +205,7 @@ async function importMarkdown(event: Event) {
 
 onMounted(() => {
   void loadArticles();
+  void loadSeriesOptions();
 });
 </script>
 
@@ -249,6 +264,16 @@ onMounted(() => {
         <div class="editor-form-grid">
           <el-form-item label="文章作者"><el-input v-model="form.author" /></el-form-item>
           <el-form-item label="文章分类"><el-input v-model="form.category" placeholder="随笔 / 技术 / 生活" /></el-form-item>
+        </div>
+        <div class="editor-form-grid">
+          <el-form-item label="所属专题">
+            <el-select v-model="form.series_id" clearable placeholder="不加入专题">
+              <el-option v-for="item in seriesOptions" :key="item.id" :label="item.title" :value="item.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="专题内顺序">
+            <el-input-number v-model="form.series_order" :disabled="form.series_id === null" :min="0" :max="100000" controls-position="right" />
+          </el-form-item>
         </div>
         <el-form-item label="标签"><el-select v-model="form.tags" multiple filterable allow-create default-first-option placeholder="输入后回车添加标签"><el-option v-for="tag in form.tags" :key="tag" :label="tag" :value="tag" /></el-select></el-form-item>
         <el-form-item required>

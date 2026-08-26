@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
   return {
     base: mode === "production" ? "/web/" : "/",
     plugins: [vue(), tailwindcss()],
+    resolve: {
+      extensions: [".ts", ".tsx", ".mjs", ".js", ".mts", ".jsx", ".json"],
+    },
     server: {
       proxy: {
         "/api": {

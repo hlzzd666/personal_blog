@@ -166,6 +166,11 @@ function clearFilters() {
   void loadArticles();
 }
 
+function syncFiltersFromRoute() {
+  activeTag.value = typeof route.query.tag === "string" ? route.query.tag : "";
+  activeCategory.value = typeof route.query.category === "string" ? route.query.category : "";
+}
+
 function selectCategory(category: string) {
   activeCategory.value = category;
   activeTag.value = "";
@@ -374,6 +379,7 @@ function observeLoadMoreSentinel() {
 
 onMounted(() => {
   document.addEventListener("visibilitychange", handleVisualAssetVisibilityChange);
+  syncFiltersFromRoute();
   void loadArticles();
   void loadVisualAsset();
 });
@@ -415,6 +421,13 @@ watch([activeCategory, activeTag, currentView], async () => {
   revealVisibleEntries();
   observeLoadMoreSentinel();
 });
+watch(
+  () => [route.query.tag, route.query.category],
+  () => {
+    syncFiltersFromRoute();
+    void loadArticles();
+  },
+);
 onBeforeUnmount(() => {
   pageObserver?.disconnect();
   document.removeEventListener("visibilitychange", handleVisualAssetVisibilityChange);
@@ -701,7 +714,7 @@ onBeforeUnmount(() => {
   height: 34rem;
   clip-path: polygon(0 8%, 88% 0, 100% 72%, 16% 100%);
   background:
-    repeating-linear-gradient(106deg, rgba(231, 139, 102, 0.055) 0 1px, transparent 1px 1.15rem),
+    radial-gradient(ellipse at 26% 30%, rgba(231, 139, 102, 0.18), transparent 54%),
     linear-gradient(122deg, rgba(137, 76, 58, 0.3), rgba(24, 79, 78, 0.08) 72%);
   opacity: 0.72;
   transform: translate3d(0, var(--archive-counter-shift), 0);
@@ -725,16 +738,8 @@ onBeforeUnmount(() => {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  background-image:
-    repeating-linear-gradient(135deg, rgba(232, 132, 93, 0.025) 0 1px, transparent 1px 0.9rem),
-    linear-gradient(rgba(134, 211, 198, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(134, 211, 198, 0.045) 1px, transparent 1px);
-  background-size:
-    auto,
-    5rem 5rem,
-    5rem 5rem;
   opacity: 0.82;
-  animation: chart-drift 32s linear infinite;
+  animation: atmosphere-drift 32s ease-in-out infinite alternate;
 }
 .archive-visual-stack {
   position: fixed;
@@ -779,17 +784,17 @@ onBeforeUnmount(() => {
 }
 .sea-chart-motion::before {
   background:
-    radial-gradient(circle at 18% 22%, rgba(247, 201, 81, 0.08), transparent 10rem),
-    radial-gradient(circle at 82% 42%, rgba(134, 211, 198, 0.1), transparent 13rem),
-    repeating-linear-gradient(90deg, transparent 0 7.8rem, rgba(244, 243, 233, 0.025) 7.85rem 7.9rem);
+    radial-gradient(ellipse at 18% 22%, rgba(247, 201, 81, 0.08), transparent 20rem),
+    radial-gradient(ellipse at 82% 42%, rgba(134, 211, 198, 0.1), transparent 27rem),
+    linear-gradient(118deg, transparent 0 42%, rgba(244, 243, 233, 0.035) 42.2%, transparent 43%);
   opacity: 0.68;
   transform: translate3d(0, 0, 0);
   animation: atmosphere-drift 26s cubic-bezier(0.25, 1, 0.5, 1) infinite alternate;
 }
 .sea-chart-motion::after {
   background:
-    linear-gradient(180deg, transparent 0 49%, rgba(134, 211, 198, 0.06) 50%, transparent 51%),
-    repeating-linear-gradient(0deg, rgba(244, 243, 233, 0.018) 0 1px, transparent 1px 5px);
+    linear-gradient(160deg, transparent 0 44%, rgba(134, 211, 198, 0.075) 48%, transparent 56%),
+    radial-gradient(ellipse at 65% 78%, rgba(244, 243, 233, 0.045), transparent 28rem);
   opacity: 0.45;
   transform: translate3d(0, -8%, 0);
   animation: atmosphere-scan 12s linear infinite;
@@ -801,8 +806,7 @@ onBeforeUnmount(() => {
   width: 124%;
   height: 8rem;
   background:
-    linear-gradient(90deg, transparent, rgba(134, 211, 198, 0.18), transparent),
-    repeating-linear-gradient(168deg, transparent 0 1.2rem, rgba(244, 243, 233, 0.04) 1.25rem 1.3rem);
+    linear-gradient(90deg, transparent, rgba(134, 211, 198, 0.18), transparent);
   opacity: 0.45;
   transform: rotate(-8deg) translateX(-5%);
   animation: current-slip 18s cubic-bezier(0.25, 1, 0.5, 1) infinite alternate;
