@@ -23,15 +23,7 @@ const fallbackSettings: SiteSettings = {
     {
       author: "路飞",
       text: "我是要成为海贼王的男人。",
-    },
-    {
-      author: "希鲁鲁克",
-      text: "人被世人遗忘的时候，才是真正的死亡。",
-    },
-    {
-      author: "罗宾",
-      text: "我想活下去。",
-    },
+    }
   ],
 };
 
@@ -49,33 +41,14 @@ const fallbackProfile: AboutProfile = {
   location_name: "位置待维护",
   location_longitude: null,
   location_latitude: null,
-  metrics: [
-    { value: "全栈", label: "工程视角" },
-    { value: "长期", label: "写作节奏" },
-    { value: "开放", label: "交流状态" },
-  ],
+  metrics: [],
   work_experiences: [],
-  project_experiences: [
-    {
-      name: "个人博客系统",
-      role: "设计与全栈开发",
-      period: "持续维护",
-      summary: "以前台阅读、后台运营、后端 API 为核心的个人内容系统。",
-      link_url: null,
-      technologies: ["Vue 3", "TypeScript", "FastAPI", "MySQL"],
-    },
-  ],
-  skills: [
-    { name: "Vue 3", icon_url: "" },
-    { name: "TypeScript", icon_url: "" },
-    { name: "FastAPI", icon_url: "" },
-    { name: "MySQL", icon_url: "" },
-  ],
+  project_experiences: [],
+  skills: [],
   social_links: [],
   interests: ["写作", "产品", "前端", "后端"],
   site_title: "关于本站",
-  site_description:
-    "一个由前台、后台和 API 共同维护的个人内容系统，用来沉淀文章、项目与个人档案。",
+  site_description: "",
   site_launched_at: "持续迭代中",
   site_stack: ["Vue 3", "TypeScript", "FastAPI", "SQLAlchemy", "MySQL"],
   site_repository_url: null,
@@ -511,8 +484,8 @@ onBeforeUnmount(() => {
     <main class="content-shell">
       <section id="articles" class="content-section cards-section">
         <div class="compact-board-heading text-left">
-          <p class="section-tag">最近更新</p>
-          <h2>从这里继续阅读</h2>
+          <h2>航海日志</h2>
+          <span>{{ homeArticlesStatus }} · {{ homeArticleTotal }} 篇记录</span>
         </div>
 
         <div class="home-content-flow">
@@ -522,13 +495,16 @@ onBeforeUnmount(() => {
               class="home-featured-log home-reveal"
               :to="{ path: `/articles/${featuredArticle.slug}` }"
             >
-              <span class="home-eyebrow">LATEST LOG / {{ formatFullDate(featuredArticle.published_at ?? featuredArticle.created_at) }}</span>
+              <div class="home-panel-heading">
+                <strong>最新文章</strong>
+                <time>{{ formatFullDate(featuredArticle.published_at ?? featuredArticle.created_at) }}</time>
+              </div>
               <h3>{{ featuredArticle.title }}</h3>
               <p>{{ featuredArticle.summary || "打开文章查看完整记录。" }}</p>
               <span class="home-featured-meta">{{ featuredArticle.views }} 阅读 <i></i> {{ featuredArticle.likes }} 喜欢</span>
             </RouterLink>
             <article v-else class="home-featured-log home-reveal">
-              <span class="home-eyebrow">LATEST LOG</span>
+              <div class="home-panel-heading"><strong>最新文章</strong></div>
               <h3>{{ homeArticlesLoading ? "正在整理最近内容" : homeArticlesStatus }}</h3>
               <p>有新文章时会出现在这里。</p>
               <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">进入文章归档</RouterLink>
@@ -537,7 +513,7 @@ onBeforeUnmount(() => {
             <aside class="home-voyage-status home-reveal" aria-label="航行状态">
               <div class="home-status-heading">
                 <span class="signal-light" aria-hidden="true"></span>
-                <span class="home-eyebrow">VOYAGE STATUS</span>
+                <h3>航行状态</h3>
               </div>
               <strong class="home-writing-status">{{ writingStatusText }}</strong>
               <div class="home-clock-line">
@@ -564,7 +540,7 @@ onBeforeUnmount(() => {
           </div>
 
           <nav class="home-route-nav home-reveal" aria-label="快捷航线">
-            <span class="home-route-label">QUICK ROUTES</span>
+            <span class="home-route-label"><strong>快捷航线</strong><small>选择下一站</small></span>
             <RouterLink
               v-for="command in commandLinks"
               :key="command.label"
@@ -579,7 +555,7 @@ onBeforeUnmount(() => {
           <div class="home-reading-layout">
             <section class="home-reading-feed home-reveal" aria-labelledby="home-reading-title">
               <div class="home-section-heading">
-                <div><span class="home-eyebrow">RECENT LOGS</span><h3 id="home-reading-title">沿航线继续阅读</h3></div>
+                <h3 id="home-reading-title">最近文章</h3>
                 <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">全部文章</RouterLink>
               </div>
               <RouterLink
@@ -597,7 +573,7 @@ onBeforeUnmount(() => {
             </section>
 
             <aside class="home-index-panel home-reveal" aria-label="文章索引">
-              <div class="home-section-heading"><span class="home-eyebrow">INDEX</span><RouterLink :to="{ path: '/articles', query: { view: 'categories' } }">分类</RouterLink></div>
+              <div class="home-section-heading"><h3>文章索引</h3><RouterLink :to="{ path: '/articles', query: { view: 'categories' } }">全部分类</RouterLink></div>
               <div v-if="articleCategories.length" class="home-category-lines">
                 <RouterLink v-for="category in articleCategories" :key="category.name" :to="{ path: '/articles', query: { view: 'categories' } }">
                   <span>{{ category.name }}</span><b>{{ category.count }}</b>
@@ -610,33 +586,35 @@ onBeforeUnmount(() => {
             </aside>
           </div>
 
-          <div ref="homeDiscoveryRoot" class="home-discovery-layout">
-            <section class="home-signal-panel home-reveal">
-              <div class="home-section-heading"><span class="home-eyebrow">FEATURED SERIES</span><RouterLink to="/series">全部专题</RouterLink></div>
-              <div v-if="featuredSeries.length" class="home-signal-list">
-                <RouterLink v-for="(series, index) in featuredSeries" :key="series.id" :to="`/series/${series.slug}`">
-                  <span>{{ String(index + 1).padStart(2, "0") }}</span><strong>{{ series.title }}</strong><small>{{ series.description || "进入专题连续阅读" }}</small>
-                </RouterLink>
-              </div>
-              <p v-else class="compact-empty">专题航线正在整理中。</p>
-            </section>
-            <section class="home-signal-panel home-reveal">
-              <div class="home-section-heading"><span class="home-eyebrow">RECENT SIGNALS</span><RouterLink to="/notes">全部动态</RouterLink></div>
-              <div v-if="latestNotes.length" class="home-signal-list home-note-list">
-                <RouterLink v-for="note in latestNotes" :key="note.id" :to="`/notes/${note.slug}`">
-                  <span class="signal-light" aria-hidden="true"></span><strong>{{ noteExcerpt(note.content_markdown) }}</strong>
-                </RouterLink>
-              </div>
-              <p v-else class="compact-empty">最近还没有新的动态信号。</p>
-            </section>
-          </div>
+          <div ref="homeDiscoveryRoot" class="home-lower-deck">
+            <div class="home-discovery-layout">
+              <section class="home-signal-panel home-reveal">
+                <div class="home-section-heading"><h3>专题航线</h3><RouterLink to="/series">全部专题</RouterLink></div>
+                <div v-if="featuredSeries.length" class="home-signal-list">
+                  <RouterLink v-for="(series, index) in featuredSeries" :key="series.id" :to="`/series/${series.slug}`">
+                    <span>{{ String(index + 1).padStart(2, "0") }}</span><strong>{{ series.title }}</strong><small>{{ series.description || "进入专题连续阅读" }}</small>
+                  </RouterLink>
+                </div>
+                <p v-else class="compact-empty">专题航线正在整理中。</p>
+              </section>
+              <section class="home-signal-panel home-reveal">
+                <div class="home-section-heading"><h3>最近动态</h3><RouterLink to="/notes">全部动态</RouterLink></div>
+                <div v-if="latestNotes.length" class="home-signal-list home-note-list">
+                  <RouterLink v-for="note in latestNotes" :key="note.id" :to="`/notes/${note.slug}`">
+                    <span class="signal-light" aria-hidden="true"></span><strong>{{ noteExcerpt(note.content_markdown) }}</strong>
+                  </RouterLink>
+                </div>
+                <p v-else class="compact-empty">最近还没有新的动态信号。</p>
+              </section>
+            </div>
 
-          <RouterLink class="home-profile-strip home-reveal" to="/about">
-            <span class="profile-seal-mini" aria-hidden="true">{{ homeProfile.display_name.slice(0, 1) || "站" }}</span>
-            <span class="home-profile-copy"><span class="home-eyebrow">ABOUT / {{ homeProfile.display_name }}</span><strong>{{ homeProfile.role }}</strong><small>{{ homeProfile.headline }}</small></span>
-            <span class="home-profile-facts"><b>{{ profileProjects[0]?.name || "个人博客系统" }}</b><small>{{ siteStack.slice(0, 4).join(" · ") }}</small></span>
-            <span class="home-profile-action">查看档案</span>
-          </RouterLink>
+            <RouterLink class="home-profile-strip home-reveal" to="/about">
+              <span class="profile-seal-mini" aria-hidden="true">{{ homeProfile.display_name.slice(0, 1) || "站" }}</span>
+              <span class="home-profile-copy"><span class="home-profile-name">关于 · {{ homeProfile.display_name }}</span><strong>{{ homeProfile.role }}</strong><small>{{ homeProfile.headline }}</small></span>
+              <span class="home-profile-facts"><b>{{ profileProjects[0]?.name || "个人博客系统" }}</b><small>{{ siteStack.slice(0, 4).join(" · ") }}</small></span>
+              <span class="home-profile-action">查看档案</span>
+            </RouterLink>
+          </div>
         </div>
       </section>
     </main>
@@ -3806,7 +3784,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--flow-line);
   color: var(--home-ink);
   text-decoration: none;
-  transition: padding 200ms var(--card-ease), color 180ms ease, background-color 180ms ease;
+  transition: transform 200ms var(--card-ease), color 180ms ease, background-color 180ms ease;
 }
 
 .home-article-row::before {
@@ -3873,7 +3851,7 @@ onBeforeUnmount(() => {
   color: var(--home-muted);
   font-size: 0.75rem;
   text-decoration: none;
-  transition: color 180ms ease, padding 180ms var(--card-ease);
+  transition: color 180ms ease, transform 180ms var(--card-ease);
 }
 
 .home-category-lines a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3917,7 +3895,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--flow-line);
   color: var(--home-ink);
   text-decoration: none;
-  transition: color 180ms ease, padding 180ms var(--card-ease), background-color 180ms ease;
+  transition: color 180ms ease, transform 180ms var(--card-ease), background-color 180ms ease;
 }
 
 .home-signal-list > a > span:first-child {
@@ -3948,7 +3926,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--flow-line);
   color: var(--home-ink);
   text-decoration: none;
-  transition: padding 200ms var(--card-ease), border-color 200ms ease;
+  transition: transform 200ms var(--card-ease), border-color 200ms ease;
 }
 
 .home-profile-copy,
@@ -3983,19 +3961,19 @@ onBeforeUnmount(() => {
   .home-section-heading > a:hover,
   .home-section-heading > a:focus-visible { color: var(--home-brass); transform: translateX(0.15rem); }
   .home-article-row:hover,
-  .home-article-row:focus-visible { padding-left: 0.65rem; background: rgba(255, 248, 230, 0.035); }
+  .home-article-row:focus-visible { background: rgba(255, 248, 230, 0.035); transform: translateX(0.35rem); }
   .home-article-row:hover::before,
   .home-article-row:focus-visible::before { opacity: 1; transform: scaleY(1); }
   .home-category-lines a:hover,
-  .home-category-lines a:focus-visible { padding-left: 0.45rem; color: var(--home-ink); }
+  .home-category-lines a:focus-visible { color: var(--home-ink); transform: translateX(0.3rem); }
   .home-tag-line a:hover,
   .home-tag-line a:focus-visible { color: var(--home-brass); transform: translateY(-0.1rem); }
   .home-signal-list > a:hover,
-  .home-signal-list > a:focus-visible { padding-left: 0.5rem; background: rgba(255, 248, 230, 0.035); }
+  .home-signal-list > a:focus-visible { background: rgba(255, 248, 230, 0.035); transform: translateX(0.3rem); }
   .home-profile-strip:hover .home-profile-action,
   .home-profile-strip:focus-visible .home-profile-action { transform: translateX(0.2rem); }
   .home-profile-strip:hover,
-  .home-profile-strip:focus-visible { padding-left: 0.65rem; border-color: rgba(247, 201, 81, 0.42); }
+  .home-profile-strip:focus-visible { border-color: rgba(247, 201, 81, 0.42); }
 }
 
 @keyframes home-flow-reveal {
@@ -4053,6 +4031,603 @@ onBeforeUnmount(() => {
   .home-profile-action {
     animation: none;
     transition: none;
+  }
+}
+
+/* 2026 首页内容区：紧凑的航海日志工作台。 */
+.content-section {
+  max-width: 1220px;
+  padding: 3rem 1.5rem 5rem;
+}
+
+.compact-board-heading {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding: 0 0.15rem;
+}
+
+.compact-board-heading h2 {
+  font-size: 1.55rem;
+  line-height: 1.2;
+}
+
+.compact-board-heading span {
+  color: rgba(255, 248, 230, 0.62);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.home-content-flow {
+  --flow-line: rgba(213, 240, 235, 0.16);
+  --flow-line-active: rgba(131, 215, 203, 0.52);
+  --flow-glass: rgba(5, 20, 29, 0.68);
+  --flow-glass-strong: rgba(5, 20, 29, 0.82);
+  display: grid;
+  gap: 1rem;
+  overflow: clip;
+}
+
+.home-featured-log,
+.home-voyage-status,
+.home-route-nav,
+.home-reading-feed,
+.home-index-panel,
+.home-signal-panel,
+.home-profile-strip {
+  border: 1px solid var(--flow-line);
+  border-radius: 6px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.055), transparent 38%),
+    var(--flow-glass);
+  box-shadow:
+    0 1.25rem 3.5rem rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(15px) saturate(112%);
+}
+
+.home-reveal {
+  --reveal-x: 0;
+  --reveal-y: 1.15rem;
+  --reveal-scale: 0.985;
+}
+
+.home-voyage-status.home-reveal,
+.home-index-panel.home-reveal,
+.home-profile-strip.home-reveal {
+  --reveal-x: 1rem;
+  --reveal-y: 0;
+}
+
+.home-route-nav.home-reveal {
+  --reveal-y: 0.45rem;
+  --reveal-scale: 0.97;
+}
+
+.cards-motion-ready .home-reveal:not(.card-visible) {
+  opacity: 0;
+  transform: translate3d(var(--reveal-x), var(--reveal-y), 0) scale(var(--reveal-scale));
+}
+
+.cards-motion-ready .home-reveal.card-visible {
+  animation: home-console-reveal 620ms var(--card-ease) var(--reveal-delay, 0ms) backwards;
+}
+
+.home-lead-row {
+  grid-template-columns: minmax(0, 1.45fr) minmax(19rem, 0.72fr);
+  gap: 1rem;
+  border: 0;
+}
+
+.home-featured-log {
+  min-height: 19rem;
+  overflow: hidden;
+  justify-content: flex-end;
+  padding: 2rem;
+}
+
+.home-featured-log::before {
+  right: -8%;
+  bottom: -42%;
+  left: 26%;
+  width: auto;
+  height: 20rem;
+  background: radial-gradient(circle, rgba(230, 111, 82, 0.18), transparent 66%);
+  opacity: 0.68;
+  transform: translate3d(0, 0.7rem, 0);
+}
+
+.home-panel-heading,
+.home-status-heading {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.home-panel-heading {
+  justify-content: space-between;
+  margin-bottom: auto;
+  padding-bottom: 1.4rem;
+  border-bottom: 1px solid rgba(213, 240, 235, 0.12);
+}
+
+.home-panel-heading strong,
+.home-panel-heading time,
+.home-profile-name {
+  color: var(--home-brass);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.home-panel-heading time {
+  color: var(--home-muted);
+  font-weight: 500;
+}
+
+.home-featured-log h3 {
+  max-width: 42rem;
+  margin: 1.7rem 0 0;
+  font-size: clamp(2rem, 4.2vw, 3.8rem);
+  line-height: 1.08;
+}
+
+.home-featured-log p {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 42rem;
+  margin-top: 0.8rem;
+  color: rgba(255, 248, 230, 0.7);
+  line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.home-featured-meta {
+  margin-top: 1.1rem;
+}
+
+.home-voyage-status {
+  align-content: start;
+  gap: 0.75rem;
+  padding: 1.35rem;
+  border-left: 1px solid var(--flow-line);
+}
+
+.home-status-heading {
+  justify-content: space-between;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(213, 240, 235, 0.12);
+}
+
+.home-status-heading h3,
+.home-section-heading h3 {
+  margin: 0;
+  font-family: var(--display-font);
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.home-writing-status {
+  margin-top: 0.2rem;
+  font-size: 1.15rem;
+}
+
+.home-clock-line {
+  gap: 0.45rem 0.7rem;
+}
+
+.home-clock-line .time-digits {
+  font-size: clamp(1.55rem, 3vw, 2.15rem);
+}
+
+.home-status-grid {
+  gap: 0;
+  padding-top: 0.75rem;
+}
+
+.home-status-grid span {
+  padding: 0 0.55rem;
+  border-left: 1px solid rgba(213, 240, 235, 0.12);
+}
+
+.home-status-grid span:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.home-status-grid b {
+  font-size: 0.94rem;
+}
+
+.home-visitor-line {
+  margin-top: auto;
+  padding-top: 0.75rem;
+}
+
+.home-route-nav {
+  grid-template-columns: minmax(8.5rem, 0.7fr) repeat(5, minmax(0, 1fr));
+  overflow: hidden;
+  border-bottom: 1px solid var(--flow-line);
+}
+
+.home-route-label {
+  display: grid;
+  gap: 0.25rem;
+  align-content: center;
+  min-height: 4.6rem;
+  padding: 0.8rem 1rem;
+  border-right: 1px solid var(--flow-line);
+  writing-mode: initial;
+  transform: none;
+}
+
+.home-route-label strong {
+  color: var(--home-ink);
+  font-family: var(--display-font);
+  font-size: 0.92rem;
+}
+
+.home-route-label small {
+  color: var(--home-soft);
+  font-size: 0.6rem;
+}
+
+.home-route-nav > a {
+  min-height: 4.6rem;
+  padding: 0.7rem 0.75rem;
+  border-left: 0;
+  border-right: 1px solid var(--flow-line);
+}
+
+.home-route-nav > a:last-child {
+  border-right: 0;
+}
+
+.home-route-nav strong {
+  font-size: 0.86rem;
+}
+
+.home-route-nav .action-mark {
+  width: 1.3rem;
+}
+
+.home-reading-layout {
+  grid-template-columns: minmax(0, 1.55fr) minmax(17rem, 0.62fr);
+  gap: 1rem;
+}
+
+.home-reading-feed,
+.home-index-panel,
+.home-signal-panel {
+  min-width: 0;
+  padding: 1.25rem;
+}
+
+.home-index-panel {
+  border-left: 1px solid var(--flow-line);
+}
+
+.home-section-heading {
+  min-height: 2.15rem;
+  padding-bottom: 0.75rem;
+}
+
+.home-section-heading > a {
+  color: rgba(255, 248, 230, 0.62);
+}
+
+.home-article-row {
+  grid-template-columns: 2rem 4.6rem minmax(0, 1fr) auto;
+  min-height: 4.65rem;
+  padding: 0.62rem 0;
+}
+
+.home-article-row strong {
+  font-size: 0.96rem;
+}
+
+.home-category-lines a {
+  padding: 0.55rem 0;
+}
+
+.home-tag-line {
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.home-tag-line a {
+  padding: 0.25rem 0.42rem;
+  border: 1px solid rgba(131, 215, 203, 0.18);
+  border-radius: 4px;
+  background: rgba(131, 215, 203, 0.055);
+}
+
+.home-lower-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(17rem, 0.72fr);
+  gap: 1rem;
+  min-width: 0;
+}
+
+.home-discovery-layout {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.home-signal-panel {
+  border-top: 1px solid var(--flow-line);
+}
+
+.home-signal-panel:last-child {
+  border-color: var(--flow-line);
+}
+
+.home-signal-list > a {
+  grid-template-columns: 1.6rem minmax(0, 0.8fr) minmax(0, 1.2fr);
+  min-height: 3.35rem;
+  padding: 0.5rem 0;
+}
+
+.home-profile-strip {
+  position: relative;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  padding: 1.25rem;
+  border-top: 1px solid var(--flow-line);
+  border-bottom: 1px solid var(--flow-line);
+}
+
+.home-profile-strip .profile-seal-mini {
+  grid-row: 1 / span 2;
+}
+
+.home-profile-copy {
+  gap: 0.3rem;
+}
+
+.home-profile-copy small {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.home-profile-facts {
+  grid-column: 1 / -1;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(213, 240, 235, 0.12);
+}
+
+.home-profile-action {
+  position: absolute;
+  right: 1.25rem;
+  bottom: 1.25rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .home-featured-log,
+  .home-voyage-status,
+  .home-reading-feed,
+  .home-index-panel,
+  .home-signal-panel,
+  .home-profile-strip {
+    transition:
+      transform 280ms var(--card-ease),
+      border-color 240ms ease,
+      box-shadow 280ms ease,
+      background-color 240ms ease;
+  }
+
+  .home-featured-log:hover,
+  .home-featured-log:focus-visible,
+  .home-voyage-status:hover,
+  .home-reading-feed:hover,
+  .home-index-panel:hover,
+  .home-signal-panel:hover,
+  .home-profile-strip:hover,
+  .home-profile-strip:focus-visible {
+    border-color: var(--flow-line-active);
+    box-shadow:
+      0 1.65rem 4rem rgba(0, 0, 0, 0.27),
+      0 0 1.5rem rgba(131, 215, 203, 0.07),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    transform: translateY(-0.22rem);
+  }
+
+  .home-featured-log:hover::before,
+  .home-featured-log:focus-visible::before {
+    opacity: 0.95;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .home-route-nav > a:hover,
+  .home-route-nav > a:focus-visible {
+    background: rgba(131, 215, 203, 0.075);
+  }
+
+  .home-tag-line a:hover,
+  .home-tag-line a:focus-visible {
+    border-color: rgba(247, 201, 81, 0.5);
+    background: rgba(247, 201, 81, 0.09);
+  }
+}
+
+@keyframes home-console-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--reveal-x), var(--reveal-y), 0) scale(var(--reveal-scale));
+    filter: blur(5px);
+  }
+  72% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@media (max-width: 960px) {
+  .home-lead-row,
+  .home-reading-layout,
+  .home-lower-deck {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-route-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .home-route-label {
+    grid-column: 1 / -1;
+    min-height: 3.7rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--flow-line);
+  }
+
+  .home-route-nav > a:nth-child(4) {
+    border-right: 0;
+  }
+
+  .home-profile-strip {
+    grid-template-columns: auto minmax(0, 1.2fr) minmax(13rem, 0.8fr) auto;
+    grid-template-rows: auto;
+  }
+
+  .home-profile-strip .profile-seal-mini {
+    grid-row: auto;
+  }
+
+  .home-profile-facts {
+    grid-column: auto;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .home-profile-action {
+    position: static;
+  }
+}
+
+@media (max-width: 680px) {
+  .content-section {
+    padding: 2.2rem 0.8rem 3.6rem;
+  }
+
+  .compact-board-heading {
+    align-items: flex-end;
+  }
+
+  .compact-board-heading h2 {
+    font-size: 1.35rem;
+  }
+
+  .home-content-flow {
+    gap: 0.7rem;
+  }
+
+  .home-lead-row,
+  .home-reading-layout,
+  .home-lower-deck,
+  .home-discovery-layout {
+    gap: 0.7rem;
+  }
+
+  .home-featured-log {
+    min-height: 15.5rem;
+    padding: 1.15rem;
+  }
+
+  .home-featured-log::before {
+    display: none;
+  }
+
+  .home-featured-log {
+    overflow: clip;
+  }
+
+  .home-featured-log::after {
+    display: none;
+  }
+
+  .home-featured-log h3 {
+    margin-top: 1.15rem;
+    font-size: 2rem;
+  }
+
+  .home-voyage-status,
+  .home-reading-feed,
+  .home-index-panel,
+  .home-signal-panel,
+  .home-profile-strip {
+    padding: 1rem;
+  }
+
+  .home-route-nav {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .home-route-label {
+    grid-column: 1 / -1;
+  }
+
+  .home-route-nav > a,
+  .home-route-nav > a:nth-child(4) {
+    min-height: 4.25rem;
+    border-right: 1px solid var(--flow-line);
+    border-bottom: 1px solid var(--flow-line);
+  }
+
+  .home-route-nav > a:nth-child(odd),
+  .home-route-nav > a:last-child {
+    border-right: 0;
+  }
+
+  .home-route-nav > a:last-child {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
+
+  .home-article-row {
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  }
+
+  .home-article-row time {
+    grid-column: 2;
+  }
+
+  .home-discovery-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-profile-strip {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .home-profile-facts {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cards-motion-ready .home-reveal,
+  .home-featured-log,
+  .home-voyage-status,
+  .home-reading-feed,
+  .home-index-panel,
+  .home-signal-panel,
+  .home-profile-strip {
+    animation: none;
+    transition: none;
+    filter: none;
   }
 }
 </style>

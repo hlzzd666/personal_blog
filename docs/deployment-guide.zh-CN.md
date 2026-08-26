@@ -91,7 +91,7 @@ backend.tar.gz
 
 ### 使用 FinalShell
 
-1. 使用 FinalShell 连接 `114.215.205.44`。
+1. 使用 FinalShell 连接 `47.111.75.30`。
 2. 在服务器文件窗口打开 `/tmp`。
 3. 把 `web.tar.gz`、`admin.tar.gz`、`backend.tar.gz` 拖进 `/tmp`。
 4. 等待三个文件上传完成。
@@ -99,9 +99,9 @@ backend.tar.gz
 也可以在本地 PowerShell 执行：
 
 ```powershell
-scp web.tar.gz root@114.215.205.44:/tmp/
-scp admin.tar.gz root@114.215.205.44:/tmp/
-scp backend.tar.gz root@114.215.205.44:/tmp/
+scp web.tar.gz root@47.111.75.30:/tmp/
+scp admin.tar.gz root@47.111.75.30:/tmp/
+scp backend.tar.gz root@47.111.75.30:/tmp/
 ```
 
 ## 4. 在服务器发布
@@ -210,10 +210,10 @@ curl -i http://127.0.0.1:8000/api/v1/health
 检查前台路径和重定向：
 
 ```bash
-curl -I http://114.215.205.44/
-curl -I http://114.215.205.44/web
-curl -I http://114.215.205.44/web/
-curl -I http://114.215.205.44/web/about
+curl -I http://47.111.75.30/
+curl -I http://47.111.75.30/web
+curl -I http://47.111.75.30/web/
+curl -I http://47.111.75.30/web/about
 ```
 
 预期结果：
@@ -225,8 +225,8 @@ curl -I http://114.215.205.44/web/about
 浏览器打开：
 
 ```text
-前台：http://114.215.205.44/web/
-后台：http://114.215.205.44/admin/login
+前台：http://47.111.75.30/web/
+后台：http://47.111.75.30/admin/login
 ```
 
 按 `Ctrl+F5` 强制刷新，避免浏览器继续使用旧文件。
@@ -278,8 +278,8 @@ nano /opt/personal_blog/backend/.env
 
 ```env
 DATABASE_URL=数据库连接地址
-PUBLIC_BASE_URL=http://114.215.205.44
-SITE_URL=http://114.215.205.44
+PUBLIC_BASE_URL=http://47.111.75.30
+SITE_URL=http://47.111.75.30
 WEB_BASE_PATH=/web
 WEB_DIST_DIR=/var/www/personal_blog/web-current
 UPLOAD_DIR=/data/personal_blog/uploads
@@ -345,7 +345,7 @@ location / {
 }
 ```
 
-前台正式入口固定为 `http://114.215.205.44/web/`。Vue Router 子路由也位于该前缀下，
+前台正式入口固定为 `http://47.111.75.30/web/`。Vue Router 子路由也位于该前缀下，
 例如文章列表为 `/web/articles`、关于页面为 `/web/about`。根路径只负责跳转，
 不再直接提供前台文件。详情页的 HTML 外壳由后端读取 `WEB_DIST_DIR/index.html` 后注入
 canonical、Open Graph 和 JSON-LD；静态资源仍由 Nginx 提供。RSS 位于 `/feed.xml`
