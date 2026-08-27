@@ -142,6 +142,11 @@ const assetUrl = computed(() => assetByVariant[props.variant]);
 .ocean-atmosphere--series .ocean-atmosphere-wash-one { background: #e4a16f; }
 .ocean-atmosphere--notes .ocean-atmosphere-wash-two { background: #e37c5e; }
 
+/* 文章详情页以长文阅读为主，氛围层降噪：海图压暗、色雾静止、流线减淡，正文区域获得安稳的阅读底色 */
+.ocean-atmosphere--detail .ocean-atmosphere-image { opacity: 0.26; }
+.ocean-atmosphere--detail .ocean-atmosphere-wash { animation: none; opacity: 0.1; }
+.ocean-atmosphere--detail .ocean-atmosphere-current { opacity: 0.3; }
+
 @keyframes atmosphere-image-drift {
   from { transform: scale(1.04) translate3d(-0.7%, -0.5%, 0); }
   to { transform: scale(1.08) translate3d(0.7%, 0.5%, 0); }

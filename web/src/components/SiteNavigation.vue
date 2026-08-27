@@ -137,9 +137,7 @@ onBeforeUnmount(() => {
   z-index: 1;
 }
 .floating-nav.light-surface {
-  border-bottom: 1px solid rgba(16, 42, 54, 0.1);
   background: rgba(237, 242, 245, 0.86);
-  box-shadow: 0 5px 22px rgba(16, 42, 54, 0.055);
   backdrop-filter: blur(15px) saturate(1.2);
 }
 .floating-nav.light-surface::before {

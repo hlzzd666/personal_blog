@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DOMPurify from "dompurify";
+import hljs from "highlight.js/lib/common";
 import { marked } from "marked";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -81,6 +82,59 @@ function normalizeMarkdown(value: string) {
   return !value.includes("\n") && value.includes("\\n") ? value.replace(/\\n/g, "\n") : value;
 }
 
+// 复制图标的内联 SVG：站点未引入图标库，保持与后台预览类似的极简剪贴板图形。
+const CODE_COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>';
+
+function escapeCodeHtml(value: string) {
+  const holder = document.createElement("div");
+  holder.textContent = value;
+  return holder.innerHTML;
+}
+
+// 将 Markdown 代码块重建为 mac 风格卡片：行号、语言标识、复制按钮 + highlight.js 高亮，
+// 视觉对齐后台编辑器（md-editor-v3）的预览效果。
+function transformCodeBlocks(root: HTMLElement) {
+  root.querySelectorAll("pre > code").forEach((codeElement) => {
+    const preElement = codeElement.parentElement;
+    if (!preElement) return;
+    const requestedLanguage = /language-([\w-]+)/.exec(codeElement.className)?.[1] ?? "";
+    // marked 会在代码文本末尾补一个换行，先去掉，行号和高亮才不会多出一行。
+    const rawCode = (codeElement.textContent ?? "").replace(/\n$/, "");
+    const language = hljs.getLanguage(requestedLanguage) ? requestedLanguage : "";
+    let highlighted: string;
+    let displayLanguage = requestedLanguage || "code";
+    try {
+      if (language) {
+        highlighted = hljs.highlight(rawCode, { language }).value;
+      } else {
+        const detected = hljs.highlightAuto(rawCode);
+        highlighted = detected.value;
+        displayLanguage = detected.language ?? "code";
+      }
+    } catch {
+      // 高亮失败时退化为转义后的纯文本，保证内容仍然可读
+      highlighted = escapeCodeHtml(rawCode);
+    }
+    const lineNumbers = Array.from({ length: Math.max(rawCode.split("\n").length, 1) }, (_, index) => index + 1).join("\n");
+    const wrapper = document.createElement("div");
+    wrapper.className = "md-code";
+    wrapper.innerHTML = [
+      '<div class="md-code-head">',
+      '  <span class="md-code-dots" aria-hidden="true"><i></i><i></i><i></i></span>',
+      '  <span class="md-code-meta">',
+      `    <span class="md-code-lang">${escapeCodeHtml(displayLanguage)}</span>`,
+      `    <button class="md-code-copy" type="button">${CODE_COPY_ICON}<span>复制代码</span></button>`,
+      "  </span>",
+      "</div>",
+      '<div class="md-code-body">',
+      `  <pre class="md-code-lines" aria-hidden="true">${lineNumbers}</pre>`,
+      `  <pre class="md-code-content"><code class="hljs">${highlighted}</code></pre>`,
+      "</div>",
+    ].join("");
+    preElement.replaceWith(wrapper);
+  });
+}
+
 function buildArticleContent(markdown: string) {
   const rawHtml = marked.parse(normalizeMarkdown(markdown)) as string;
   const safeDocument = new DOMParser().parseFromString(DOMPurify.sanitize(rawHtml), "text/html");
@@ -104,6 +158,7 @@ function buildArticleContent(markdown: string) {
     image.setAttribute("role", "button");
     image.setAttribute("aria-label", image.getAttribute("alt") || "查看文章图片");
   });
+  transformCodeBlocks(safeDocument.body);
   articleContent.value = safeDocument.body.innerHTML;
   activeHeadingId.value = articleToc.value[0]?.id ?? "";
 }
@@ -115,10 +170,30 @@ function openImagePreview(image: HTMLImageElement) {
 }
 
 function handleContentClick(event: MouseEvent) {
-  const target = event.target instanceof Element ? event.target.closest("img") : null;
+  if (!(event.target instanceof Element)) return;
+  const copyButton = event.target.closest(".md-code-copy");
+  if (copyButton instanceof HTMLButtonElement) {
+    handleCodeCopy(copyButton);
+    return;
+  }
+  const target = event.target.closest("img");
   if (!(target instanceof HTMLImageElement)) return;
   event.preventDefault();
   openImagePreview(target);
+}
+
+async function handleCodeCopy(button: HTMLButtonElement) {
+  const label = button.querySelector("span");
+  const code = button.closest(".md-code")?.querySelector(".md-code-content code")?.textContent ?? "";
+  if (!label || !code) return;
+  const copied = await copyTextToClipboard(code);
+  button.classList.toggle("is-copied", copied);
+  button.classList.toggle("is-failed", !copied);
+  label.textContent = copied ? "已复制" : "复制失败";
+  window.setTimeout(() => {
+    button.classList.remove("is-copied", "is-failed");
+    label.textContent = "复制代码";
+  }, 1600);
 }
 
 function handleContentKeydown(event: KeyboardEvent) {
@@ -324,37 +399,34 @@ function resetFeedback() {
 }
 
 async function copyArticleLink() {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(window.location.href);
-    } else {
-      const input = document.createElement("textarea");
-      input.value = window.location.href;
-      input.style.position = "fixed";
-      input.style.opacity = "0";
-      document.body.appendChild(input);
-      input.select();
-      const copied = document.execCommand("copy");
-      input.remove();
-      if (!copied) throw new Error("copy command failed");
-    }
-    copyState.value = "copied";
-  } catch {
+  copyState.value = (await copyTextToClipboard(window.location.href)) ? "copied" : "error";
+  resetFeedback();
+}
+
+// 统一剪贴板入口：优先 Clipboard API，失败时降级为隐藏 textarea + execCommand。
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
     try {
-      const input = document.createElement("textarea");
-      input.value = window.location.href;
-      input.style.position = "fixed";
-      input.style.opacity = "0";
-      document.body.appendChild(input);
-      input.select();
-      const copied = document.execCommand("copy");
-      input.remove();
-      copyState.value = copied ? "copied" : "error";
+      await navigator.clipboard.writeText(text);
+      return true;
     } catch {
-      copyState.value = "error";
+      // 进入降级方案
     }
   }
-  resetFeedback();
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  let copied: boolean;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  input.remove();
+  return copied;
 }
 
 async function shareArticle() {
@@ -609,6 +681,7 @@ onBeforeUnmount(() => {
 
 .reading-progress { position: fixed; z-index: 30; inset: 0 0 auto; height: 3px; pointer-events: none; }
 .reading-progress span { display: block; width: 100%; height: 100%; background: linear-gradient(90deg, var(--coral), var(--signal), var(--current)); box-shadow: 0 0 0.9rem rgba(244, 202, 88, 0.55); transform: scaleX(var(--reading-ratio)); transform-origin: left; transition: transform 0.12s linear; }
+.article-detail-page ::selection { color: #fdf7e2; background: rgba(223, 123, 89, 0.5); }
 .article-hero, .article-reading-layout, .article-detail-state { position: relative; z-index: 1; }
 .article-chart { position: fixed; z-index: -1; inset: 0; overflow: hidden; pointer-events: none; opacity: 0.72; }
 .chart-route { position: absolute; top: 22vh; left: 0; width: 100%; height: 52rem; color: var(--current); transform: rotate(-4deg); }
@@ -624,7 +697,7 @@ onBeforeUnmount(() => {
 .article-hero { position: relative; min-height: min(48rem, 86vh); display: flex; align-items: flex-end; overflow: hidden; padding: 8.5rem 1.5rem 5.5rem; background: radial-gradient(circle at 82% 22%, rgba(244, 202, 88, 0.13), transparent 17rem), linear-gradient(122deg, rgba(223, 123, 89, 0.18), transparent 35%), #061d28; }
 .article-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 78% 28%, rgba(117, 201, 189, 0.12), transparent 30rem), linear-gradient(122deg, transparent 0 46%, rgba(244, 202, 88, 0.08) 48%, transparent 52%); mask-image: linear-gradient(90deg, #000, transparent 78%); }
 .article-hero::after { content: "LOG"; position: absolute; right: -0.05em; bottom: -0.22em; color: rgba(244, 240, 223, 0.035); font-family: var(--display-font); font-size: clamp(12rem, 30vw, 32rem); line-height: 0.8; pointer-events: none; }
-.article-hero.has-cover { background-image: linear-gradient(90deg, rgba(5, 25, 35, 0.97) 0%, rgba(5, 25, 35, 0.78) 48%, rgba(5, 25, 35, 0.34) 100%), var(--article-cover); background-position: center; background-size: cover; }
+.article-hero.has-cover { background-image: linear-gradient(90deg, rgba(5, 25, 35, 0.97) 0%, rgba(5, 25, 35, 0.86) 52%, rgba(5, 25, 35, 0.52) 100%), var(--article-cover); background-position: center; background-size: cover; }
 .hero-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, transparent 58%, #061d28 100%); }
 .article-hero-inner { position: relative; z-index: 1; width: min(1180px, 100%); margin: 0 auto; }
 .article-back-link { display: inline-flex; gap: 0.55rem; align-items: center; margin-bottom: clamp(3rem, 8vh, 6.5rem); color: var(--current); font-family: "Noto Sans SC", sans-serif; font-size: 0.78rem; text-decoration: none; transition: color 0.25s ease, transform 0.25s ease; }
@@ -676,7 +749,7 @@ onBeforeUnmount(() => {
 .document-header div { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; justify-content: flex-end; color: rgba(244, 240, 223, 0.42); font-size: 0.62rem; }
 .article-detail-cover { display: block; width: 100%; max-height: 32rem; margin-bottom: 4rem; border: 1px solid rgba(244, 240, 223, 0.14); border-radius: 4px; object-fit: cover; box-shadow: 1.2rem 1.2rem 0 rgba(117, 201, 189, 0.06); }
 
-.markdown-body { color: rgba(244, 240, 223, 0.86); font-family: "Noto Sans SC", sans-serif; font-size: 1.04rem; line-height: 2.05; overflow-wrap: anywhere; }
+.markdown-body { color: rgba(244, 240, 223, 0.9); font-family: "Noto Sans SC", sans-serif; font-size: 1.04rem; line-height: 2.05; overflow-wrap: anywhere; }
 .markdown-body.motion-ready > :deep(*) { opacity: 0; transform: translateY(1.3rem); }
 .markdown-body.motion-ready > :deep(.is-visible) { opacity: 1; transform: translateY(0); transition: opacity 0.72s var(--reveal-delay) ease, transform 0.72s var(--reveal-delay) cubic-bezier(0.2, 0.76, 0.26, 1); }
 .markdown-body :deep(h1) { margin: 0 0 2rem; color: var(--ink); font-family: var(--display-font); font-size: clamp(2rem, 4vw, 3.25rem); line-height: 1.22; }
@@ -699,9 +772,45 @@ onBeforeUnmount(() => {
 .markdown-body :deep(blockquote)::before { content: "SIGNAL"; position: absolute; top: -0.65rem; left: 1.55rem; padding: 0 0.4rem; color: var(--signal); background: #092832; font-size: 0.52rem; letter-spacing: 0.12em; }
 .markdown-body :deep(blockquote p) { margin: 0; }
 .markdown-body :deep(code) { padding: 0.12rem 0.35rem; border: 1px solid rgba(223, 123, 89, 0.16); border-radius: 3px; color: #ffd9ae; background: rgba(223, 123, 89, 0.1); font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; font-size: 0.9em; }
-.markdown-body :deep(pre) { position: relative; overflow-x: auto; margin: 2.6rem 0; padding: 2.8rem 1.45rem 1.45rem; border: 1px solid rgba(117, 201, 189, 0.18); border-radius: 4px; color: #e7f2e8; background: linear-gradient(90deg, rgba(117, 201, 189, 0.06) 1px, transparent 1px), #04151e; background-size: 3rem 100%; box-shadow: 0 1.4rem 3.5rem rgba(0, 0, 0, 0.22); }
-.markdown-body :deep(pre)::before { content: "CODE / SHIP LOG"; position: absolute; top: 0.78rem; left: 1.4rem; color: rgba(117, 201, 189, 0.55); font-size: 0.55rem; letter-spacing: 0.12em; }
-.markdown-body :deep(pre code) { padding: 0; border: 0; color: inherit; background: transparent; }
+.markdown-body :deep(pre:not([class])) { position: relative; overflow-x: auto; margin: 2.6rem 0; padding: 2.8rem 1.45rem 1.45rem; border: 1px solid rgba(117, 201, 189, 0.18); border-radius: 4px; color: #e7f2e8; background: linear-gradient(90deg, rgba(117, 201, 189, 0.06) 1px, transparent 1px), #04151e; background-size: 3rem 100%; box-shadow: 0 1.4rem 3.5rem rgba(0, 0, 0, 0.22); }
+.markdown-body :deep(pre:not([class]))::before { content: "CODE / SHIP LOG"; position: absolute; top: 0.78rem; left: 1.4rem; color: rgba(117, 201, 189, 0.55); font-size: 0.55rem; letter-spacing: 0.12em; }
+.markdown-body :deep(pre:not([class]) code) { padding: 0; border: 0; color: inherit; background: transparent; }
+/* mac 风格代码卡片：对齐后台编辑预览，浅色卡片与深海底色形成内容分区 */
+.markdown-body :deep(.md-code) { margin: 2.4rem 0; overflow: hidden; border: 1px solid #d0d7de; border-radius: 6px; color: #24292e; background: #f6f8fa; box-shadow: 0 1rem 2.8rem rgba(3, 18, 26, 0.35); font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; font-size: 0.85rem; }
+.markdown-body :deep(.md-code-head) { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.55rem 0.9rem; border-bottom: 1px solid #d8dee4; background: #eef1f4; }
+.markdown-body :deep(.md-code-dots) { display: inline-flex; gap: 0.42rem; }
+.markdown-body :deep(.md-code-dots i) { width: 0.72rem; aspect-ratio: 1; border: 1px solid rgba(27, 31, 36, 0.14); border-radius: 50%; }
+.markdown-body :deep(.md-code-dots i:nth-child(1)) { background: #ff5f57; }
+.markdown-body :deep(.md-code-dots i:nth-child(2)) { background: #febc2e; }
+.markdown-body :deep(.md-code-dots i:nth-child(3)) { background: #28c840; }
+.markdown-body :deep(.md-code-meta) { display: inline-flex; gap: 0.85rem; align-items: center; }
+.markdown-body :deep(.md-code-lang) { color: #656d76; font-size: 0.75rem; font-weight: 600; line-height: 1; }
+.markdown-body :deep(.md-code-copy) { display: inline-flex; gap: 0.35rem; align-items: center; padding: 0.28rem 0.5rem; border: 0; border-radius: 5px; color: #57606a; background: transparent; font-family: "Noto Sans SC", sans-serif; font-size: 0.75rem; line-height: 1; cursor: pointer; transition: color 0.18s ease, background-color 0.18s ease; }
+.markdown-body :deep(.md-code-copy svg) { width: 0.9rem; height: 0.9rem; }
+.markdown-body :deep(.md-code-copy:hover) { color: #1f2328; background: rgba(31, 35, 40, 0.08); }
+.markdown-body :deep(.md-code-copy:focus-visible) { color: #1f2328; background: rgba(31, 35, 40, 0.08); outline: 2px solid #0969da; outline-offset: 1px; }
+.markdown-body :deep(.md-code-copy.is-copied) { color: #1a7f37; }
+.markdown-body :deep(.md-code-copy.is-failed) { color: #cf222e; }
+/* 行号列与代码列共用字号和行高，两条 pre 各自的行保持单行高度，编号自然对齐 */
+.markdown-body :deep(.md-code-body) { display: flex; overflow-x: auto; scrollbar-color: rgba(101, 109, 118, 0.45) transparent; scrollbar-width: thin; }
+.markdown-body :deep(.md-code-lines), .markdown-body :deep(.md-code-content) { margin: 0; padding: 0.9rem 0; font-family: inherit; font-size: inherit; line-height: 1.65; font-variant-numeric: tabular-nums; white-space: pre; }
+.markdown-body :deep(.md-code-lines) { position: sticky; left: 0; z-index: 1; flex-shrink: 0; padding-right: 0.9rem; padding-left: 1.05rem; color: #8c959f; background: #f6f8fa; text-align: right; user-select: none; }
+.markdown-body :deep(.md-code-content) { flex: 1 0 auto; padding-right: 1.1rem; padding-left: 1rem; }
+.markdown-body :deep(.md-code code) { padding: 0; border: 0; color: inherit; background: transparent; font-size: inherit; }
+.markdown-body :deep(.md-code) ::selection { color: #1f2328; background: rgba(9, 105, 218, 0.22); }
+/* highlight.js 的 github 浅色主题配色，与后台编辑器预览保持一致 */
+.markdown-body :deep(.md-code .hljs-doctag), .markdown-body :deep(.md-code .hljs-keyword), .markdown-body :deep(.md-code .hljs-meta .hljs-keyword), .markdown-body :deep(.md-code .hljs-template-tag), .markdown-body :deep(.md-code .hljs-template-variable), .markdown-body :deep(.md-code .hljs-type), .markdown-body :deep(.md-code .hljs-variable.language_) { color: #d73a49; }
+.markdown-body :deep(.md-code .hljs-title), .markdown-body :deep(.md-code .hljs-title.class_), .markdown-body :deep(.md-code .hljs-title.class_.inherited__), .markdown-body :deep(.md-code .hljs-title.function_) { color: #6f42c1; }
+.markdown-body :deep(.md-code .hljs-attr), .markdown-body :deep(.md-code .hljs-attribute), .markdown-body :deep(.md-code .hljs-literal), .markdown-body :deep(.md-code .hljs-meta), .markdown-body :deep(.md-code .hljs-number), .markdown-body :deep(.md-code .hljs-operator), .markdown-body :deep(.md-code .hljs-selector-attr), .markdown-body :deep(.md-code .hljs-selector-class), .markdown-body :deep(.md-code .hljs-selector-id), .markdown-body :deep(.md-code .hljs-variable) { color: #005cc5; }
+.markdown-body :deep(.md-code .hljs-meta .hljs-string), .markdown-body :deep(.md-code .hljs-regexp), .markdown-body :deep(.md-code .hljs-string) { color: #032f62; }
+.markdown-body :deep(.md-code .hljs-built_in), .markdown-body :deep(.md-code .hljs-symbol) { color: #e36209; }
+.markdown-body :deep(.md-code .hljs-code), .markdown-body :deep(.md-code .hljs-comment), .markdown-body :deep(.md-code .hljs-formula) { color: #6a737d; font-style: italic; }
+.markdown-body :deep(.md-code .hljs-name), .markdown-body :deep(.md-code .hljs-quote), .markdown-body :deep(.md-code .hljs-selector-pseudo), .markdown-body :deep(.md-code .hljs-selector-tag) { color: #22863a; }
+.markdown-body :deep(.md-code .hljs-subst) { color: #24292e; }
+.markdown-body :deep(.md-code .hljs-section) { color: #005cc5; font-weight: 700; }
+.markdown-body :deep(.md-code .hljs-bullet) { color: #735c0f; }
+.markdown-body :deep(.md-code .hljs-addition) { color: #22863a; background-color: #f0fff4; }
+.markdown-body :deep(.md-code .hljs-deletion) { color: #b31d28; background-color: #ffeef0; }
 .markdown-body :deep(table) { width: 100%; margin: 2.5rem 0; border-collapse: collapse; font-size: 0.9rem; }
 .markdown-body :deep(th), .markdown-body :deep(td) { padding: 0.8rem; border-bottom: 1px solid rgba(244, 240, 223, 0.14); text-align: left; }
 .markdown-body :deep(th) { color: var(--signal); font-weight: 500; }
@@ -798,7 +907,8 @@ onBeforeUnmount(() => {
   .document-header div { justify-content: flex-start; }
   .markdown-body { font-size: 0.98rem; line-height: 1.95; }
   .markdown-body :deep(h2) { margin-top: 4rem; }
-  .markdown-body :deep(pre) { margin-inline: -0.35rem; padding-inline: 1rem; }
+  .markdown-body :deep(pre:not([class])) { margin-inline: -0.35rem; padding-inline: 1rem; }
+  .markdown-body :deep(.md-code-body) { font-size: 0.8rem; }
   .article-detail-footer { align-items: stretch; flex-direction: column; }
   .article-like-area { justify-items: stretch; }
   .article-like-button { justify-content: center; }
