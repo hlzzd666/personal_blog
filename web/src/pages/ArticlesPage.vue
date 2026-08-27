@@ -43,7 +43,7 @@ const totalArticles = ref(0);
 const allPagesLoaded = ref(false);
 const articleStats = ref<ArticleListStats>(createEmptyArticleStats());
 const views: Array<{ key: ArticleView; label: string; caption: string }> = [
-  { key: "archive", label: "归档", caption: "按发表时间回看全部记录" },
+  { key: "archive", label: "全部文章", caption: "按发表时间回看全部记录" },
   { key: "tags", label: "标签", caption: "沿主题找到相关记录" },
   { key: "categories", label: "分类", caption: "从内容方向切入阅读" },
 ];
@@ -53,7 +53,7 @@ const currentView = computed<ArticleView>(() => {
   return view === "tags" || view === "categories" ? view : "archive";
 });
 const pageTitle = computed(
-  () => views.find((view) => view.key === currentView.value)?.label ?? "归档",
+  () => views.find((view) => view.key === currentView.value)?.label ?? "全部文章",
 );
 const pageCaption = computed(
   () => views.find((view) => view.key === currentView.value)?.caption ?? "按发表时间回看全部记录",
@@ -516,7 +516,7 @@ onBeforeUnmount(() => {
         <p class="archive-eyebrow">
           <span aria-hidden="true"></span> LOGBOOK / {{ currentView.toUpperCase() }}
         </p>
-        <h1>文章{{ pageTitle }}</h1>
+        <h1>{{ pageTitle }}</h1>
         <p class="archive-description">
           {{ pageCaption }}。每篇文章都保留在它最初抵达这条航线的日期。
         </p>
@@ -660,7 +660,7 @@ onBeforeUnmount(() => {
                 {{ loadMoreError }} 点击重试
               </button>
               <span v-else-if="hasMoreArticles">继续向下查看更多记录</span>
-              <span v-else>已抵达文章归档的最早记录</span>
+              <span v-else>已抵达最早文章</span>
             </div>
           </template>
         </section>

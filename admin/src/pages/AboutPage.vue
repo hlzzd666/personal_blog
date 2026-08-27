@@ -79,8 +79,6 @@ function addWorkExperience() {
     organization: "",
     role: "",
     period: "",
-    summary: "",
-    highlights: [],
   };
   form.value.work_experiences.push(item);
 }
@@ -116,6 +114,8 @@ function normalizeOptionalFields(payload: AboutProfilePayload): AboutProfilePayl
     site_repository_url: payload.site_repository_url?.trim() || null,
     project_experiences: payload.project_experiences.map((project) => ({
       ...project,
+      role: project.role.trim(),
+      period: project.period.trim(),
       link_url: project.link_url?.trim() || null,
     })),
     skills: payload.skills.map((skill) => ({
@@ -431,6 +431,22 @@ onMounted(() => {
             <div v-for="(metric, index) in form.metrics" :key="index" class="about-metric-item">
               <el-input v-model="metric.value" placeholder="例如：5 年+" maxlength="20" />
               <el-input v-model="metric.label" placeholder="例如：开发经验" maxlength="30" />
+              <div class="about-order-actions">
+                <el-button
+                  :icon="Top"
+                  circle
+                  title="上移指标"
+                  :disabled="index === 0"
+                  @click="moveItem(form.metrics, index, -1)"
+                />
+                <el-button
+                  :icon="Bottom"
+                  circle
+                  title="下移指标"
+                  :disabled="index === form.metrics.length - 1"
+                  @click="moveItem(form.metrics, index, 1)"
+                />
+              </div>
               <el-button
                 :icon="Delete"
                 circle
@@ -498,7 +514,7 @@ onMounted(() => {
           <div class="about-section-heading">
             <div>
               <h3>工作经历</h3>
-              <p>按前台展示顺序排列，支持补充关键成果。</p>
+              <p>按前台展示顺序排列，维护组织、职位和时间范围。</p>
             </div>
             <el-button type="primary" plain :icon="Plus" @click="addWorkExperience">
               添加经历
@@ -547,32 +563,6 @@ onMounted(() => {
                     <el-input v-model="item.period" placeholder="2024.01 - 至今" />
                   </el-form-item>
                 </div>
-                <el-form-item label="经历简介" required>
-                  <el-input
-                    v-model="item.summary"
-                    type="textarea"
-                    :rows="3"
-                    maxlength="500"
-                    show-word-limit
-                  />
-                </el-form-item>
-                <el-form-item label="关键成果">
-                  <el-select
-                    v-model="item.highlights"
-                    multiple
-                    filterable
-                    allow-create
-                    default-first-option
-                    placeholder="输入一条成果后回车"
-                  >
-                    <el-option
-                      v-for="highlight in item.highlights"
-                      :key="highlight"
-                      :label="highlight"
-                      :value="highlight"
-                    />
-                  </el-select>
-                </el-form-item>
               </el-form>
             </article>
             <el-empty v-if="form.work_experiences.length === 0" description="还没有工作经历" />
@@ -627,11 +617,11 @@ onMounted(() => {
                   <el-form-item label="项目名称" required>
                     <el-input v-model="item.name" />
                   </el-form-item>
-                  <el-form-item label="项目角色" required>
+                  <el-form-item label="项目角色">
                     <el-input v-model="item.role" />
                   </el-form-item>
-                  <el-form-item label="项目时间" required>
-                    <el-input v-model="item.period" />
+                  <el-form-item label="项目时间">
+                    <el-input v-model="item.period" placeholder="例如：2024.01 - 至今" />
                   </el-form-item>
                 </div>
                 <el-form-item label="项目简介" required>

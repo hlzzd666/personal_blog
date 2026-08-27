@@ -7,8 +7,6 @@ export type WorkExperience = {
   organization: string;
   role: string;
   period: string;
-  summary: string;
-  highlights: string[];
 };
 
 export type ProjectExperience = {

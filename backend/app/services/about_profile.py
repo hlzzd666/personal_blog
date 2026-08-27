@@ -30,8 +30,6 @@ DEFAULT_ABOUT_PROFILE = AboutProfileUpdate(
             "organization": "独立开发与长期实践",
             "role": "产品工程师",
             "period": "现在",
-            "summary": "围绕真实需求完成从产品梳理、界面设计到前后端交付的完整闭环。",
-            "highlights": ["关注可维护架构与体验细节", "持续沉淀可复用的工程方法"],
         }
     ],
     project_experiences=[

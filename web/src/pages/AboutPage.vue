@@ -28,8 +28,6 @@ const fallbackProfile: AboutProfile = {
       organization: "独立开发与长期实践",
       role: "产品工程师",
       period: "现在",
-      summary: "围绕真实需求完成从产品梳理、界面设计到前后端交付的完整闭环。",
-      highlights: ["关注可维护架构与体验细节", "持续沉淀可复用的工程方法"],
     },
   ],
   project_experiences: [
@@ -415,24 +413,24 @@ onBeforeUnmount(() => {
           </div>
           <span>{{ profile.work_experiences.length }} 段</span>
         </header>
-        <div v-if="profile.work_experiences.length" class="compact-log">
-          <details
+        <div v-if="profile.work_experiences.length" class="work-timeline">
+          <div
             v-for="(work, index) in profile.work_experiences"
             :key="`${work.organization}-${work.period}`"
+            class="work-timeline-item"
           >
-            <summary>
-              <span>{{ String(index + 1).padStart(2, "0") }}</span>
+            <span class="work-timeline-marker" aria-hidden="true">
+              {{ String(index + 1).padStart(2, "0") }}
+            </span>
+            <div class="work-timeline-body">
+              <div class="work-timeline-meta">
+                <span>航线记录 {{ String(index + 1).padStart(2, "0") }}</span>
+                <time>{{ work.period }}</time>
+              </div>
               <strong>{{ work.organization }}</strong>
-              <small>{{ work.period }}</small>
-            </summary>
-            <div class="compact-log-detail">
               <b>{{ work.role }}</b>
-              <p>{{ work.summary }}</p>
-              <ul v-if="work.highlights.length">
-                <li v-for="highlight in work.highlights" :key="highlight">{{ highlight }}</li>
-              </ul>
             </div>
-          </details>
+          </div>
         </div>
         <p v-else class="compact-empty">新的工作经历正在整理中。</p>
       </article>
@@ -452,7 +450,13 @@ onBeforeUnmount(() => {
           >
             <span class="project-index">{{ String(index + 1).padStart(2, "0") }}</span>
             <div>
-              <p>{{ project.period }} · {{ project.role }}</p>
+              <p v-if="project.period.trim() || project.role.trim()">
+                <span v-if="project.period.trim()">{{ project.period }}</span>
+                <span v-if="project.period.trim() && project.role.trim()" aria-hidden="true">
+                  ·
+                </span>
+                <span v-if="project.role.trim()">{{ project.role }}</span>
+              </p>
               <h3>{{ project.name }}</h3>
               <p class="project-summary">{{ project.summary }}</p>
               <div class="project-tags">
@@ -1286,93 +1290,109 @@ onBeforeUnmount(() => {
   animation-play-state: paused;
 }
 
-.compact-log {
+.work-timeline {
+  position: relative;
+  display: grid;
   max-height: 248px;
   margin-top: 1rem;
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 
-.compact-log details {
+.work-timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.8rem;
+  min-width: 0;
+  padding: 0.95rem 0;
   border-top: 1px solid var(--border);
 }
 
-.compact-log details:last-child {
+.work-timeline-item:not(:last-child)::after {
+  position: absolute;
+  top: 1.9rem;
+  bottom: -1.9rem;
+  left: 0.95rem;
+  width: 1px;
+  background: color-mix(in srgb, var(--sea) 64%, var(--border));
+  content: "";
+  opacity: 0.62;
+}
+
+.work-timeline-item:last-child {
   border-bottom: 1px solid var(--border);
 }
 
-.compact-log summary {
+.work-timeline-marker {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr) auto;
-  gap: 0.6rem;
-  align-items: center;
-  min-height: 52px;
-  cursor: pointer;
-  list-style: none;
-  transition:
-    padding 180ms ease,
-    color 180ms ease;
-}
-
-.compact-log summary::-webkit-details-marker {
-  display: none;
-}
-
-.compact-log summary > span {
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  border: 1px solid rgba(198, 79, 58, 0.58);
+  border-radius: 50%;
   color: var(--coral);
+  background: var(--card-bg);
   font:
-    600 0.64rem "IBM Plex Mono",
+    600 0.62rem "IBM Plex Mono",
     monospace;
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease;
 }
 
-.compact-log summary strong {
+.work-timeline-body {
+  display: grid;
+  align-content: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.work-timeline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.8rem;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--muted);
+  font:
+    600 0.58rem "IBM Plex Mono",
+    monospace;
+  letter-spacing: 0.02em;
+}
+
+.work-timeline-meta time {
+  color: var(--sea);
+  white-space: nowrap;
+}
+
+.work-timeline-body > strong {
   overflow: hidden;
-  font-size: 0.78rem;
+  color: var(--ink);
+  font-size: 0.82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: color 180ms ease;
 }
 
-.compact-log summary small {
-  color: var(--muted);
-  font-size: 0.62rem;
-}
-
-.compact-log-detail {
-  padding: 0 0 0.9rem 2.6rem;
-  transform-origin: top;
-  animation: detail-in 260ms cubic-bezier(0.2, 0.75, 0.2, 1) both;
-}
-
-.compact-log details[open] summary {
-  padding-left: 0.35rem;
+.work-timeline-body > b {
   color: var(--sea);
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
-.compact-log details:hover summary strong {
+.work-timeline-item:hover {
+  transform: none;
+}
+
+.work-timeline-item:hover .work-timeline-marker {
+  color: var(--ink);
+  border-color: var(--sea);
+  background: #e4f4f1;
+}
+
+.work-timeline-item:hover .work-timeline-body > strong {
   color: var(--sea);
-}
-
-.compact-log-detail > b {
-  color: var(--sea);
-  font-size: 0.76rem;
-}
-
-.compact-log-detail p,
-.compact-log-detail li {
-  color: var(--muted);
-  font:
-    400 0.7rem/1.65 "Noto Sans SC",
-    sans-serif;
-}
-
-.compact-log-detail p {
-  margin: 0.35rem 0 0;
-}
-
-.compact-log-detail ul {
-  margin: 0.45rem 0 0;
-  padding-left: 1rem;
 }
 
 .project-card,
@@ -2068,14 +2088,6 @@ onBeforeUnmount(() => {
     width: 100%;
   }
 
-  .compact-log summary {
-    grid-template-columns: 1.6rem minmax(0, 1fr);
-  }
-
-  .compact-log summary small {
-    grid-column: 2;
-  }
-
   .location-card-heading {
     display: grid;
   }
@@ -2107,7 +2119,6 @@ onBeforeUnmount(() => {
   .mast-chip,
   .bento-card,
   .headline-status i,
-  .compact-log-detail,
   .resume-preview-layer,
   .resume-preview-dialog {
     animation: none;
@@ -2131,6 +2142,9 @@ onBeforeUnmount(() => {
   .mast-resume-actions button,
   .resume-actions a,
   .resume-actions button,
+  .work-timeline-item,
+  .work-timeline-body,
+  .work-timeline-marker,
   .project-list > article,
   .project-list > article::before {
     transition: none;

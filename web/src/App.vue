@@ -82,7 +82,7 @@ const visitorLocationStatus = ref("正在查询访客位置");
 const clockNow = ref(new Date());
 const commandLinks = [
   {
-    label: "文章归档",
+    label: "全部文章",
     caption: "按时间回看全部记录",
     to: { path: "/articles", query: { view: "archive" } },
     tone: "brass",
@@ -198,7 +198,9 @@ const distanceText = computed(() => {
     return settings.value.owner_latitude === null ? "站长坐标待维护" : "距离测算中";
   }
 
-  return distance >= 100 ? `约 ${Math.round(distance)} 公里` : `约 ${distance.toFixed(1)} 公里`;
+  return distance >= 100
+    ? `你距离站长约 ${Math.round(distance)} 公里`
+    : `你距离站长约 ${distance.toFixed(1)} 公里`;
 });
 function formatArticleDate(article: Article) {
   const value = article.published_at ?? article.created_at;
@@ -507,7 +509,7 @@ onBeforeUnmount(() => {
               <div class="home-panel-heading"><strong>最新文章</strong></div>
               <h3>{{ homeArticlesLoading ? "正在整理最近内容" : homeArticlesStatus }}</h3>
               <p>有新文章时会出现在这里。</p>
-              <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">进入文章归档</RouterLink>
+              <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">进入全部文章</RouterLink>
             </article>
 
             <aside class="home-voyage-status home-reveal" aria-label="航行状态">

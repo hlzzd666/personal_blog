@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
         <div class="hero-shade" aria-hidden="true"></div>
         <div class="article-hero-inner">
           <RouterLink class="article-back-link" :to="{ path: '/articles', query: { view: 'archive' } }">
-            <span aria-hidden="true">←</span> 返回文章归档
+            <span aria-hidden="true">←</span> 返回全部文章
           </RouterLink>
           <div class="hero-heading">
             <p class="article-kicker"><span>LOGBOOK / {{ article.category }}</span><span>{{ formatDate(article.published_at) }}</span></p>
@@ -570,7 +570,7 @@ onBeforeUnmount(() => {
     </div>
     <div v-else class="article-detail-state article-detail-error">
       <p>{{ errorText }}</p>
-      <RouterLink v-if="notFound" :to="{ path: '/articles', query: { view: 'archive' } }">返回文章归档</RouterLink>
+      <RouterLink v-if="notFound" :to="{ path: '/articles', query: { view: 'archive' } }">返回全部文章</RouterLink>
       <button v-else type="button" @click="loadArticle">重新读取</button>
     </div>
 

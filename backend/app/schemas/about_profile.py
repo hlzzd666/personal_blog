@@ -12,14 +12,12 @@ class WorkExperience(BaseModel):
     organization: str = Field(..., min_length=1, max_length=120)
     role: str = Field(..., min_length=1, max_length=120)
     period: str = Field(..., min_length=1, max_length=60)
-    summary: str = Field(..., min_length=1, max_length=500)
-    highlights: list[str] = Field(default_factory=list, max_length=8)
 
 
 class ProjectExperience(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
-    role: str = Field(..., min_length=1, max_length=120)
-    period: str = Field(..., min_length=1, max_length=60)
+    role: str = Field(default="", max_length=120)
+    period: str = Field(default="", max_length=60)
     summary: str = Field(..., min_length=1, max_length=500)
     link_url: HttpUrl | None = None
     technologies: list[str] = Field(default_factory=list, max_length=12)
