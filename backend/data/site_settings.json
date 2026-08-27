@@ -66,6 +66,15 @@
       "enabled": true,
       "opacity": 0.68,
       "note": "用于文章列表页背景，建议上传清晰横图。"
+    },
+    {
+      "key": "asset_1787814026988",
+      "name": "新的背景图",
+      "usage": "background",
+      "image_url": "https://images.hdqwalls.com/wallpapers/bthumb/one-piece-movie-8k-q7.jpg",
+      "enabled": true,
+      "opacity": 0.68,
+      "note": "用于文章列表页背景，建议上传清晰横图。"
     }
   ],
   "owner_location_name": "江苏省南京市",

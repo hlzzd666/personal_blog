@@ -1727,6 +1727,7 @@ onBeforeUnmount(() => {
   font-size: 0.64rem;
 }
 .archive-timeline {
+  --archive-axis-x: 6.3rem;
   position: relative;
   overflow: hidden;
   padding-top: 0.15rem;
@@ -1736,7 +1737,7 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 5.35rem;
+  left: var(--archive-axis-x);
   width: 1px;
   background: rgba(247, 201, 81, 0.32);
 }
@@ -1744,7 +1745,7 @@ onBeforeUnmount(() => {
   content: "";
   position: absolute;
   top: -5rem;
-  left: 5.35rem;
+  left: var(--archive-axis-x);
   width: 1px;
   height: 5rem;
   background: linear-gradient(transparent, #f7c951, transparent);
@@ -2561,8 +2562,8 @@ onBeforeUnmount(() => {
   .archive-month-group::before {
     inset: -0.6rem -0.8rem;
   }
-  .archive-timeline::before {
-    left: 4.4rem;
+  .archive-timeline {
+    --archive-axis-x: 5.35rem;
   }
   .archive-entry {
     grid-template-columns: 3.4rem 2rem minmax(0, 1fr);

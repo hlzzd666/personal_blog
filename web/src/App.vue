@@ -124,13 +124,17 @@ let homeSession = 0;
 const activeQuote = computed(
   () => settings.value.quotes[activeQuoteIndex.value] ?? fallbackSettings.quotes[0],
 );
+const ownerAvatarUrl = computed(
+  () => settings.value.owner_avatar_url || fallbackSettings.owner_avatar_url,
+);
+const ownerLocationName = computed(
+  () => settings.value.owner_location_name || fallbackSettings.owner_location_name,
+);
 const typedQuote = computed(() => activeQuote.value.text.slice(0, typedCharacters.value));
 const featuredArticle = computed(() => homeArticles.value[0] ?? null);
 const secondaryArticles = computed(() => homeArticles.value.slice(1, 4));
 const articleCategories = computed(() => homeArticleStats.value.categories.slice(0, 5));
 const articleTags = computed(() => homeArticleStats.value.tags.slice(0, 12));
-const profileProjects = computed(() => homeProfile.value.project_experiences.slice(0, 3));
-const siteStack = computed(() => homeProfile.value.site_stack.slice(0, 8));
 const featuredSeries = computed(() => homeSeries.value.slice(0, 2));
 const latestNotes = computed(() => homeNotes.value.slice(0, 3));
 const currentTimeText = computed(() =>
@@ -611,9 +615,11 @@ onBeforeUnmount(() => {
             </div>
 
             <RouterLink class="home-profile-strip home-reveal" to="/about">
-              <span class="profile-seal-mini" aria-hidden="true">{{ homeProfile.display_name.slice(0, 1) || "站" }}</span>
+              <span class="home-profile-avatar">
+                <img :src="ownerAvatarUrl" alt="站长头像" />
+              </span>
               <span class="home-profile-copy"><span class="home-profile-name">关于 · {{ homeProfile.display_name }}</span><strong>{{ homeProfile.role }}</strong><small>{{ homeProfile.headline }}</small></span>
-              <span class="home-profile-facts"><b>{{ profileProjects[0]?.name || "个人博客系统" }}</b><small>{{ siteStack.slice(0, 4).join(" · ") }}</small></span>
+              <span class="home-profile-facts"><b>驻泊地 · {{ ownerLocationName }}</b><small>{{ settings.nav_brand }}</small></span>
               <span class="home-profile-action">查看档案</span>
             </RouterLink>
           </div>
@@ -2821,12 +2827,15 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.profile-seal-mini {
+.home-profile-avatar {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
   width: 3rem;
   aspect-ratio: 1;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 0.16rem;
   border: 1px solid rgba(247, 201, 81, 0.55);
   border-radius: 50%;
   color: var(--home-brass);
@@ -2837,6 +2846,14 @@ onBeforeUnmount(() => {
   font-family: var(--display-font);
   font-size: 1.2rem;
   line-height: 1;
+}
+
+.home-profile-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .profile-mini div {
@@ -4383,7 +4400,7 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--flow-line);
 }
 
-.home-profile-strip .profile-seal-mini {
+.home-profile-strip .home-profile-avatar {
   grid-row: 1 / span 2;
 }
 
@@ -4504,7 +4521,7 @@ onBeforeUnmount(() => {
     grid-template-rows: auto;
   }
 
-  .home-profile-strip .profile-seal-mini {
+  .home-profile-strip .home-profile-avatar {
     grid-row: auto;
   }
 

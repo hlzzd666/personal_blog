@@ -40,9 +40,7 @@ const visualAssetInputs = ref<Array<HTMLInputElement | null>>([]);
 const uploadingImage = ref<"avatar" | "hero" | `asset-${number}` | "">("");
 
 const previewQuotes = computed(() => quoteDraft.value.split("\n").filter(Boolean).slice(0, 3));
-const previewVisualAssets = computed(() =>
-  form.value.visual_assets.filter((asset) => asset.image_url).slice(0, 4),
-);
+const previewVisualAssets = computed(() => form.value.visual_assets.filter((asset) => asset.image_url));
 
 function disableFutureDate(value: Date) {
   const today = new Date();
@@ -346,7 +344,7 @@ onMounted(() => {
               <div class="visual-assets-header">
                 <div>
                   <strong>文章列表页背景图</strong>
-                  <span>只维护背景图，前台文章列表页会读取第一张启用图片。</span>
+                  <span>只维护背景图；多张启用图片会在前台文章列表页每 6 秒平滑切换。</span>
                 </div>
                 <el-button type="primary" plain @click="addVisualAsset">添加资产</el-button>
               </div>
