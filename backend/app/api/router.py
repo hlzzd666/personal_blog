@@ -38,6 +38,13 @@ from backend.app.schemas.content import (
     SeriesResponse,
 )
 from backend.app.schemas.media import MediaCleanupResponse, MediaListResponse
+from backend.app.schemas.daily_learning import (
+    DailyLearningRunListResponse,
+    DailyLearningRunResponse,
+    DailyLearningSettingsResponse,
+    DailyLearningSettingsUpdate,
+    DailyLearningTestResponse,
+)
 from backend.app.services.articles import (
     create_article,
     delete_article,
@@ -76,6 +83,16 @@ from backend.app.services.auth import (
     require_admin_session,
 )
 from backend.app.services.media import cleanup_unreferenced_media_files, list_media_files
+from backend.app.services.daily_learning import (
+    DailyLearningAIError,
+    DailyLearningConfigurationError,
+    get_or_create_settings as get_daily_learning_settings,
+    list_daily_learning_runs,
+    queue_daily_learning_run,
+    serialize_settings as serialize_daily_learning_settings,
+    test_daily_learning_ai,
+    update_daily_learning_settings,
+)
 
 router = APIRouter()
 
@@ -109,6 +126,89 @@ def health_check(request: Request) -> ApiResponse[dict[str, str]]:
         request,
         {"status": "ok", "service": "personal-blog-api"},
     )
+
+
+@router.get(
+    "/daily-learning/settings",
+    tags=["daily-learning"],
+    response_model=ApiResponse[DailyLearningSettingsResponse],
+)
+def read_daily_learning_settings(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[DailyLearningSettingsResponse]:
+    record = get_daily_learning_settings(session)
+    return build_success_response(request, serialize_daily_learning_settings(record))
+
+
+@router.put(
+    "/daily-learning/settings",
+    tags=["daily-learning"],
+    response_model=ApiResponse[DailyLearningSettingsResponse],
+)
+def write_daily_learning_settings(
+    request: Request,
+    payload: DailyLearningSettingsUpdate,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[DailyLearningSettingsResponse]:
+    try:
+        result = update_daily_learning_settings(session, payload)
+    except DailyLearningConfigurationError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return build_success_response(request, result, message="每日问答配置已保存")
+
+
+@router.post(
+    "/daily-learning/test",
+    tags=["daily-learning"],
+    response_model=ApiResponse[DailyLearningTestResponse],
+)
+def test_daily_learning_configuration(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[DailyLearningTestResponse]:
+    try:
+        result = test_daily_learning_ai(session)
+    except DailyLearningConfigurationError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except DailyLearningAIError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return build_success_response(request, result, message="AI 连接和内容格式验证通过")
+
+
+@router.post(
+    "/daily-learning/run-now",
+    tags=["daily-learning"],
+    response_model=ApiResponse[DailyLearningRunResponse],
+)
+def run_daily_learning_now(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[DailyLearningRunResponse]:
+    try:
+        result = queue_daily_learning_run(session)
+    except DailyLearningConfigurationError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    message = "今天的文章已经发布" if result.status == "succeeded" else "生成任务已加入队列"
+    return build_success_response(request, result, message=message)
+
+
+@router.get(
+    "/daily-learning/runs",
+    tags=["daily-learning"],
+    response_model=ApiResponse[DailyLearningRunListResponse],
+)
+def read_daily_learning_runs(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[DailyLearningRunListResponse]:
+    return build_success_response(request, list_daily_learning_runs(session, limit))
 
 
 @router.post("/auth/login", tags=["auth"], response_model=ApiResponse[AdminSessionResponse])

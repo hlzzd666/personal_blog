@@ -389,6 +389,44 @@ web/.env.production.local
 
 ## 7. 重启和日志命令
 
+### 每日问答定时器
+
+首次部署每日问答功能时，先生成加密主密钥：
+
+```bash
+/opt/personal_blog/.venv/bin/python -c \
+  "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+把输出写入 `/opt/personal_blog/backend/.env`：
+
+```env
+DAILY_LEARNING_ENCRYPTION_KEY=<刚生成的完整密钥>
+```
+
+然后安装并启动定时器：
+
+```bash
+cp /opt/personal_blog/backend/deploy/systemd/personal-blog-daily-learning.service \
+  /etc/systemd/system/
+cp /opt/personal_blog/backend/deploy/systemd/personal-blog-daily-learning.timer \
+  /etc/systemd/system/
+
+systemctl daemon-reload
+systemctl enable --now personal-blog-daily-learning.timer
+systemctl restart personal-blog-backend
+```
+
+检查状态：
+
+```bash
+systemctl status personal-blog-daily-learning.timer --no-pager
+systemctl list-timers personal-blog-daily-learning.timer --no-pager
+journalctl -u personal-blog-daily-learning.service -n 100 --no-pager
+```
+
+部署后功能默认关闭。登录管理后台“每日问答”页面，保存 AI 配置并测试成功后再启用。
+
 ### 重启后端
 
 ```bash

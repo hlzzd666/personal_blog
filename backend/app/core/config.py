@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     admin_session_cookie_name: str = "personal_blog_admin_session"
     admin_csrf_cookie_name: str = "personal_blog_admin_csrf"
     cookie_secure: bool = False
+    daily_learning_encryption_key: str = ""
 
     model_config = SettingsConfigDict(env_file="backend/.env", extra="ignore")
 

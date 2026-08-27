@@ -1,0 +1,13 @@
+[Unit]
+Description=Personal Blog Daily Learning Publisher
+After=network-online.target mysql.service redis-server.service
+Wants=network-online.target mysql.service redis-server.service
+
+[Service]
+Type=oneshot
+User=personal_blog
+Group=personal_blog
+WorkingDirectory=/opt/personal_blog
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/personal_blog/.venv/bin/python -m backend.scripts.publish_daily_learning
+TimeoutStartSec=5min

@@ -44,6 +44,7 @@ def build_article_filters(
         filters.append(
             or_(
                 Article.title.like(keyword),
+                Article.slug.like(keyword),
                 Article.summary.like(keyword),
                 Article.content_markdown.like(keyword),
             )

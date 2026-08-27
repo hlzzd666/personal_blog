@@ -27,6 +27,11 @@ export const router = createRouter({
         { path: "articles", name: "articles", component: ArticlesPage },
         { path: "series", name: "series", component: () => import("../pages/SeriesPage.vue") },
         { path: "notes", name: "notes", component: () => import("../pages/NotesPage.vue") },
+        {
+          path: "daily-learning",
+          name: "daily-learning",
+          component: () => import("../pages/DailyLearningPage.vue"),
+        },
         { path: "media", name: "media", component: MediaPage },
         { path: "about", name: "about", component: AboutPage },
         { path: "site-settings", name: "site-settings", component: SiteSettingsPage },

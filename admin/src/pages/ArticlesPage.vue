@@ -2,6 +2,7 @@
 import { Delete, Edit, Plus, Search, Upload } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
 import { MdEditor } from "md-editor-v3";
 import "md-editor-v3/lib/style.css";
 
@@ -45,6 +46,7 @@ const drawerTitle = computed(() => (editingId.value === null ? "写一篇新文�
 const markdownInput = ref<HTMLInputElement | null>(null);
 const importingMarkdown = ref(false);
 const seriesOptions = ref<Series[]>([]);
+const route = useRoute();
 
 function formatDate(value: string | null) {
   if (!value) return "未设置";
@@ -203,9 +205,15 @@ async function importMarkdown(event: Event) {
   }
 }
 
-onMounted(() => {
-  void loadArticles();
-  void loadSeriesOptions();
+onMounted(async () => {
+  const querySearch = typeof route.query.search === "string" ? route.query.search : "";
+  const queryEdit = typeof route.query.edit === "string" ? Number(route.query.edit) : null;
+  searchText.value = querySearch;
+  await Promise.all([loadArticles(), loadSeriesOptions()]);
+  if (queryEdit !== null && Number.isInteger(queryEdit)) {
+    const article = articles.value.find((item) => item.id === queryEdit);
+    if (article) openEdit(article);
+  }
 });
 </script>
 
@@ -219,7 +227,7 @@ onMounted(() => {
 
     <div class="article-toolbar">
       <div class="article-filters">
-        <el-input v-model="searchText" clearable placeholder="搜索标题或摘要" @keyup.enter="page = 1; loadArticles()">
+        <el-input v-model="searchText" clearable placeholder="搜索标题、别名或摘要" @keyup.enter="page = 1; loadArticles()">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
         <el-input v-model="categoryFilter" clearable placeholder="按分类筛选" @keyup.enter="page = 1; loadArticles()" />

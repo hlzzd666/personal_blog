@@ -14,7 +14,7 @@ from backend.app.models.article import Article
 from backend.app.models.content import Note, Series
 from backend.app.schemas.auth import AdminSessionResponse
 from backend.app.schemas.content import NotePayload, SeriesPayload
-from backend.app.services.articles import get_article_context
+from backend.app.services.articles import get_article_context, list_articles
 from backend.app.services.auth import require_admin_session
 from backend.app.services.content import (
     create_note,
@@ -131,6 +131,24 @@ class ContentServicesTest(unittest.TestCase):
         self.assertEqual(context.related[0].id, first.id)
         self.assertIn(tagged.id, [article.id for article in context.related])
         self.assertNotIn(current.id, [article.id for article in context.related])
+
+    def test_article_search_matches_slug(self) -> None:
+        article = self.article("2026-08-27-学习记录")
+        article.title = "每日学习问答"
+        article.summary = "前端知识练习"
+        article.content_markdown = "# 今日内容"
+        self.session.commit()
+
+        items, total = list_articles(
+            self.session,
+            public_only=False,
+            page=1,
+            page_size=20,
+            search="2026-08-27-学习记录",
+        )
+
+        self.assertEqual(total, 1)
+        self.assertEqual([item.id for item in items], [article.id])
 
     def test_notes_filter_uses_exact_json_membership(self) -> None:
         create_note(
