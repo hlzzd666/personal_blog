@@ -4,6 +4,7 @@ import { ElMessage } from "element-plus";
 import { computed, onMounted, ref } from "vue";
 
 import { fetchSiteSettings, updateSiteSettings, uploadImage } from "../api/site-settings";
+import { resolveErrorMessage } from "../api/http";
 import PageHeader from "../components/PageHeader.vue";
 import type { QuoteItem, SiteSettings, VisualAssetItem } from "../types/site";
 
@@ -130,8 +131,8 @@ async function handleImageSelected(type: "avatar" | "hero", event: Event) {
       form.value.hero_image_url = result.url;
     }
     ElMessage.success("图片上传成功，请保存配置");
-  } catch {
-    ElMessage.error("图片上传失败，请稍后重试");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "图片上传失败，请稍后重试"));
   } finally {
     uploadingImage.value = "";
   }
@@ -161,8 +162,8 @@ async function handleVisualAssetImageSelected(index: number, event: Event) {
       form.value.visual_assets[index].name = "已上传视觉资产";
     }
     ElMessage.success("图片上传成功，请保存配置");
-  } catch {
-    ElMessage.error("图片上传失败，请稍后重试");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "图片上传失败，请稍后重试"));
   } finally {
     uploadingImage.value = "";
   }
@@ -177,8 +178,8 @@ async function loadSettings() {
     };
     formatQuotes(payload.quotes);
     statusText.value = "站点设置已加载，可直接修改文章列表页视觉层。";
-  } catch {
-    statusText.value = "读取失败，请确认后端服务已启动。";
+  } catch (error) {
+    statusText.value = `读取失败：${resolveErrorMessage(error, "请确认后端服务已启动")}`;
   }
 }
 
@@ -198,9 +199,10 @@ async function saveSettings() {
     formatQuotes(nextValue.quotes);
     statusText.value = "保存成功，前台刷新后即可看到新的文章列表页视觉层。";
     ElMessage.success("站点设置已保存");
-  } catch {
-    statusText.value = "保存失败，请检查建站日期、经纬度和语录格式。";
-    ElMessage.error("保存失败，请检查站点配置");
+  } catch (error) {
+    const message = resolveErrorMessage(error, "站点设置保存失败，请检查建站日期、经纬度和语录格式");
+    statusText.value = `保存失败：${message}`;
+    ElMessage.error(message);
   } finally {
     saving.value = false;
   }

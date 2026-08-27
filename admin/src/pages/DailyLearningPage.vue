@@ -10,7 +10,7 @@ import {
   testDailyLearningAI,
   updateDailyLearningSettings,
 } from "../api/daily-learning";
-import { ApiError } from "../api/http";
+import { resolveErrorMessage } from "../api/http";
 import PageHeader from "../components/PageHeader.vue";
 import type {
   DailyLearningRun,
@@ -43,10 +43,6 @@ const statusMeta: Record<DailyLearningRunStatus, { label: string; type: "info" |
   failed: { label: "失败", type: "danger" },
 };
 
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.message : fallback;
-}
-
 function formatDateTime(value: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("zh-CN", {
@@ -75,7 +71,7 @@ async function loadRuns(showError = false) {
   try {
     runs.value = (await fetchDailyLearningRuns()).items;
   } catch (error) {
-    if (showError) ElMessage.error(errorMessage(error, "运行记录读取失败"));
+    if (showError) ElMessage.error(resolveErrorMessage(error, "运行记录读取失败"));
   }
 }
 
@@ -84,7 +80,7 @@ async function loadPage() {
   try {
     await Promise.all([loadSettings(), loadRuns()]);
   } catch (error) {
-    ElMessage.error(errorMessage(error, "每日问答配置读取失败"));
+    ElMessage.error(resolveErrorMessage(error, "每日问答配置读取失败"));
   } finally {
     loading.value = false;
   }
@@ -120,7 +116,7 @@ async function saveSettings() {
     updatedAt.value = result.updated_at;
     ElMessage.success("每日问答配置已保存");
   } catch (error) {
-    ElMessage.error(errorMessage(error, "配置保存失败"));
+    ElMessage.error(resolveErrorMessage(error, "配置保存失败"));
   } finally {
     saving.value = false;
   }
@@ -132,7 +128,7 @@ async function testConnection() {
     const result = await testDailyLearningAI();
     ElMessage.success(`验证通过：生成 ${result.question_count} 题，耗时 ${result.latency_ms} ms`);
   } catch (error) {
-    ElMessage.error(errorMessage(error, "AI 测试失败"));
+    ElMessage.error(resolveErrorMessage(error, "AI 测试失败"));
   } finally {
     testing.value = false;
   }
@@ -154,7 +150,7 @@ async function queueNow() {
     ElMessage.success(run.status === "succeeded" ? "今天的文章已经发布" : "任务已加入队列");
     await loadRuns();
   } catch (error) {
-    ElMessage.error(errorMessage(error, "任务加入队列失败"));
+    ElMessage.error(resolveErrorMessage(error, "任务加入队列失败"));
   } finally {
     queueing.value = false;
   }

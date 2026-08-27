@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { CopyDocument, Delete, Refresh, Upload } from "@element-plus/icons-vue";
 
 import { cleanupUnreferencedMediaFiles, fetchMediaFiles, uploadMediaImage } from "../api/media";
+import { resolveErrorMessage } from "../api/http";
 import PageHeader from "../components/PageHeader.vue";
 import type { MediaFileItem, MediaListResponse } from "../types/media";
 
@@ -50,7 +51,7 @@ async function loadMediaFiles() {
   try {
     mediaData.value = await fetchMediaFiles();
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "媒体资源加载失败"));
+    ElMessage.error(resolveErrorMessage(error, "媒体资源加载失败"));
   } finally {
     loading.value = false;
   }
@@ -73,7 +74,7 @@ async function handleImageSelected(event: Event) {
     ElMessage.success("图片上传成功");
     await loadMediaFiles();
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "图片上传失败"));
+    ElMessage.error(resolveErrorMessage(error, "图片上传失败"));
   } finally {
     uploading.value = false;
     input.value = "";
@@ -108,7 +109,7 @@ async function handleCleanup() {
     ElMessage.success(`已清理 ${result.deleted_count} 个文件，释放 ${formatBytes(result.deleted_size)}`);
     await loadMediaFiles();
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "未引用文件清理失败"));
+    ElMessage.error(resolveErrorMessage(error, "未引用文件清理失败"));
   } finally {
     cleanupLoading.value = false;
   }
@@ -165,9 +166,7 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+
 </script>
 
 <template>

@@ -8,6 +8,7 @@ import "md-editor-v3/lib/style.css";
 
 import { createArticle, deleteArticle, fetchManageArticles, updateArticle } from "../api/articles";
 import { fetchSeries } from "../api/content";
+import { resolveErrorMessage } from "../api/http";
 import { uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type { Article, ArticlePayload } from "../types/article";
@@ -68,8 +69,8 @@ async function loadArticles() {
     });
     articles.value = result.items;
     total.value = result.total;
-  } catch {
-    ElMessage.error("文章列表读取失败");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "文章列表读取失败"));
   } finally {
     loading.value = false;
   }
@@ -119,8 +120,8 @@ async function saveArticle() {
     }
     drawerVisible.value = false;
     await loadArticles();
-  } catch {
-    ElMessage.error("保存失败，请检查文章别名和链接格式");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "文章保存失败，请检查表单内容"));
   } finally {
     saving.value = false;
   }
@@ -137,7 +138,9 @@ async function removeArticle(article: Article) {
     ElMessage.success("文章已删除");
     await loadArticles();
   } catch (error) {
-    if (error !== "cancel" && error !== "close") ElMessage.error("删除失败");
+    if (error !== "cancel" && error !== "close") {
+      ElMessage.error(resolveErrorMessage(error, "文章删除失败"));
+    }
   }
 }
 
@@ -167,8 +170,8 @@ async function handleMarkdownImageUpload(files: File[], insertImages: (urls: str
     const results = await Promise.all(validFiles.map((file) => uploadImage(file)));
     insertImages(results.map((result) => result.url));
     ElMessage.success(`已插入 ${results.length} 张图片`);
-  } catch {
-    ElMessage.error("图片上传失败，请稍后重试");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "图片上传失败，请稍后重试"));
   }
 }
 

@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, ref } from "vue";
 
 import { fetchAboutProfile, updateAboutProfile } from "../api/about";
+import { resolveErrorMessage } from "../api/http";
 import { uploadImage, uploadResume } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type {
@@ -169,9 +170,10 @@ async function loadProfile() {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(profile.updated_at))}`;
-  } catch {
-    statusText.value = "读取失败，请确认后端服务和数据库迁移已就绪。";
-    ElMessage.error("关于我资料读取失败");
+  } catch (error) {
+    const message = resolveErrorMessage(error, "关于我资料读取失败");
+    statusText.value = `读取失败：${message}`;
+    ElMessage.error(message);
   } finally {
     loading.value = false;
   }
@@ -189,9 +191,10 @@ async function saveProfile() {
     form.value = payload;
     statusText.value = "保存成功，前台“关于我”页面刷新后即可看到更新。";
     ElMessage.success("关于我资料已保存");
-  } catch {
-    statusText.value = "保存失败，请检查必填项、链接格式和数组内容。";
-    ElMessage.error("保存失败，请检查表单内容");
+  } catch (error) {
+    const message = resolveErrorMessage(error, "关于我资料保存失败，请检查表单内容");
+    statusText.value = `保存失败：${message}`;
+    ElMessage.error(message);
   } finally {
     saving.value = false;
   }
@@ -214,8 +217,8 @@ async function handleAvatarSelected(event: Event) {
   try {
     form.value.avatar_url = (await uploadImage(file)).url;
     ElMessage.success("头像已上传，请保存资料");
-  } catch {
-    ElMessage.error("头像上传失败");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "头像上传失败"));
   } finally {
     uploadingAvatar.value = false;
   }
@@ -241,8 +244,8 @@ async function handleResumeSelected(event: Event) {
     form.value.resume_url = result.url;
     form.value.resume_filename = result.original_filename;
     ElMessage.success("简历已上传，请保存资料");
-  } catch {
-    ElMessage.error("简历上传失败");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "简历上传失败"));
   } finally {
     uploadingResume.value = false;
   }
@@ -288,8 +291,8 @@ async function handleSkillIconSelected(event: Event, index: number) {
   try {
     skill.icon_url = (await uploadImage(file)).url;
     ElMessage.success("技术图标已上传，请保存资料");
-  } catch {
-    ElMessage.error("技术图标上传失败");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "技术图标上传失败"));
   } finally {
     uploadingSkillIndex.value = null;
   }

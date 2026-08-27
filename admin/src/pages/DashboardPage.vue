@@ -4,6 +4,7 @@ import { ElMessage } from "element-plus";
 import { computed, onMounted, ref } from "vue";
 
 import { fetchDashboardStats } from "../api/content";
+import { resolveErrorMessage } from "../api/http";
 import PageHeader from "../components/PageHeader.vue";
 import type { DashboardStats } from "../types/content";
 
@@ -25,8 +26,8 @@ async function loadStats() {
   loading.value = true;
   try {
     stats.value = await fetchDashboardStats();
-  } catch {
-    ElMessage.error("控制台统计读取失败");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "控制台统计读取失败"));
   } finally {
     loading.value = false;
   }

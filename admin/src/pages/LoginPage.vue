@@ -4,6 +4,7 @@ import { ElMessage } from "element-plus";
 import { reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+import { resolveErrorMessage } from "../api/http";
 import { useAuthStore } from "../stores/auth";
 
 const authStore = useAuthStore();
@@ -25,7 +26,7 @@ async function handleLogin() {
     const redirect = typeof route.query.redirect === "string" ? route.query.redirect : "/";
     await router.push(redirect);
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "登录失败");
+    ElMessage.error(resolveErrorMessage(error, "登录失败，请稍后重试"));
   } finally {
     loading.value = false;
   }

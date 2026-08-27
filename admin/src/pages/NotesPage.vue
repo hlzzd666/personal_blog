@@ -6,6 +6,7 @@ import { MdEditor } from "md-editor-v3";
 import "md-editor-v3/lib/style.css";
 
 import { createNote, deleteNote, fetchNotes, updateNote } from "../api/content";
+import { resolveErrorMessage } from "../api/http";
 import { uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type { Note, NotePayload } from "../types/content";
@@ -44,8 +45,8 @@ async function loadNotes() {
     const result = await fetchNotes({ page: page.value, page_size: 20, tag: tagFilter.value || undefined });
     notes.value = result.items;
     total.value = result.total;
-  } catch {
-    ElMessage.error("短动态读取失败");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "短动态读取失败"));
   } finally {
     loading.value = false;
   }
@@ -86,8 +87,8 @@ async function saveNote() {
     ElMessage.success(editingId.value === null ? "短动态已发布" : "短动态已更新");
     drawerVisible.value = false;
     await loadNotes();
-  } catch {
-    ElMessage.error("保存失败，请检查别名或外部链接");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "短动态保存失败，请检查表单内容"));
   } finally {
     saving.value = false;
   }
@@ -104,7 +105,9 @@ async function removeNote(note: Note) {
     ElMessage.success("短动态已删除");
     await loadNotes();
   } catch (error) {
-    if (error !== "cancel" && error !== "close") ElMessage.error("删除失败");
+    if (error !== "cancel" && error !== "close") {
+      ElMessage.error(resolveErrorMessage(error, "短动态删除失败"));
+    }
   }
 }
 
@@ -113,8 +116,8 @@ async function handleImageUpload(files: File[], insertImages: (urls: string[]) =
     const validFiles = files.filter((file) => file.type.startsWith("image/") && file.size <= 10 * 1024 * 1024);
     const results = await Promise.all(validFiles.map(uploadImage));
     insertImages(results.map((item) => item.url));
-  } catch {
-    ElMessage.error("图片上传失败");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "图片上传失败"));
   }
 }
 

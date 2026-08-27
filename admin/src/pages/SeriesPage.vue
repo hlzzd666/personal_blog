@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { computed, onMounted, reactive, ref } from "vue";
 
 import { createSeries, deleteSeries, fetchSeries, updateSeries } from "../api/content";
+import { resolveErrorMessage } from "../api/http";
 import { uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type { Series, SeriesPayload } from "../types/content";
@@ -30,8 +31,8 @@ async function loadSeries() {
   loading.value = true;
   try {
     items.value = (await fetchSeries()).items;
-  } catch {
-    ElMessage.error("专题列表读取失败");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "专题列表读取失败"));
   } finally {
     loading.value = false;
   }
@@ -68,8 +69,8 @@ async function saveSeries() {
     ElMessage.success(editingId.value === null ? "专题已创建" : "专题已更新");
     dialogVisible.value = false;
     await loadSeries();
-  } catch {
-    ElMessage.error("保存失败，请检查别名格式或是否重复");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "专题保存失败，请检查表单内容"));
   } finally {
     saving.value = false;
   }
@@ -86,7 +87,9 @@ async function removeSeries(item: Series) {
     ElMessage.success("专题已删除，文章关联已解除");
     await loadSeries();
   } catch (error) {
-    if (error !== "cancel" && error !== "close") ElMessage.error("删除失败");
+    if (error !== "cancel" && error !== "close") {
+      ElMessage.error(resolveErrorMessage(error, "专题删除失败"));
+    }
   }
 }
 
@@ -99,8 +102,8 @@ async function uploadCover(event: Event) {
   try {
     form.cover_image_url = (await uploadImage(file)).url;
     ElMessage.success("专题封面已上传");
-  } catch {
-    ElMessage.error("封面上传失败");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "封面上传失败"));
   } finally {
     uploading.value = false;
   }
