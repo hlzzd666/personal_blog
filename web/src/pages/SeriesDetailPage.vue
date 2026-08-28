@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { computed, nextTick, ref, watch } from "vue";
+import { onBeforeRouteLeave, useRoute } from "vue-router";
 
 import { ApiError } from "../api/http";
 import { fetchSeriesDetail, type SeriesDetail } from "../api/content";
 import OceanAtmosphere from "../components/OceanAtmosphere.vue";
+import { readArticleReturnContext, saveArticleReturnContext } from "../composables/useArticleReturnContext";
 import { useSeo } from "../composables/useSeo";
 import { useViewportReveal } from "../composables/useViewportReveal";
 
@@ -22,6 +23,25 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric" }).format(
     new Date(value ?? Date.now()),
   );
+}
+
+function rememberSeriesArticleEntry(articleSlug: string) {
+  saveArticleReturnContext({
+    source: "series",
+    path: route.fullPath,
+    scrollY: window.scrollY,
+    articleSlug,
+  });
+}
+
+async function restoreSeriesReturnPosition() {
+  const returnContext = readArticleReturnContext();
+  if (returnContext?.source !== "series" || returnContext.path !== route.fullPath) return;
+
+  await nextTick();
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: returnContext.scrollY, left: 0, behavior: "auto" });
+  });
 }
 
 async function loadSeries() {
@@ -49,10 +69,16 @@ async function loadSeries() {
   } finally {
     loading.value = false;
     void observe(pageRoot.value);
+    void restoreSeriesReturnPosition();
   }
 }
 
 watch(() => route.params.slug, loadSeries, { immediate: true });
+
+onBeforeRouteLeave((to) => {
+  if (!to.path.startsWith("/articles/") || typeof to.params.slug !== "string") return;
+  rememberSeriesArticleEntry(to.params.slug);
+});
 </script>
 
 <template>
@@ -76,6 +102,7 @@ watch(() => route.params.slug, loadSeries, { immediate: true });
           class="series-route-stop reveal-item"
           data-reveal
           :to="`/articles/${article.slug}`"
+          @click="rememberSeriesArticleEntry(article.slug)"
         >
           <span class="route-node">{{ String(index + 1).padStart(2, "0") }}</span>
           <div>

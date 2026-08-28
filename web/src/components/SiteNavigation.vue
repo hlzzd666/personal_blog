@@ -17,7 +17,7 @@ let revealTimer: number | undefined;
 let loadingBrand = false;
 
 const brand = computed(() => props.brand ?? loadedBrand.value);
-const usesLightSurface = computed(() => route.path === "/about" || route.path === "/privacy");
+const usesLightSurface = computed(() => route.path === "/about" || route.path === "/privacy" || /^\/articles\/[^/]+/.test(route.path));
 
 async function loadBrand() {
   if (props.brand || loadingBrand) return;
@@ -137,32 +137,39 @@ onBeforeUnmount(() => {
   z-index: 1;
 }
 .floating-nav.light-surface {
-  background: rgba(237, 242, 245, 0.86);
-  backdrop-filter: blur(15px) saturate(1.2);
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  backdrop-filter: none;
 }
 .floating-nav.light-surface::before {
-  display: none;
+  display: block;
+  border-bottom: 1px solid rgba(24, 49, 56, 0.07);
+  background: rgba(255, 250, 242, 0.88);
+  backdrop-filter: blur(15px) saturate(1.08);
 }
 .floating-nav.light-surface .brand,
 .floating-nav.light-surface nav a,
 .floating-nav.light-surface .nav-search-button {
-  color: #173541;
+  color: #183138;
   text-shadow: none;
 }
 .floating-nav.light-surface nav > a::before,
 .floating-nav.light-surface .nav-search-button::before {
-  background: #e7674c;
-  box-shadow: 0 0 0.55rem rgba(231, 103, 76, 0.28);
+  background: #276f6d;
+  box-shadow: none;
 }
 .floating-nav.light-surface nav > a:hover,
 .floating-nav.light-surface nav > a:focus-visible,
 .floating-nav.light-surface .nav-search-button:hover,
 .floating-nav.light-surface .nav-search-button:focus-visible,
 .floating-nav.light-surface nav > a.router-link-active {
-  color: #c64f3a;
+  color: #276f6d;
 }
 .floating-nav.revealing::before {
   animation: nav-glass-fade 1.2s ease both;
+}
+.floating-nav.light-surface.revealing::before {
+  animation: nav-light-fade 1.2s ease both;
 }
 .floating-nav.hidden {
   opacity: 0;
@@ -239,16 +246,28 @@ nav > a:focus-visible,
     opacity: 0;
   }
 }
+@keyframes nav-light-fade {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 @media (max-width: 900px) {
   .floating-nav {
     flex-direction: column;
-    gap: 0.9rem;
-    padding-inline: 1rem;
+    gap: 0.55rem;
+    padding: 0.78rem 1rem 0.7rem;
   }
   nav {
     flex-wrap: wrap;
     justify-content: center;
     gap: 0.65rem 1rem;
+    font-size: 0.9rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {

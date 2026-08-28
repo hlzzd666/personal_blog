@@ -9,14 +9,18 @@ import {
   ref,
   watch,
 } from "vue";
-import { onBeforeRouteLeave, useRoute } from "vue-router";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 
 import { fetchArticles, type Article, type ArticleListStats } from "../api/articles";
+import { readArticleReturnContext, saveArticleReturnContext } from "../composables/useArticleReturnContext";
 import { fetchSiteSettings, type SiteSettings, type VisualAssetItem } from "../api/site-settings";
 
 type ArticleView = "archive" | "tags" | "categories";
 
+defineOptions({ name: "ArticlesPage" });
+
 const route = useRoute();
+const router = useRouter();
 const articles = ref<Article[]>([]);
 const loading = ref(true);
 const loadingMore = ref(false);
@@ -38,6 +42,7 @@ let pageObserver: IntersectionObserver | undefined;
 let pageIsActive = false;
 const pageSize = 20;
 const visualAssetRotationMs = 6000;
+const articleListReturnStorageKey = "article-list-return-path";
 const currentPage = ref(0);
 const totalArticles = ref(0);
 const allPagesLoaded = ref(false);
@@ -161,9 +166,7 @@ function formatFullDate(value: string | null) {
 }
 
 function clearFilters() {
-  activeCategory.value = "";
-  activeTag.value = "";
-  void loadArticles();
+  void router.replace({ path: "/articles", query: { view: currentView.value } });
 }
 
 function syncFiltersFromRoute() {
@@ -172,15 +175,11 @@ function syncFiltersFromRoute() {
 }
 
 function selectCategory(category: string) {
-  activeCategory.value = category;
-  activeTag.value = "";
-  void loadArticles();
+  void router.replace({ path: "/articles", query: { view: currentView.value, category } });
 }
 
 function selectTag(tag: string) {
-  activeTag.value = tag;
-  activeCategory.value = "";
-  void loadArticles();
+  void router.replace({ path: "/articles", query: { view: currentView.value, tag } });
 }
 
 function getVisualAssetLayerStyle(asset: VisualAssetItem) {
@@ -343,6 +342,17 @@ function scrollToTop() {
   window.scrollTo({ top: 0, behavior });
 }
 
+function rememberArticleEntry(article: Article) {
+  savedScrollY = window.scrollY;
+  sessionStorage.setItem(articleListReturnStorageKey, route.fullPath);
+  saveArticleReturnContext({
+    source: "articles",
+    path: route.fullPath,
+    scrollY: savedScrollY,
+    articleSlug: article.slug,
+  });
+}
+
 function addPageListeners() {
   window.addEventListener("scroll", revealVisibleEntries, { passive: true });
   window.addEventListener("resize", handlePageResize);
@@ -397,7 +407,12 @@ onActivated(async () => {
 
   await nextTick();
   window.requestAnimationFrame(() => {
-    window.scrollTo({ top: savedScrollY, left: 0, behavior: "auto" });
+    const returnContext = readArticleReturnContext();
+    const scrollY =
+      returnContext?.source === "articles" && returnContext.path === route.fullPath
+        ? returnContext.scrollY
+        : savedScrollY;
+    window.scrollTo({ top: scrollY, left: 0, behavior: "auto" });
     revealVisibleEntries();
     observeLoadMoreSentinel();
   });
@@ -412,8 +427,17 @@ onDeactivated(() => {
   removePageListeners();
 });
 
-onBeforeRouteLeave(() => {
+onBeforeRouteLeave((to) => {
   savedScrollY = window.scrollY;
+  sessionStorage.setItem(articleListReturnStorageKey, route.fullPath);
+  if (to.path.startsWith("/articles/") && typeof to.params.slug === "string") {
+    saveArticleReturnContext({
+      source: "articles",
+      path: route.fullPath,
+      scrollY: savedScrollY,
+      articleSlug: to.params.slug,
+    });
+  }
 });
 
 watch([activeCategory, activeTag, currentView], async () => {
@@ -422,11 +446,24 @@ watch([activeCategory, activeTag, currentView], async () => {
   observeLoadMoreSentinel();
 });
 watch(
-  () => [route.query.tag, route.query.category],
+  () => [route.path, route.query.tag, route.query.category],
   () => {
-    syncFiltersFromRoute();
+    if (route.path !== "/articles") return;
+    const nextTag = typeof route.query.tag === "string" ? route.query.tag : "";
+    const nextCategory = typeof route.query.category === "string" ? route.query.category : "";
+    if (nextTag === activeTag.value && nextCategory === activeCategory.value) return;
+    activeTag.value = nextTag;
+    activeCategory.value = nextCategory;
     void loadArticles();
   },
+);
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.path !== "/articles") return;
+    sessionStorage.setItem(articleListReturnStorageKey, route.fullPath);
+  },
+  { immediate: true },
 );
 onBeforeUnmount(() => {
   pageObserver?.disconnect();
@@ -635,7 +672,10 @@ onBeforeUnmount(() => {
                         <span>{{ formatFullDate(archiveDate(article)) }}</span>
                       </div>
                       <h2>
-                        <RouterLink :to="{ path: `/articles/${article.slug}` }">
+                        <RouterLink
+                          :to="{ path: `/articles/${article.slug}` }"
+                          @click="rememberArticleEntry(article)"
+                        >
                           {{ article.title }}
                         </RouterLink>
                       </h2>

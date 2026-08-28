@@ -142,10 +142,18 @@ const assetUrl = computed(() => assetByVariant[props.variant]);
 .ocean-atmosphere--series .ocean-atmosphere-wash-one { background: #e4a16f; }
 .ocean-atmosphere--notes .ocean-atmosphere-wash-two { background: #e37c5e; }
 
-/* 文章详情页以长文阅读为主，氛围层降噪：海图压暗、色雾静止、流线减淡，正文区域获得安稳的阅读底色 */
-.ocean-atmosphere--detail .ocean-atmosphere-image { opacity: 0.26; }
-.ocean-atmosphere--detail .ocean-atmosphere-wash { animation: none; opacity: 0.1; }
-.ocean-atmosphere--detail .ocean-atmosphere-current { opacity: 0.3; }
+/* 文章详情页以长文阅读为主，氛围层改为浅色纸面底，减少暗色阅读疲劳。 */
+.ocean-atmosphere--detail { background: #f7f2e9; }
+.ocean-atmosphere--detail::before {
+  background: linear-gradient(115deg, rgba(240, 247, 242, 0.76), transparent 48%, rgba(247, 242, 233, 0.82));
+}
+.ocean-atmosphere--detail::after {
+  background: linear-gradient(180deg, rgba(255, 252, 246, 0.32), rgba(247, 242, 233, 0.58) 55%, rgba(251, 247, 239, 0.9));
+}
+.ocean-atmosphere--detail .ocean-atmosphere-image { opacity: 0.035; filter: saturate(0.45) contrast(0.86); }
+.ocean-atmosphere--detail .ocean-atmosphere-wash { animation: none; opacity: 0.035; mix-blend-mode: multiply; }
+.ocean-atmosphere--detail .ocean-atmosphere-current { opacity: 0.07; }
+.ocean-atmosphere--detail .ocean-atmosphere-beacon { opacity: 0.14; box-shadow: none; }
 
 @keyframes atmosphere-image-drift {
   from { transform: scale(1.04) translate3d(-0.7%, -0.5%, 0); }
