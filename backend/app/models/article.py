@@ -22,7 +22,6 @@ class Article(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=func.now(),
-        onupdate=func.now(),
         server_default=func.now(),
     )
     views: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

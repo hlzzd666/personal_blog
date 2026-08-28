@@ -28,6 +28,15 @@ from backend.app.schemas.article import (
 ArticleListCacheStatus = Literal["HIT", "MISS", "BYPASS"]
 
 
+def _article_date_order():
+    return (
+        Article.published_at.is_(None),
+        Article.published_at.desc(),
+        Article.created_at.desc(),
+        Article.id.desc(),
+    )
+
+
 def build_article_filters(
     *,
     category: str | None = None,
@@ -198,7 +207,7 @@ def get_article_context(session: Session, slug: str) -> ArticleContextResponse |
             session.scalars(
                 select(Article)
                 .where(Article.series_id == article.series_id)
-                .order_by(Article.series_order.is_(None), Article.series_order.asc(), Article.id.asc())
+                .order_by(*_article_date_order())
             )
         )
         index = next(index for index, candidate in enumerate(series_articles) if candidate.id == article.id)

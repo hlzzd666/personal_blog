@@ -282,9 +282,6 @@ onMounted(async () => {
               <el-option v-for="item in seriesOptions" :key="item.id" :label="item.title" :value="item.id" />
             </el-select>
           </el-form-item>
-          <el-form-item label="专题内顺序">
-            <el-input-number v-model="form.series_order" :disabled="form.series_id === null" :min="0" :max="100000" controls-position="right" />
-          </el-form-item>
         </div>
         <el-form-item label="标签"><el-select v-model="form.tags" multiple filterable allow-create default-first-option placeholder="输入后回车添加标签"><el-option v-for="tag in form.tags" :key="tag" :label="tag" :value="tag" /></el-select></el-form-item>
         <el-form-item required>

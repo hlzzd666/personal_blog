@@ -60,7 +60,7 @@ def get_series_detail(session: Session, series: Series) -> SeriesDetailResponse:
         session.scalars(
             select(Article)
             .where(Article.series_id == series.id)
-            .order_by(Article.series_order.is_(None), Article.series_order.asc(), *_article_date_order())
+            .order_by(*_article_date_order())
         )
     )
     return SeriesDetailResponse(
