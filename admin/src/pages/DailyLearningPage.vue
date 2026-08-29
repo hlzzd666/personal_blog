@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Connection, MagicStick, Refresh, Select } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 
 import {
   fetchDailyLearningRuns,
@@ -10,6 +10,7 @@ import {
   testDailyLearningAI,
   updateDailyLearningSettings,
 } from "../api/daily-learning";
+import { fetchArticleTaxonomy, fetchSeries } from "../api/content";
 import { resolveErrorMessage } from "../api/http";
 import PageHeader from "../components/PageHeader.vue";
 import type {
@@ -17,24 +18,75 @@ import type {
   DailyLearningRunStatus,
   DailyLearningSettingsPayload,
 } from "../types/daily-learning";
+import type { Series, TaxonomyItem } from "../types/content";
 
 const form = reactive<DailyLearningSettingsPayload>({
   enabled: false,
   publish_time: "09:00",
+  schedule_type: "daily",
+  schedule_weekday: null,
+  schedule_day: null,
   ai_base_url: "",
   ai_model: "",
+  generation_topic: "",
+  system_prompt: "",
   api_key: "",
-  generation_instructions:
-    "题目覆盖 JavaScript、TypeScript、Vue、React、浏览器、CSS、网络、性能和工程化，兼顾基础、中级和高级难度。答案准确、清晰，必要时给出简短代码示例。",
-  tags: ["前端面试", "每日问答"],
+  generation_instructions: "",
+  generation_count: 10,
+  question_label: "",
+  answer_label: "",
+  article_title_template: "",
+  article_slug_template: "",
+  article_summary_template: "",
+  author: "",
+  series_id: null,
+  category_id: null,
+  tag_ids: [],
+  tags: [],
+  max_attempts: 3,
+  retry_delays_minutes: [],
 });
 const apiKeyConfigured = ref(false);
 const updatedAt = ref("");
 const runs = ref<DailyLearningRun[]>([]);
+const seriesOptions = ref<Series[]>([]);
+const categoryOptions = ref<TaxonomyItem[]>([]);
+const tagOptions = ref<TaxonomyItem[]>([]);
+const retryDelaysText = ref("");
 const loading = ref(false);
 const saving = ref(false);
 const testing = ref(false);
 const queueing = ref(false);
+
+const weekdays = [
+  { label: "周一", value: 1 },
+  { label: "周二", value: 2 },
+  { label: "周三", value: 3 },
+  { label: "周四", value: 4 },
+  { label: "周五", value: 5 },
+  { label: "周六", value: 6 },
+  { label: "周日", value: 7 },
+];
+
+const selectedCategoryName = computed(() => {
+  const category = categoryOptions.value.find((item) => item.id === form.category_id);
+  return category?.name ?? (form.category_id ? "配置已失效" : "未配置");
+});
+const selectedSeriesName = computed(
+  () => seriesOptions.value.find((item) => item.id === form.series_id)?.title ?? (form.series_id ? "配置已失效" : "不加入专题"),
+);
+const selectedTagNames = computed(() =>
+  tagOptions.value.filter((item) => form.tag_ids.includes(item.id)).map((item) => item.name),
+);
+const scheduleSummary = computed(() => {
+  if (form.schedule_type === "weekly") {
+    return `每周${weekdays.find((item) => item.value === form.schedule_weekday)?.label ?? "待配置"} ${form.publish_time}`;
+  }
+  if (form.schedule_type === "monthly") {
+    return `每月 ${form.schedule_day ?? "待配置"} 日 ${form.publish_time}`;
+  }
+  return `每日 ${form.publish_time}`;
+});
 
 const statusMeta: Record<DailyLearningRunStatus, { label: string; type: "info" | "warning" | "success" | "danger" }> = {
   pending: { label: "等待执行", type: "info" },
@@ -57,14 +109,39 @@ async function loadSettings() {
   Object.assign(form, {
     enabled: settings.enabled,
     publish_time: settings.publish_time.slice(0, 5),
+    schedule_type: settings.schedule_type,
+    schedule_weekday: settings.schedule_weekday,
+    schedule_day: settings.schedule_day,
     ai_base_url: settings.ai_base_url,
     ai_model: settings.ai_model,
     api_key: "",
+    generation_topic: settings.generation_topic,
+    system_prompt: settings.system_prompt,
     generation_instructions: settings.generation_instructions,
+    generation_count: settings.generation_count,
+    question_label: settings.question_label,
+    answer_label: settings.answer_label,
+    article_title_template: settings.article_title_template,
+    article_slug_template: settings.article_slug_template,
+    article_summary_template: settings.article_summary_template,
+    author: settings.author,
+    series_id: settings.series_id,
+    category_id: settings.category_id,
+    tag_ids: [...settings.tag_ids],
     tags: [...settings.tags],
+    max_attempts: settings.max_attempts,
+    retry_delays_minutes: [...settings.retry_delays_minutes],
   });
+  retryDelaysText.value = settings.retry_delays_minutes.join(", ");
   apiKeyConfigured.value = settings.api_key_configured;
   updatedAt.value = settings.updated_at;
+}
+
+async function loadOptions() {
+  const [taxonomy, series] = await Promise.all([fetchArticleTaxonomy(), fetchSeries()]);
+  categoryOptions.value = taxonomy.categories;
+  tagOptions.value = taxonomy.tags;
+  seriesOptions.value = series.items;
 }
 
 async function loadRuns(showError = false) {
@@ -78,7 +155,20 @@ async function loadRuns(showError = false) {
 async function loadPage() {
   loading.value = true;
   try {
-    await Promise.all([loadSettings(), loadRuns()]);
+    await Promise.all([loadSettings(), loadOptions(), loadRuns()]);
+    if (form.category_id && !categoryOptions.value.some((item) => item.id === form.category_id)) {
+      ElMessage.error("当前配置的文章分类不存在，请重新选择分类");
+      form.category_id = null;
+    }
+    const missingTags = form.tag_ids.filter((id) => !tagOptions.value.some((item) => item.id === id));
+    if (missingTags.length) {
+      ElMessage.error("当前配置中有不存在的文章标签，请重新选择标签");
+      form.tag_ids = form.tag_ids.filter((id) => !missingTags.includes(id));
+    }
+    if (form.series_id && !seriesOptions.value.some((item) => item.id === form.series_id)) {
+      ElMessage.error("当前配置的专题不存在，请重新选择专题");
+      form.series_id = null;
+    }
   } catch (error) {
     ElMessage.error(resolveErrorMessage(error, "每日问答配置读取失败"));
   } finally {
@@ -87,28 +177,47 @@ async function loadPage() {
 }
 
 async function saveSettings() {
-  if (!form.ai_base_url || !form.ai_model) {
-    ElMessage.warning("请填写 AI 接口地址和模型");
+  if (form.enabled && (!form.ai_base_url || !form.ai_model)) {
+    ElMessage.warning("启用自动发布前，请填写 AI 接口地址和模型");
     return;
   }
-  if (!apiKeyConfigured.value && !form.api_key?.trim()) {
+  if (form.enabled && !apiKeyConfigured.value && !form.api_key?.trim()) {
     ElMessage.warning("请填写 AI API Key");
     return;
   }
-  const normalizedTags = [...new Set(form.tags.map((tag) => tag.trim()).filter(Boolean))];
-  if (!normalizedTags.length) {
-    ElMessage.warning("请至少添加一个文章标签");
+  if (!form.category_id) {
+    ElMessage.warning("请选择文章分类");
     return;
   }
-  if (normalizedTags.some((tag) => tag.length > 30)) {
-    ElMessage.warning("单个文章标签不能超过 30 个字符");
+  if (form.schedule_type === "weekly" && !form.schedule_weekday) {
+    ElMessage.warning("每周发布请选择星期几");
+    return;
+  }
+  if (form.schedule_type === "monthly" && !form.schedule_day) {
+    ElMessage.warning("每月发布请选择日期");
+    return;
+  }
+  const retryTokens = retryDelaysText.value.trim() ? retryDelaysText.value.split(/[,，\s]+/) : [];
+  if (retryTokens.some((value) => !/^\d+$/.test(value))) {
+    ElMessage.warning("重试间隔必须填写为整数，例如：10, 30");
+    return;
+  }
+  const retryDelays = retryTokens.map(Number);
+  if (retryDelays.some((value) => value < 1 || value > 1440)) {
+    ElMessage.warning("重试间隔必须是 1 至 1440 分钟的整数");
+    return;
+  }
+  if (retryDelays.length > form.max_attempts - 1) {
+    ElMessage.warning("重试间隔数量不能超过最大尝试次数减一");
     return;
   }
   saving.value = true;
   try {
+    const selectedTags = tagOptions.value.filter((item) => form.tag_ids.includes(item.id));
     const result = await updateDailyLearningSettings({
       ...form,
-      tags: normalizedTags,
+      tags: selectedTags.map((tag) => tag.name),
+      retry_delays_minutes: retryDelays,
       api_key: form.api_key?.trim() || null,
     });
     form.api_key = "";
@@ -137,7 +246,7 @@ async function testConnection() {
 async function queueNow() {
   try {
     await ElMessageBox.confirm(
-      "任务会在约一分钟内生成并直接公开今天的 10 道问答。当天已发布时不会重复创建。",
+      `任务会在约一分钟内按当前配置生成 ${form.generation_count} 道问答并直接公开。当天已发布时不会重复创建。`,
       "立即生成今日问答",
       { type: "warning", confirmButtonText: "加入队列", cancelButtonText: "取消" },
     );
@@ -166,7 +275,7 @@ onMounted(() => {
     <PageHeader
       eyebrow="AUTOMATED STUDY LOG"
       title="每日问答"
-      description="每天按北京时间自动生成 10 道前端面试题，校验完整后直接发布到“今日份学习”专题。"
+      description="按当前配置自动生成问答内容，校验完整后直接发布。历史文章不会受配置修改影响。"
     />
 
     <section class="daily-learning-summary">
@@ -175,8 +284,8 @@ onMounted(() => {
         <strong>{{ form.enabled ? "自动发布已启用" : "自动发布已停用" }}</strong>
       </div>
       <div>
-        <span>每日时间</span>
-        <strong>{{ form.publish_time }} · Asia/Shanghai</strong>
+        <span>发布计划</span>
+        <strong>{{ scheduleSummary }} · Asia/Shanghai</strong>
       </div>
       <div>
         <span>API Key</span>
@@ -199,7 +308,23 @@ onMounted(() => {
 
         <el-form label-position="top" @submit.prevent="saveSettings">
           <div class="daily-learning-fields">
-            <el-form-item label="每日发布时间" required>
+            <el-form-item label="发布周期" required>
+              <el-radio-group v-model="form.schedule_type">
+                <el-radio-button label="daily">每日</el-radio-button>
+                <el-radio-button label="weekly">每周</el-radio-button>
+                <el-radio-button label="monthly">每月</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item v-if="form.schedule_type === 'weekly'" label="每周发布日" required>
+              <el-select v-model="form.schedule_weekday" placeholder="选择星期">
+                <el-option v-for="item in weekdays" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="form.schedule_type === 'monthly'" label="每月发布日" required>
+              <el-input-number v-model="form.schedule_day" :min="1" :max="31" controls-position="right" />
+              <span class="field-help">当月没有该日期时按当月最后一天执行。</span>
+            </el-form-item>
+            <el-form-item label="发布时间" required>
               <el-time-select
                 v-model="form.publish_time"
                 start="00:00"
@@ -228,20 +353,18 @@ onMounted(() => {
             <span class="field-help">保存后不会再次显示明文；留空会保留当前 Key。</span>
           </el-form-item>
 
-          <el-form-item label="文章标签" required>
-            <el-select
-              v-model="form.tags"
-              multiple
-              filterable
-              allow-create
-              default-first-option
-              placeholder="输入后按回车添加标签"
-            >
-              <el-option v-for="tag in form.tags" :key="tag" :label="tag" :value="tag" />
-            </el-select>
-            <span class="field-help">每天生成的文章都会使用这些标签，最多 20 个。</span>
-          </el-form-item>
+          <div class="daily-learning-fields">
+            <el-form-item label="生成主题" required>
+              <el-input v-model="form.generation_topic" maxlength="200" />
+            </el-form-item>
+            <el-form-item label="生成数量" required>
+              <el-input-number v-model="form.generation_count" :min="1" :max="20" controls-position="right" />
+            </el-form-item>
+          </div>
 
+          <el-form-item label="AI 角色设定" required>
+            <el-input v-model="form.system_prompt" type="textarea" :rows="3" maxlength="5000" show-word-limit />
+          </el-form-item>
           <el-form-item label="生成要求">
             <el-input
               v-model="form.generation_instructions"
@@ -251,6 +374,52 @@ onMounted(() => {
               show-word-limit
             />
           </el-form-item>
+
+          <div class="daily-learning-fields">
+            <el-form-item label="问题标题" required><el-input v-model="form.question_label" maxlength="50" /></el-form-item>
+            <el-form-item label="答案标题" required><el-input v-model="form.answer_label" maxlength="50" /></el-form-item>
+          </div>
+
+          <div class="daily-learning-fields">
+            <el-form-item label="文章标题模板" required><el-input v-model="form.article_title_template" maxlength="200" /></el-form-item>
+            <el-form-item label="文章别名模板" required><el-input v-model="form.article_slug_template" maxlength="160" /></el-form-item>
+          </div>
+          <el-form-item label="文章摘要模板">
+            <el-input v-model="form.article_summary_template" type="textarea" :rows="2" maxlength="5000" show-word-limit />
+          </el-form-item>
+
+          <div class="daily-learning-fields">
+            <el-form-item label="文章作者"><el-input v-model="form.author" maxlength="100" /></el-form-item>
+            <el-form-item label="文章分类" required>
+              <el-select v-model="form.category_id" placeholder="选择分类" :disabled="!categoryOptions.length">
+                <el-option v-for="item in categoryOptions" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+              <span v-if="!categoryOptions.length" class="field-help field-error">暂无分类，请先在“分类与标签”中创建。</span>
+            </el-form-item>
+          </div>
+          <div class="daily-learning-fields">
+            <el-form-item label="所属专题">
+              <el-select v-model="form.series_id" clearable placeholder="不加入专题">
+                <el-option v-for="item in seriesOptions" :key="item.id" :label="item.title" :value="item.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="文章标签">
+              <el-select v-model="form.tag_ids" multiple filterable placeholder="选择标签">
+                <el-option v-for="item in tagOptions" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+              <span class="field-help">可不选；只能选择“分类与标签”中已维护的标签。</span>
+            </el-form-item>
+          </div>
+
+          <div class="daily-learning-fields">
+            <el-form-item label="最大尝试次数" required>
+              <el-input-number v-model="form.max_attempts" :min="1" :max="10" controls-position="right" />
+            </el-form-item>
+            <el-form-item label="重试间隔（分钟）">
+              <el-input v-model="retryDelaysText" placeholder="例如：10, 30" />
+              <span class="field-help">按顺序填写，最多为最大尝试次数减一项；每项 1-1440 分钟。</span>
+            </el-form-item>
+          </div>
 
           <div class="daily-learning-actions">
             <el-button type="primary" :icon="Select" :loading="saving" @click="saveSettings">
@@ -267,16 +436,17 @@ onMounted(() => {
       </el-card>
 
       <el-card shadow="never" class="daily-learning-rules">
-        <template #header><strong>固定发布规则</strong></template>
+        <template #header><strong>当前生效配置</strong></template>
         <dl>
-          <div><dt>文章标题</dt><dd>YYYY-MM-DD-学习问答</dd></div>
-          <div><dt>文章别名</dt><dd>YYYY-MM-DD-学习记录</dd></div>
-          <div><dt>文章分类</dt><dd>每日问答</dd></div>
-          <div><dt>所属专题</dt><dd>今日份学习</dd></div>
-          <div><dt>文章作者</dt><dd>AI自动生成</dd></div>
-          <div><dt>文章标签</dt><dd>{{ form.tags.join("、") || "尚未配置" }}</dd></div>
-          <div><dt>内容数量</dt><dd>10 道题目与参考答案</dd></div>
-          <div><dt>失败策略</dt><dd>最多 3 次，不发布残缺内容</dd></div>
+          <div><dt>发布计划</dt><dd>{{ scheduleSummary }}</dd></div>
+          <div><dt>生成主题</dt><dd>{{ form.generation_topic || "未配置" }}</dd></div>
+          <div><dt>内容数量</dt><dd>{{ form.generation_count }} 道问答</dd></div>
+          <div><dt>文章标题模板</dt><dd>{{ form.article_title_template || "未配置" }}</dd></div>
+          <div><dt>文章别名模板</dt><dd>{{ form.article_slug_template || "未配置" }}</dd></div>
+          <div><dt>文章分类</dt><dd>{{ selectedCategoryName }}</dd></div>
+          <div><dt>所属专题</dt><dd>{{ selectedSeriesName }}</dd></div>
+          <div><dt>文章标签</dt><dd>{{ selectedTagNames.join("、") || "未配置" }}</dd></div>
+          <div><dt>失败策略</dt><dd>最多 {{ form.max_attempts }} 次，间隔 {{ retryDelaysText || "无" }} 分钟</dd></div>
         </dl>
       </el-card>
     </div>
@@ -362,7 +532,11 @@ onMounted(() => {
 }
 
 .daily-learning-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.daily-learning-fields .el-select,
+.daily-learning-fields .el-input-number,
+.daily-learning-fields .el-input { width: 100%; }
 .daily-learning-actions { justify-content: flex-start; flex-wrap: wrap; }
+.field-error { color: #c45656; }
 .daily-learning-rules dl { display: grid; gap: 0; margin: 0; }
 .daily-learning-rules dl > div { display: grid; gap: 0.25rem; padding: 0.8rem 0; border-bottom: 1px solid #e7ebef; }
 .daily-learning-rules dl > div:last-child { border-bottom: 0; }

@@ -23,7 +23,7 @@ export function testDailyLearningAI() {
 }
 
 export function runDailyLearningNow() {
-  return request<DailyLearningRun>({ url: "/daily-learning/run-now", method: "POST" });
+  return request<DailyLearningRun>({ url: "/daily-learning/run-now", method: "POST", timeout: 120000 });
 }
 
 export function fetchDailyLearningRuns(limit = 20) {

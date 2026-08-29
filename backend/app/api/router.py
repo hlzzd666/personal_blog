@@ -157,7 +157,7 @@ def read_daily_learning_settings(
     session: Session = Depends(get_db_session),
 ) -> ApiResponse[DailyLearningSettingsResponse]:
     record = get_daily_learning_settings(session)
-    return build_success_response(request, serialize_daily_learning_settings(record))
+    return build_success_response(request, serialize_daily_learning_settings(session, record))
 
 
 @router.put(
@@ -759,7 +759,10 @@ def delete_manage_series(
     series = get_series(session, series_id)
     if series is None:
         raise HTTPException(status_code=404, detail="专题不存在")
-    delete_series(session, series)
+    try:
+        delete_series(session, series)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     return build_success_response(request, {"id": series_id}, message="专题已删除，文章关联已解除")
 
 

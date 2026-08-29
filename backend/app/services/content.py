@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.cache import invalidate_article_list_cache
 from backend.app.models.article import Article
 from backend.app.models.content import Note, Series
+from backend.app.models.daily_learning import DailyLearningSettings
 from backend.app.schemas.article import ArticleResponse
 from backend.app.schemas.content import (
     DashboardStatsResponse,
@@ -95,6 +96,8 @@ def update_series(session: Session, series: Series, payload: SeriesPayload) -> S
 
 
 def delete_series(session: Session, series: Series) -> None:
+    if session.scalar(select(DailyLearningSettings.id).where(DailyLearningSettings.series_id == series.id)):
+        raise ValueError("专题正在被每日问答配置使用，不能删除")
     session.execute(
         update(Article)
         .where(Article.series_id == series.id)

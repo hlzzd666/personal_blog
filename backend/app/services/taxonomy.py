@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.cache import invalidate_article_list_cache
 from backend.app.models.article import Article, ArticleCategory, ArticleTag, ArticleTagLink
+from backend.app.models.daily_learning import DailyLearningSettings
 from backend.app.schemas.article import ArticlePayload
 from backend.app.schemas.taxonomy import (
     ArticleTaxonomyResponse,
@@ -96,6 +97,10 @@ def update_category(session: Session, category: ArticleCategory, payload: Taxono
 def delete_category(session: Session, category: ArticleCategory) -> None:
     if _category_count(session, category.id):
         raise ValueError("分类正在被文章使用，不能删除")
+    if session.scalar(
+        select(DailyLearningSettings.id).where(DailyLearningSettings.category_id == category.id)
+    ):
+        raise ValueError("分类正在被每日问答配置使用，不能删除")
     session.delete(category)
     session.commit()
     invalidate_article_list_cache()
@@ -134,6 +139,9 @@ def update_tag(session: Session, tag: ArticleTag, payload: TaxonomyPayload) -> T
 def delete_tag(session: Session, tag: ArticleTag) -> None:
     if _tag_count(session, tag.id):
         raise ValueError("标签正在被文章使用，不能删除")
+    settings = session.scalar(select(DailyLearningSettings).where(DailyLearningSettings.id == 1))
+    if settings and tag.id in (settings.tag_ids or []):
+        raise ValueError("标签正在被每日问答配置使用，不能删除")
     session.delete(tag)
     session.commit()
     invalidate_article_list_cache()
@@ -143,12 +151,16 @@ def apply_article_taxonomy(
     session: Session,
     article: Article,
     payload: ArticlePayload | None = None,
+    *,
+    category_id: int | None = None,
+    tag_ids: list[int] | None = None,
 ) -> None:
-    values = (
-        payload.model_dump()
-        if payload is not None
-        else {"category_id": None, "tag_ids": None, "category": article.category, "tags": article.tags}
-    )
+    values = payload.model_dump() if payload is not None else {
+        "category_id": category_id,
+        "tag_ids": tag_ids,
+        "category": article.category,
+        "tags": article.tags,
+    }
     category_id = values.pop("category_id")
     tag_ids = values.pop("tag_ids")
 

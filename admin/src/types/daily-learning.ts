@@ -1,18 +1,37 @@
 export type DailyLearningSettings = {
   enabled: boolean;
   publish_time: string;
+  schedule_type: "daily" | "weekly" | "monthly";
+  schedule_weekday: number | null;
+  schedule_day: number | null;
   ai_base_url: string;
   ai_model: string;
   api_key_configured: boolean;
+  generation_topic: string;
+  system_prompt: string;
   generation_instructions: string;
+  generation_count: number;
+  question_label: string;
+  answer_label: string;
+  article_title_template: string;
+  article_slug_template: string;
+  article_summary_template: string;
+  author: string;
+  series_id: number | null;
+  series_title: string | null;
+  category_id: number | null;
+  category: string | null;
+  tag_ids: number[];
   tags: string[];
+  max_attempts: number;
+  retry_delays_minutes: number[];
   timezone: string;
   updated_at: string;
 };
 
-export type DailyLearningSettingsPayload = Pick<
+export type DailyLearningSettingsPayload = Omit<
   DailyLearningSettings,
-  "enabled" | "publish_time" | "ai_base_url" | "ai_model" | "generation_instructions" | "tags"
+  "api_key_configured" | "series_title" | "category" | "timezone" | "updated_at"
 > & {
   api_key?: string | null;
 };

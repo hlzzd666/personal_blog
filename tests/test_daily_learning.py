@@ -1,11 +1,10 @@
 import json
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -14,7 +13,7 @@ from backend.app.core.config import settings
 from backend.app.core.database import get_db_session
 from backend.app.main import app
 from backend.app.models import Base
-from backend.app.models.article import Article
+from backend.app.models.article import Article, ArticleCategory, ArticleTag
 from backend.app.models.content import Series
 from backend.app.models.daily_learning import DailyLearningRun, DailyLearningSettings
 from backend.app.schemas.auth import AdminSessionResponse
@@ -27,8 +26,11 @@ from backend.app.services.auth import require_admin_session
 from backend.app.services.daily_learning import (
     DailyLearningAIError,
     DailyLearningConfigurationError,
+    AIConfiguration,
     _parse_generated_questions,
     encrypt_api_key,
+    generate_daily_questions,
+    is_publish_date,
     process_daily_learning_tick,
     update_daily_learning_settings,
     validate_ai_base_url,
@@ -38,14 +40,14 @@ from backend.app.services.daily_learning import (
 BEIJING = timezone(timedelta(hours=8))
 
 
-def generated_questions(prefix: str = "题目") -> GeneratedQuestionSet:
+def generated_questions(prefix: str = "题目", count: int = 10) -> GeneratedQuestionSet:
     return GeneratedQuestionSet(
         questions=[
             GeneratedQuestion(
                 question=f"{prefix}{index}是什么？",
                 answer=f"这是第 {index} 道题的完整参考答案，包含足够的解释。",
             )
-            for index in range(1, 11)
+            for index in range(1, count + 1)
         ]
     )
 
@@ -137,6 +139,10 @@ class DailyLearningTest(unittest.TestCase):
     def test_generated_content_requires_exactly_ten_unique_questions(self) -> None:
         valid = generated_questions().model_dump_json()
         self.assertEqual(len(_parse_generated_questions(valid, []).questions), 10)
+        self.assertEqual(
+            len(_parse_generated_questions(generated_questions(count=3).model_dump_json(), [], 3).questions),
+            3,
+        )
 
         invalid = {"questions": generated_questions().model_dump()["questions"][:9]}
         with self.assertRaises(DailyLearningAIError):
@@ -147,12 +153,114 @@ class DailyLearningTest(unittest.TestCase):
         with self.assertRaises(DailyLearningAIError):
             _parse_generated_questions(json.dumps(duplicate, ensure_ascii=False), [])
 
-    def test_settings_require_at_least_one_tag(self) -> None:
-        with self.assertRaises(ValidationError):
-            DailyLearningSettingsUpdate(tags=[" ", ""])
+    def test_settings_allow_empty_tags(self) -> None:
+        payload = DailyLearningSettingsUpdate(tags=[" ", ""])
+        self.assertEqual(payload.tags, [])
+
+    def test_publish_schedule_supports_weekly_and_month_end(self) -> None:
+        weekly = DailyLearningSettings(schedule_type="weekly", schedule_weekday=3)
+        monthly = DailyLearningSettings(schedule_type="monthly", schedule_day=31)
+        self.assertTrue(is_publish_date(datetime(2026, 8, 26).date(), weekly))
+        self.assertFalse(is_publish_date(datetime(2026, 8, 27).date(), weekly))
+        self.assertTrue(is_publish_date(datetime(2026, 2, 28).date(), monthly))
+
+    def test_generation_request_uses_configured_prompt_and_count(self) -> None:
+        response = MagicMock(is_redirect=False, status_code=200)
+        response.json.return_value = {
+            "choices": [{"message": {"content": generated_questions(count=3).model_dump_json()}}]
+        }
+        client = MagicMock()
+        client.post.return_value = response
+        configuration = AIConfiguration(
+            base_url="https://api.example.com/v1",
+            model="configured-model",
+            api_key="secret",
+            generation_instructions="只使用简短示例",
+            generation_topic="数据库索引",
+            system_prompt="你是数据库导师",
+            generation_count=3,
+        )
+        with patch("backend.app.services.daily_learning.httpx.Client") as client_class:
+            client_class.return_value.__enter__.return_value = client
+            result = generate_daily_questions(configuration, [])
+
+        self.assertEqual(len(result.questions), 3)
+        request_payload = client.post.call_args.kwargs["json"]
+        self.assertEqual(request_payload["messages"][0]["content"], "你是数据库导师")
+        self.assertIn("数据库索引", request_payload["messages"][1]["content"])
+        self.assertIn("只使用简短示例", request_payload["messages"][1]["content"])
+        self.assertIn("恰好 3 道问答", request_payload["messages"][1]["content"])
+
+    def test_settings_support_dynamic_question_count_and_clear_series(self) -> None:
+        record = self.add_settings()
+        category = ArticleCategory(name="可配置分类")
+        series = Series(slug="config-series", title="可配置专题")
+        tag = ArticleTag(name="可配置标签")
+        self.session.add_all([category, series, tag])
+        self.session.flush()
+        with patch(
+            "backend.app.services.daily_learning.validate_ai_base_url",
+            side_effect=lambda value: value,
+        ):
+            result = update_daily_learning_settings(
+                self.session,
+                DailyLearningSettingsUpdate(
+                    enabled=False,
+                    publish_time="09:00",
+                    ai_base_url="https://api.example.com/v1",
+                    ai_model="test-model",
+                    category_id=category.id,
+                    tag_ids=[tag.id],
+                    series_id=series.id,
+                    generation_count=3,
+                    article_title_template="学习 {date}",
+                    article_slug_template="learning-{date}",
+                    article_summary_template="{year}/{month}/{day}",
+                    retry_delays_minutes=[5],
+                ),
+            )
+        self.assertEqual(result.generation_count, 3)
+        self.assertEqual(result.tag_ids, [tag.id])
+        self.assertEqual(result.series_id, series.id)
+        self.assertEqual(record.category_id, category.id)
+
+        with patch(
+            "backend.app.services.daily_learning.validate_ai_base_url",
+            side_effect=lambda value: value,
+        ):
+            cleared = update_daily_learning_settings(
+                self.session,
+                DailyLearningSettingsUpdate(
+                    enabled=False,
+                    publish_time="09:00",
+                    ai_base_url="https://api.example.com/v1",
+                    ai_model="test-model",
+                    category_id=category.id,
+                    tag_ids=[],
+                    series_id=None,
+                    generation_count=3,
+                    article_title_template="学习 {date}",
+                    article_slug_template="learning-{date}",
+                    article_summary_template="{year}/{month}/{day}",
+                    max_attempts=1,
+                    retry_delays_minutes=[],
+                ),
+            )
+        self.assertIsNone(cleared.series_id)
+        self.assertEqual(cleared.max_attempts, 1)
+        self.assertEqual(cleared.retry_delays_minutes, [])
 
     def test_tick_publishes_once_and_orders_series(self) -> None:
-        self.add_settings()
+        record = self.add_settings()
+        category = ArticleCategory(name="每日问答")
+        tags = [ArticleTag(name=name) for name in record.tags]
+        series = Series(slug="daily-learning", title="今日份学习")
+        self.session.add_all([category, *tags, series])
+        self.session.flush()
+        record.category_id = category.id
+        record.tag_ids = [tag.id for tag in tags]
+        record.series_id = series.id
+        self.session.commit()
         calls = 0
 
         def generator(_configuration, _previous):
