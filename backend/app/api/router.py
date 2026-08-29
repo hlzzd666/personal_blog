@@ -38,6 +38,12 @@ from backend.app.schemas.content import (
     SeriesResponse,
 )
 from backend.app.schemas.media import MediaCleanupResponse, MediaListResponse
+from backend.app.schemas.taxonomy import (
+    ArticleTaxonomyResponse,
+    TaxonomyItem,
+    TaxonomyListResponse,
+    TaxonomyPayload,
+)
 from backend.app.schemas.daily_learning import (
     DailyLearningRunListResponse,
     DailyLearningRunResponse,
@@ -92,6 +98,18 @@ from backend.app.services.daily_learning import (
     serialize_settings as serialize_daily_learning_settings,
     test_daily_learning_ai,
     update_daily_learning_settings,
+)
+from backend.app.models.article import ArticleCategory, ArticleTag
+from backend.app.services.taxonomy import (
+    create_category,
+    create_tag,
+    delete_category,
+    delete_tag,
+    get_article_taxonomy,
+    list_categories,
+    list_tags,
+    update_category,
+    update_tag,
 )
 
 router = APIRouter()
@@ -389,6 +407,163 @@ def read_public_articles(
         request,
         article_list,
     )
+
+
+@router.get("/article-taxonomy", tags=["article-taxonomy"], response_model=ApiResponse[ArticleTaxonomyResponse])
+def read_article_taxonomy(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[ArticleTaxonomyResponse]:
+    return build_success_response(request, get_article_taxonomy(session))
+
+
+@router.get(
+    "/article-taxonomy/categories",
+    tags=["article-taxonomy"],
+    response_model=ApiResponse[TaxonomyListResponse],
+)
+def read_article_categories(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[TaxonomyListResponse]:
+    return build_success_response(request, list_categories(session))
+
+
+@router.post(
+    "/article-taxonomy/categories",
+    tags=["article-taxonomy"],
+    response_model=ApiResponse[TaxonomyItem],
+)
+def create_article_category(
+    request: Request,
+    payload: TaxonomyPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[TaxonomyItem]:
+    try:
+        item = create_category(session, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, item, message="分类已创建")
+
+
+@router.put(
+    "/article-taxonomy/categories/{category_id}",
+    tags=["article-taxonomy"],
+    response_model=ApiResponse[TaxonomyItem],
+)
+def update_article_category(
+    request: Request,
+    category_id: int,
+    payload: TaxonomyPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[TaxonomyItem]:
+    category = session.get(ArticleCategory, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail="分类不存在")
+    try:
+        item = update_category(session, category, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, item, message="分类已更新")
+
+
+@router.delete(
+    "/article-taxonomy/categories/{category_id}",
+    tags=["article-taxonomy"],
+    response_model=ApiResponse[dict[str, int]],
+)
+def remove_article_category(
+    request: Request,
+    category_id: int,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[dict[str, int]]:
+    category = session.get(ArticleCategory, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail="分类不存在")
+    try:
+        delete_category(session, category)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, {"id": category_id}, message="分类已删除")
+
+
+@router.get(
+    "/article-taxonomy/tags",
+    tags=["article-taxonomy"],
+    response_model=ApiResponse[TaxonomyListResponse],
+)
+def read_article_tags(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[TaxonomyListResponse]:
+    return build_success_response(request, list_tags(session))
+
+
+@router.post(
+    "/article-taxonomy/tags",
+    tags=["article-taxonomy"],
+    response_model=ApiResponse[TaxonomyItem],
+)
+def create_article_tag(
+    request: Request,
+    payload: TaxonomyPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[TaxonomyItem]:
+    try:
+        item = create_tag(session, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, item, message="标签已创建")
+
+
+@router.put(
+    "/article-taxonomy/tags/{tag_id}",
+    tags=["article-taxonomy"],
+    response_model=ApiResponse[TaxonomyItem],
+)
+def update_article_tag(
+    request: Request,
+    tag_id: int,
+    payload: TaxonomyPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[TaxonomyItem]:
+    tag = session.get(ArticleTag, tag_id)
+    if tag is None:
+        raise HTTPException(status_code=404, detail="标签不存在")
+    try:
+        item = update_tag(session, tag, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, item, message="标签已更新")
+
+
+@router.delete(
+    "/article-taxonomy/tags/{tag_id}",
+    tags=["article-taxonomy"],
+    response_model=ApiResponse[dict[str, int]],
+)
+def remove_article_tag(
+    request: Request,
+    tag_id: int,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[dict[str, int]]:
+    tag = session.get(ArticleTag, tag_id)
+    if tag is None:
+        raise HTTPException(status_code=404, detail="标签不存在")
+    try:
+        delete_tag(session, tag)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, {"id": tag_id}, message="标签已删除")
 
 
 @router.get("/articles/manage", tags=["articles"], response_model=ApiResponse[ArticleListResponse])

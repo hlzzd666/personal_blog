@@ -36,14 +36,24 @@ onMounted(async () => {
 <template>
   <main ref="pageRoot" class="content-hub series-hub">
     <OceanAtmosphere variant="series" />
-    <header class="content-hub-hero">
-      <RouterLink to="/">← 返回首页</RouterLink>
-      <p>SERIES / CHARTED ROUTES</p>
-      <h1>专题航线</h1>
-      <span>把分散的文章连成可连续阅读的航段。</span>
-      <strong>{{ items.length }} 条航线</strong>
+    <header class="content-hub-hero hub-masthead">
+      <div class="hub-hero-copy">
+        <RouterLink class="hub-back" to="/">← 返回首页</RouterLink>
+        <h1>专题航线</h1>
+        <p>把分散的文章连成可连续阅读的航段。</p>
+        <div class="hub-hero-meta"><span>CURATED ROUTES</span><strong>{{ items.length }} 条航线</strong></div>
+      </div>
+      <div class="hub-hero-aside">
+        <p>按主题收束文章，让一次阅读有起点，也有下一站。</p>
+        <div class="hub-instrument" aria-hidden="true">
+          <span class="hub-instrument-label">ROUTE INDEX</span>
+          <div class="hub-sweep"><i></i><i></i><i></i><i></i><i></i></div>
+          <span class="hub-instrument-note">FOLLOW THE CURRENT</span>
+        </div>
+      </div>
     </header>
 
+    <div class="hub-section-lead"><span>已标记航段</span><span>按阅读顺序排列</span></div>
     <section v-if="items.length" class="series-grid" aria-label="专题列表">
       <RouterLink
         v-for="(series, index) in displayItems"

@@ -12,8 +12,10 @@ const loadedBrand = ref("个人空间");
 const navVisible = ref(true);
 const navRevealing = ref(false);
 const searchOpen = ref(false);
+const articleNavigationResetKey = "articles-navigation-reset";
 let lastScrollY = 0;
 let revealTimer: number | undefined;
+let articleNavigationResetFrame: number | undefined;
 let loadingBrand = false;
 
 const brand = computed(() => props.brand ?? loadedBrand.value);
@@ -55,6 +57,37 @@ function handleShortcut(event: KeyboardEvent) {
   }
 }
 
+function handleArticlesNavigation(event: MouseEvent) {
+  if (
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    return;
+  }
+
+  if (route.path === "/articles") {
+    sessionStorage.removeItem(articleNavigationResetKey);
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    return;
+  }
+
+  sessionStorage.setItem(articleNavigationResetKey, "1");
+  if (articleNavigationResetFrame !== undefined) {
+    window.cancelAnimationFrame(articleNavigationResetFrame);
+  }
+  articleNavigationResetFrame = window.requestAnimationFrame(() => {
+    articleNavigationResetFrame = window.requestAnimationFrame(() => {
+      articleNavigationResetFrame = undefined;
+      if (window.location.pathname !== "/articles") return;
+      sessionStorage.removeItem(articleNavigationResetKey);
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  });
+}
+
 onMounted(() => {
   void loadBrand();
   window.addEventListener("scroll", handleScroll, { passive: true });
@@ -77,6 +110,9 @@ onBeforeUnmount(() => {
   window.removeEventListener("scroll", handleScroll);
   window.removeEventListener("keydown", handleShortcut);
   window.clearTimeout(revealTimer);
+  if (articleNavigationResetFrame !== undefined) {
+    window.cancelAnimationFrame(articleNavigationResetFrame);
+  }
 });
 </script>
 
@@ -98,7 +134,12 @@ onBeforeUnmount(() => {
         搜索
       </button>
       <RouterLink :to="{ path: '/', hash: '#hero' }">首页</RouterLink>
-      <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">文章</RouterLink>
+      <RouterLink
+        :to="{ path: '/articles', query: { view: 'archive' } }"
+        @click="handleArticlesNavigation"
+      >
+        文章
+      </RouterLink>
       <RouterLink to="/series">专题</RouterLink>
       <RouterLink to="/notes">动态</RouterLink>
       <RouterLink to="/about">关于我</RouterLink>

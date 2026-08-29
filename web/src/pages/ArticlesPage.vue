@@ -43,6 +43,7 @@ let pageIsActive = false;
 const pageSize = 20;
 const visualAssetRotationMs = 6000;
 const articleListReturnStorageKey = "article-list-return-path";
+const articleNavigationResetKey = "articles-navigation-reset";
 const currentPage = ref(0);
 const totalArticles = ref(0);
 const allPagesLoaded = ref(false);
@@ -387,6 +388,13 @@ function observeLoadMoreSentinel() {
   pageObserver.observe(loadMoreSentinel.value);
 }
 
+function consumeArticleNavigationReset() {
+  if (sessionStorage.getItem(articleNavigationResetKey) !== "1") return false;
+  sessionStorage.removeItem(articleNavigationResetKey);
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  return true;
+}
+
 onMounted(() => {
   document.addEventListener("visibilitychange", handleVisualAssetVisibilityChange);
   syncFiltersFromRoute();
@@ -398,6 +406,11 @@ onActivated(async () => {
   pageIsActive = true;
   startVisualAssetRotation();
   addPageListeners();
+  if (consumeArticleNavigationReset()) {
+    revealVisibleEntries();
+    observeLoadMoreSentinel();
+    return;
+  }
   if (!hasBeenDeactivated) {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     revealVisibleEntries();

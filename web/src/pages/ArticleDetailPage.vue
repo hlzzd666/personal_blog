@@ -551,7 +551,16 @@ onBeforeUnmount(() => {
               <div><span>浏览</span><strong>{{ article.views }}</strong></div>
             </div>
           </div>
-          <img v-if="article.cover_image_url" class="article-hero-cover" :src="article.cover_image_url" :alt="article.title" />
+          <div v-if="article.cover_image_url" class="article-hero-visual" aria-label="文章封面信标">
+            <span class="cover-route-line" aria-hidden="true"></span>
+            <div class="cover-frame">
+              <span class="cover-grid" aria-hidden="true"></span>
+              <span class="cover-coordinate cover-coordinate-top">SIGNAL / {{ articleNumber }}</span>
+              <span class="cover-coordinate cover-coordinate-bottom">{{ article.category }} · COVER FRAME</span>
+              <span class="cover-beacon" aria-hidden="true"><i></i><b></b></span>
+              <img class="article-hero-cover" :src="article.cover_image_url" :alt="article.title" />
+            </div>
+          </div>
         </div>
       </header>
 
@@ -716,7 +725,7 @@ onBeforeUnmount(() => {
 .article-hero { position: relative; padding: 5.9rem 1.5rem 1.55rem; border-bottom: 1px solid rgba(24, 49, 56, 0.08); background: rgba(255, 250, 242, 0.55); }
 .article-hero::before { content: ""; position: absolute; inset: auto 0 0; height: 1px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(39, 111, 109, 0.2), transparent); }
 .article-hero.has-cover { background-image: none; }
-.article-hero-inner { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(10rem, 16rem); gap: clamp(1.2rem, 3vw, 2.5rem); align-items: center; width: min(1040px, 100%); margin: 0 auto; }
+.article-hero-inner { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 27rem); gap: clamp(2rem, 5vw, 4.5rem); align-items: center; width: min(1120px, 100%); margin: 0 auto; }
 .article-back-link { display: inline-flex; gap: 0.5rem; align-items: center; margin-bottom: 1.2rem; padding: 0; border: 0; color: var(--current); background: transparent; font-family: "Noto Sans SC", sans-serif; font-size: 0.78rem; text-decoration: none; cursor: pointer; transition: color 0.25s ease, transform 0.25s ease; }
 .article-back-link:hover, .article-back-link:focus-visible { color: var(--signal); transform: translateX(-0.3rem); }
 .hero-heading { max-width: 55rem; animation: hero-entry 0.7s 0.06s cubic-bezier(0.2, 0.76, 0.26, 1) both; }
@@ -728,7 +737,26 @@ onBeforeUnmount(() => {
 .article-manifest div { display: grid; gap: 0.2rem; padding: 0.65rem 0.75rem 0 0; }
 .article-manifest span { color: #7f918f; font-family: "Noto Sans SC", sans-serif; font-size: 0.62rem; }
 .article-manifest strong { color: var(--ink); font-family: "Noto Sans SC", sans-serif; font-size: 0.82rem; font-weight: 700; }
-.article-hero-cover { width: 100%; aspect-ratio: 16 / 10; max-height: 10.5rem; border: 1px solid rgba(24, 49, 56, 0.1); border-radius: 6px; object-fit: cover; box-shadow: 0 0.8rem 2rem rgba(24, 55, 60, 0.1); opacity: 0.9; }
+.article-hero-visual { position: relative; display: grid; place-items: center; min-height: clamp(18rem, 31vw, 24rem); isolation: isolate; animation: cover-entry 0.8s 0.1s cubic-bezier(0.2, 0.76, 0.26, 1) both; }
+.cover-route-line { position: absolute; top: 47%; left: -2.25rem; width: 4.25rem; border-top: 1px dashed rgba(39, 111, 109, 0.55); transform: rotate(-13deg); transform-origin: right center; }
+.cover-route-line::after { content: ""; position: absolute; top: -0.25rem; right: -0.2rem; width: 0.38rem; aspect-ratio: 1; border: 1px solid var(--signal); border-radius: 50%; background: var(--paper-soft); box-shadow: 0 0 0 0.3rem rgba(159, 122, 49, 0.11); }
+.cover-frame { position: relative; isolation: isolate; width: min(100%, 25rem); aspect-ratio: 4 / 3; padding: 0.8rem; border: 1px solid rgba(16, 47, 55, 0.72); background: #102f37; box-shadow: 1.1rem 1.3rem 0 rgba(16, 47, 55, 0.1), 0 1.6rem 2.8rem rgba(20, 52, 57, 0.18); transform: rotate(1.8deg); transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 320ms ease; }
+.cover-frame::before { content: ""; position: absolute; z-index: -1; inset: 0.55rem -0.62rem -0.62rem 0.55rem; border: 1px solid rgba(159, 122, 49, 0.62); pointer-events: none; }
+.cover-grid { position: absolute; z-index: 1; inset: 0.8rem; pointer-events: none; background-image: linear-gradient(rgba(220, 231, 223, 0.13) 1px, transparent 1px), linear-gradient(90deg, rgba(220, 231, 223, 0.13) 1px, transparent 1px); background-size: 2rem 2rem; mix-blend-mode: screen; opacity: 0.35; }
+.cover-grid::before, .cover-grid::after { content: ""; position: absolute; background: rgba(220, 231, 223, 0.46); }
+.cover-grid::before { top: 0; bottom: 0; left: 50%; width: 1px; }
+.cover-grid::after { left: 0; right: 0; top: 50%; height: 1px; }
+.article-hero-cover { display: block; width: 100%; height: 100%; border: 0; border-radius: 0; object-fit: cover; opacity: 0.92; filter: saturate(0.98) contrast(1.03); transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), filter 320ms ease; }
+.cover-coordinate { position: absolute; z-index: 2; color: rgba(244, 240, 223, 0.9); font: 600 0.54rem/1 "IBM Plex Mono", monospace; letter-spacing: 0.08em; text-shadow: 0 1px 0 rgba(3, 15, 22, 0.35); pointer-events: none; }
+.cover-coordinate-top { top: 1.2rem; left: 1.25rem; }
+.cover-coordinate-bottom { right: 1.2rem; bottom: 1.15rem; color: rgba(244, 202, 88, 0.92); }
+.cover-beacon { position: absolute; z-index: 3; top: 1.1rem; right: 1.15rem; display: grid; width: 0.82rem; aspect-ratio: 1; place-items: center; border: 1px solid rgba(244, 240, 223, 0.82); border-radius: 50%; background: rgba(16, 47, 55, 0.35); }
+.cover-beacon i { display: block; width: 0.3rem; aspect-ratio: 1; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 0.22rem rgba(201, 154, 66, 0.18); animation: beacon-pulse 2.8s ease-out infinite; }
+.cover-beacon b { position: absolute; inset: -0.35rem; border: 1px solid rgba(201, 154, 66, 0.38); border-radius: 50%; animation: beacon-ring 2.8s ease-out infinite; }
+@media (hover: hover) and (pointer: fine) {
+  .article-hero-visual:hover .cover-frame, .article-hero-visual:focus-within .cover-frame { box-shadow: 1.1rem 1.3rem 0 rgba(16, 47, 55, 0.13), 0 1.8rem 3.2rem rgba(20, 52, 57, 0.22); transform: rotate(0deg) translateY(-0.3rem); }
+  .article-hero-visual:hover .article-hero-cover, .article-hero-visual:focus-within .article-hero-cover { filter: saturate(1.08) contrast(1.05); transform: scale(1.025); }
+}
 
 .article-reading-layout { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 56rem); gap: clamp(2rem, 5vw, 4.5rem); width: min(1130px, calc(100% - 3rem)); margin: 0 auto; padding: 2.4rem 0 7rem; }
 .reading-rail-sticky { position: sticky; top: 6.4rem; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 1.55rem; max-height: calc(100vh - 8rem); }
@@ -904,13 +932,18 @@ onBeforeUnmount(() => {
 @keyframes orbit-turn { to { transform: rotate(360deg); } }
 @keyframes hero-entry { from { opacity: 0; transform: translateY(2.2rem); } to { opacity: 1; transform: translateY(0); } }
 @keyframes manifest-entry { from { opacity: 0; clip-path: inset(0 100% 0 0); } to { opacity: 1; clip-path: inset(0); } }
+@keyframes cover-entry { from { opacity: 0; transform: translate3d(1.8rem, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes beacon-pulse { 0%, 100% { box-shadow: 0 0 0 0.18rem rgba(201, 154, 66, 0.2); } 52% { box-shadow: 0 0 0 0.5rem rgba(201, 154, 66, 0); } }
+@keyframes beacon-ring { 0%, 100% { opacity: 0.8; transform: scale(0.9); } 65% { opacity: 0; transform: scale(1.35); } }
 @keyframes like-burst { 0%, 100% { transform: scale(1); } 42% { color: var(--signal); transform: scale(1.8) rotate(-10deg); filter: drop-shadow(0 0 0.5rem rgba(244, 202, 88, 0.7)); } }
 @keyframes radar-sweep { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {
   .article-hero { padding-top: 6.2rem; }
   .article-hero-inner { grid-template-columns: 1fr; }
-  .article-hero-cover { max-width: 24rem; max-height: 12rem; }
+  .article-hero-visual { justify-items: start; min-height: 19rem; margin-top: 0.8rem; }
+  .cover-frame { width: min(100%, 30rem); }
+  .cover-route-line { display: none; }
   .article-reading-layout { grid-template-columns: 1fr; width: min(56rem, calc(100% - 3rem)); padding-top: 2rem; }
   .reading-rail { display: none; }
   .document-scrollbar { right: 0.55rem; }
@@ -922,7 +955,14 @@ onBeforeUnmount(() => {
   .article-hero h1 { font-size: clamp(1.9rem, 8.5vw, 3rem); }
   .article-summary { font-size: 0.96rem; }
   .article-manifest { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1.15rem; }
-  .article-hero-cover { display: none; }
+  .article-hero-visual { min-height: 0; margin-top: 1.4rem; }
+  .cover-frame { width: 100%; padding: 0.62rem; transform: rotate(0.8deg); }
+  .cover-frame::before { inset: 0.42rem -0.35rem -0.4rem 0.35rem; }
+  .cover-grid { inset: 0.62rem; background-size: 1.3rem 1.3rem; }
+  .cover-coordinate { font-size: 0.5rem; }
+  .cover-coordinate-top { top: 0.95rem; left: 0.95rem; }
+  .cover-coordinate-bottom { right: 0.95rem; bottom: 0.88rem; }
+  .cover-beacon { top: 0.82rem; right: 0.85rem; }
   .article-reading-layout { width: calc(100% - 2rem); padding: 1.45rem 0 5rem; }
   .article-document { padding: 0; }
   .document-header { align-items: flex-start; flex-direction: column; }
@@ -947,9 +987,9 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chart-route-flow, .chart-orbit, .hero-heading, .article-manifest, .article-like-button.celebrated .like-symbol, .state-radar::before { animation: none; }
+  .chart-route-flow, .chart-orbit, .hero-heading, .article-manifest, .article-hero-visual, .cover-beacon i, .cover-beacon b, .article-like-button.celebrated .like-symbol, .state-radar::before { animation: none; }
   .markdown-body.motion-ready > :deep(*) { opacity: 1; transform: none; transition: none; }
-  .article-detail-tags a, .article-share-panel button, .article-series-link, .article-adjacent-links a, .related-articles a { transition: none; }
+  .article-detail-tags a, .article-share-panel button, .article-series-link, .article-adjacent-links a, .related-articles a, .cover-frame, .article-hero-cover { transition: none; }
   .reading-progress span, .article-toc button, .article-back-link, .article-like-button { transition: none; }
 }
 </style>

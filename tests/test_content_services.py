@@ -10,11 +10,14 @@ from sqlalchemy.pool import StaticPool
 from backend.app.core.database import get_db_session
 from backend.app.main import app
 from backend.app.models.base import Base
-from backend.app.models.article import Article
+from backend.app.models.article import Article, ArticleCategory, ArticleTag
 from backend.app.models.content import Note, Series
 from backend.app.schemas.auth import AdminSessionResponse
+from backend.app.schemas.article import ArticleCreate
 from backend.app.schemas.content import NotePayload, SeriesPayload
+from backend.app.schemas.taxonomy import TaxonomyPayload
 from backend.app.services.articles import get_article_context, list_articles
+from backend.app.services.articles import create_article
 from backend.app.services.auth import require_admin_session
 from backend.app.services.content import (
     create_note,
@@ -22,6 +25,17 @@ from backend.app.services.content import (
     delete_series,
     get_series_detail,
     list_notes,
+)
+from backend.app.services.taxonomy import (
+    apply_article_taxonomy,
+    create_category,
+    create_tag,
+    delete_category,
+    delete_tag,
+    list_categories,
+    list_tags,
+    update_category,
+    update_tag,
 )
 
 
@@ -173,6 +187,50 @@ class ContentServicesTest(unittest.TestCase):
         )
         result = list_notes(self.session, page=1, page_size=20, tag="vue")
         self.assertEqual([note.slug for note in result.items], ["vue-note"])
+
+    def test_article_taxonomy_mirrors_existing_article_fields(self) -> None:
+        category = create_category(self.session, TaxonomyPayload(name="技术", sort_order=2))
+        tag = create_tag(self.session, TaxonomyPayload(name="vue", sort_order=1))
+        article = self.article("taxonomy-article", tags=["vue"], category="技术")
+
+        apply_article_taxonomy(self.session, self.session.get(Article, article.id))
+        self.session.commit()
+        self.session.refresh(article)
+        self.assertEqual(article.category_id, category.id)
+        self.assertEqual(article.tag_ids, [tag.id])
+        self.assertEqual(list_categories(self.session).items[0].article_count, 1)
+        self.assertEqual(list_tags(self.session).items[0].article_count, 1)
+
+        update_category(self.session, self.session.get(ArticleCategory, category.id), TaxonomyPayload(name="工程", sort_order=0))
+        update_tag(self.session, self.session.get(ArticleTag, tag.id), TaxonomyPayload(name="vue3", sort_order=0))
+        self.session.refresh(article)
+        self.assertEqual(article.category, "工程")
+        self.assertEqual(article.tags, ["vue3"])
+
+        with self.assertRaisesRegex(ValueError, "正在被文章使用"):
+            delete_category(self.session, self.session.get(ArticleCategory, category.id))
+        with self.assertRaisesRegex(ValueError, "正在被文章使用"):
+            delete_tag(self.session, self.session.get(ArticleTag, tag.id))
+
+    def test_article_create_uses_taxonomy_ids(self) -> None:
+        category = create_category(self.session, TaxonomyPayload(name="前端", sort_order=0))
+        tag = create_tag(self.session, TaxonomyPayload(name="vue", sort_order=0))
+        article = create_article(
+            self.session,
+            ArticleCreate(
+                slug="taxonomy-id-article",
+                title="Taxonomy ID",
+                content_markdown="# Taxonomy ID",
+                category="旧分类",
+                category_id=category.id,
+                tags=["旧标签"],
+                tag_ids=[tag.id],
+            ),
+        )
+        self.assertEqual(article.category, "前端")
+        self.assertEqual(article.tags, ["vue"])
+        self.assertEqual(article.category_id, category.id)
+        self.assertEqual(article.tag_ids, [tag.id])
 
     def test_admin_write_requires_session(self) -> None:
         def override_session():

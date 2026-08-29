@@ -25,6 +25,11 @@ export const router = createRouter({
       children: [
         { path: "", name: "dashboard", component: DashboardPage },
         { path: "articles", name: "articles", component: ArticlesPage },
+        {
+          path: "article-taxonomy",
+          name: "article-taxonomy",
+          component: () => import("../pages/ArticleTaxonomyPage.vue"),
+        },
         { path: "series", name: "series", component: () => import("../pages/SeriesPage.vue") },
         { path: "notes", name: "notes", component: () => import("../pages/NotesPage.vue") },
         {

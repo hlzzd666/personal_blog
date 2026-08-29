@@ -117,7 +117,7 @@ onMounted(loadSeries);
     <PageHeader
       eyebrow="CURATED ROUTES"
       title="专题管理"
-      description="组织连续阅读路线。排序值越高，专题在前台列表中越靠前。"
+      description="组织连续阅读路线。排序值越小，专题在前台列表中越靠前。"
     />
 
     <div class="content-admin-toolbar">

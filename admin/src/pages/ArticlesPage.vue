@@ -7,12 +7,12 @@ import { MdEditor } from "md-editor-v3";
 import "md-editor-v3/lib/style.css";
 
 import { createArticle, deleteArticle, fetchManageArticles, updateArticle } from "../api/articles";
-import { fetchSeries } from "../api/content";
+import { fetchArticleTaxonomy, fetchSeries } from "../api/content";
 import { resolveErrorMessage } from "../api/http";
 import { uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type { Article, ArticlePayload } from "../types/article";
-import type { Series } from "../types/content";
+import type { Series, TaxonomyItem } from "../types/content";
 
 const emptyArticle = (): ArticlePayload => ({
   slug: "",
@@ -29,6 +29,8 @@ const emptyArticle = (): ArticlePayload => ({
   likes: 0,
   tags: [],
   category: "随笔",
+  category_id: null,
+  tag_ids: [],
   series_id: null,
   series_order: null,
 });
@@ -41,12 +43,15 @@ const drawerVisible = ref(false);
 const editingId = ref<number | null>(null);
 const searchText = ref("");
 const categoryFilter = ref("");
+const tagFilter = ref("");
 const page = ref(1);
 const form = reactive<ArticlePayload>(emptyArticle());
 const drawerTitle = computed(() => (editingId.value === null ? "写一篇新文章" : "编辑文章"));
 const markdownInput = ref<HTMLInputElement | null>(null);
 const importingMarkdown = ref(false);
 const seriesOptions = ref<Series[]>([]);
+const categoryOptions = ref<TaxonomyItem[]>([]);
+const tagOptions = ref<TaxonomyItem[]>([]);
 const route = useRoute();
 
 function formatDate(value: string | null) {
@@ -66,6 +71,7 @@ async function loadArticles() {
       page_size: 20,
       search: searchText.value || undefined,
       category: categoryFilter.value || undefined,
+      tag: tagFilter.value || undefined,
     });
     articles.value = result.items;
     total.value = result.total;
@@ -84,9 +90,25 @@ async function loadSeriesOptions() {
   }
 }
 
+async function loadTaxonomyOptions() {
+  try {
+    const taxonomy = await fetchArticleTaxonomy();
+    categoryOptions.value = taxonomy.categories;
+    tagOptions.value = taxonomy.tags;
+  } catch {
+    categoryOptions.value = [];
+    tagOptions.value = [];
+  }
+}
+
 function openCreate() {
   editingId.value = null;
   resetForm();
+  const defaultCategory = categoryOptions.value[0];
+  if (defaultCategory) {
+    form.category_id = defaultCategory.id;
+    form.category = defaultCategory.name;
+  }
   drawerVisible.value = true;
 }
 
@@ -96,16 +118,31 @@ function openEdit(article: Article) {
     ...article,
     published_at: article.published_at?.slice(0, 19) ?? null,
     updated_at: article.updated_at?.slice(0, 19) ?? null,
+    category_id: article.category_id ?? categoryOptions.value.find((item) => item.name === article.category)?.id ?? null,
+    tag_ids: article.tag_ids?.length
+      ? [...article.tag_ids]
+      : article.tags
+          .map((tag) => tagOptions.value.find((item) => item.name === tag)?.id)
+          .filter((id): id is number => id !== undefined),
   });
   drawerVisible.value = true;
 }
 
 async function saveArticle() {
+  const category = categoryOptions.value.find((item) => item.id === form.category_id);
+  const selectedTags = tagOptions.value.filter((item) => form.tag_ids.includes(item.id));
+  if (!category) {
+    ElMessage.warning("请先在分类与标签中维护并选择文章分类");
+    return;
+  }
   const payload: ArticlePayload = {
     ...form,
+    category: category.name,
+    category_id: category.id,
+    tags: selectedTags.map((tag) => tag.name),
+    tag_ids: [...form.tag_ids],
     cover_image_url: form.cover_image_url || null,
     source_url: form.source_url || null,
-    tags: form.tags.map((tag) => tag.trim()).filter(Boolean),
     series_order: form.series_id === null ? null : form.series_order,
   };
   saving.value = true;
@@ -213,6 +250,7 @@ onMounted(async () => {
   const queryEdit = typeof route.query.edit === "string" ? Number(route.query.edit) : null;
   searchText.value = querySearch;
   await Promise.all([loadArticles(), loadSeriesOptions()]);
+  await loadTaxonomyOptions();
   if (queryEdit !== null && Number.isInteger(queryEdit)) {
     const article = articles.value.find((item) => item.id === queryEdit);
     if (article) openEdit(article);
@@ -233,7 +271,12 @@ onMounted(async () => {
         <el-input v-model="searchText" clearable placeholder="搜索标题、别名或摘要" @keyup.enter="page = 1; loadArticles()">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-input v-model="categoryFilter" clearable placeholder="按分类筛选" @keyup.enter="page = 1; loadArticles()" />
+        <el-select v-model="categoryFilter" clearable placeholder="按分类筛选" @change="page = 1; loadArticles()">
+          <el-option v-for="item in categoryOptions" :key="item.id" :label="item.name" :value="item.name" />
+        </el-select>
+        <el-select v-model="tagFilter" clearable placeholder="按标签筛选" @change="page = 1; loadArticles()">
+          <el-option v-for="item in tagOptions" :key="item.id" :label="item.name" :value="item.name" />
+        </el-select>
         <el-button type="primary" :loading="loading" @click="page = 1; loadArticles()">查询</el-button>
       </div>
       <el-button type="primary" :icon="Plus" @click="openCreate">写入航行记录</el-button>
@@ -274,7 +317,11 @@ onMounted(async () => {
         <el-form-item label="文章摘要"><el-input v-model="form.summary" type="textarea" :rows="2" maxlength="500" show-word-limit /></el-form-item>
         <div class="editor-form-grid">
           <el-form-item label="文章作者"><el-input v-model="form.author" /></el-form-item>
-          <el-form-item label="文章分类"><el-input v-model="form.category" placeholder="随笔 / 技术 / 生活" /></el-form-item>
+          <el-form-item label="文章分类" required>
+            <el-select v-model="form.category_id" placeholder="选择分类">
+              <el-option v-for="item in categoryOptions" :key="item.id" :label="item.name" :value="item.id" />
+            </el-select>
+          </el-form-item>
         </div>
         <div class="editor-form-grid">
           <el-form-item label="所属专题">
@@ -283,7 +330,11 @@ onMounted(async () => {
             </el-select>
           </el-form-item>
         </div>
-        <el-form-item label="标签"><el-select v-model="form.tags" multiple filterable allow-create default-first-option placeholder="输入后回车添加标签"><el-option v-for="tag in form.tags" :key="tag" :label="tag" :value="tag" /></el-select></el-form-item>
+        <el-form-item label="标签">
+          <el-select v-model="form.tag_ids" multiple filterable placeholder="选择标签">
+            <el-option v-for="tag in tagOptions" :key="tag.id" :label="tag.name" :value="tag.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item required>
           <template #label>
             <div class="markdown-field-label">

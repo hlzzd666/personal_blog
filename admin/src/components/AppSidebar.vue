@@ -2,6 +2,7 @@
 import {
   ChatLineSquare,
   Collection,
+  CollectionTag,
   DataBoard,
   Document,
   MagicStick,
@@ -20,6 +21,7 @@ const router = useRouter();
 const iconMap = {
   ChatLineSquare,
   Collection,
+  CollectionTag,
   DataBoard,
   Document,
   MagicStick,

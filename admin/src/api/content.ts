@@ -1,11 +1,42 @@
 import { request } from "./http";
 import type {
+  ArticleTaxonomy,
   DashboardStats,
   Note,
   NotePayload,
   Series,
   SeriesPayload,
+  TaxonomyItem,
+  TaxonomyPayload,
 } from "../types/content";
+
+export function fetchArticleTaxonomy() {
+  return request<ArticleTaxonomy>({ url: "/article-taxonomy", method: "GET" });
+}
+
+export function createArticleCategory(payload: TaxonomyPayload) {
+  return request<TaxonomyItem>({ url: "/article-taxonomy/categories", method: "POST", data: payload });
+}
+
+export function updateArticleCategory(id: number, payload: TaxonomyPayload) {
+  return request<TaxonomyItem>({ url: `/article-taxonomy/categories/${id}`, method: "PUT", data: payload });
+}
+
+export function deleteArticleCategory(id: number) {
+  return request<{ id: number }>({ url: `/article-taxonomy/categories/${id}`, method: "DELETE" });
+}
+
+export function createArticleTag(payload: TaxonomyPayload) {
+  return request<TaxonomyItem>({ url: "/article-taxonomy/tags", method: "POST", data: payload });
+}
+
+export function updateArticleTag(id: number, payload: TaxonomyPayload) {
+  return request<TaxonomyItem>({ url: `/article-taxonomy/tags/${id}`, method: "PUT", data: payload });
+}
+
+export function deleteArticleTag(id: number) {
+  return request<{ id: number }>({ url: `/article-taxonomy/tags/${id}`, method: "DELETE" });
+}
 
 export function fetchSeries() {
   return request<{ items: Series[]; total: number }>({ url: "/series", method: "GET" });

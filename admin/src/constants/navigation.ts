@@ -1,6 +1,7 @@
 export const adminNavigation = [
   { label: "控制台", to: "/", icon: "DataBoard", group: "workspace" },
   { label: "文章管理", to: "/articles", icon: "Document", group: "content" },
+  { label: "分类与标签", to: "/article-taxonomy", icon: "CollectionTag", group: "content" },
   { label: "专题管理", to: "/series", icon: "Collection", group: "content" },
   { label: "短动态", to: "/notes", icon: "ChatLineSquare", group: "content" },
   { label: "每日问答", to: "/daily-learning", icon: "MagicStick", group: "content" },

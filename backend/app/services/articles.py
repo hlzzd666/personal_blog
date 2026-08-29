@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,7 @@ from backend.app.core.cache import (
     invalidate_article_list_cache,
     set_cache_value,
 )
-from backend.app.models.article import Article, ArticleLikeRecord
+from backend.app.models.article import Article, ArticleCategory, ArticleLikeRecord, ArticleTag, ArticleTagLink
 from backend.app.models.content import Series
 from backend.app.schemas.article import (
     ArticleContextResponse,
@@ -24,6 +24,7 @@ from backend.app.schemas.article import (
     ArticleSeriesSummary,
     ArticleSummary,
 )
+from backend.app.services.taxonomy import apply_article_taxonomy
 
 ArticleListCacheStatus = Literal["HIT", "MISS", "BYPASS"]
 
@@ -37,6 +38,14 @@ def _article_date_order():
     )
 
 
+def _article_category_name(article: Article) -> str:
+    return article.category_ref.name if article.category_ref else article.category or "未分类"
+
+
+def _article_tag_names(article: Article) -> list[str]:
+    return [link.tag.name for link in article.tag_links if link.tag] or list(article.tags or [])
+
+
 def build_article_filters(
     *,
     category: str | None = None,
@@ -45,9 +54,28 @@ def build_article_filters(
 ) -> list:
     filters = []
     if category:
-        filters.append(Article.category == category)
+        filters.append(
+            or_(
+                Article.category == category,
+                exists(
+                    select(ArticleCategory.id).where(
+                        ArticleCategory.id == Article.category_id,
+                        ArticleCategory.name == category,
+                    )
+                ),
+            )
+        )
     if tag:
-        filters.append(Article.tags.contains(tag))
+        filters.append(
+            or_(
+                Article.tags.contains(tag),
+                exists(
+                    select(ArticleTagLink.article_id)
+                    .join(ArticleTag, ArticleTag.id == ArticleTagLink.tag_id)
+                    .where(ArticleTagLink.article_id == Article.id, ArticleTag.name == tag)
+                ),
+            )
+        )
     if search:
         keyword = f"%{search.strip()}%"
         filters.append(
@@ -112,9 +140,9 @@ def get_article_list_stats(
     category_counts: dict[str, int] = {}
     tag_counts: dict[str, int] = {}
     for article in all_articles:
-        category_name = article.category or "未分类"
+        category_name = _article_category_name(article)
         category_counts[category_name] = category_counts.get(category_name, 0) + 1
-        for article_tag in article.tags or []:
+        for article_tag in _article_tag_names(article):
             tag_counts[article_tag] = tag_counts.get(article_tag, 0) + 1
 
     return ArticleListStats(
@@ -223,13 +251,13 @@ def get_article_context(session: Session, slug: str) -> ArticleContextResponse |
         next_article = ordered[index - 1] if index > 0 else None
         previous_article = ordered[index + 1] if index + 1 < len(ordered) else None
 
-    article_tags = set(article.tags or [])
+    article_tags = set(_article_tag_names(article))
     related = sorted(
         all_articles,
         key=lambda candidate: (
             int(article.series_id is not None and candidate.series_id == article.series_id),
             len(article_tags.intersection(candidate.tags or [])),
-            int(candidate.category == article.category),
+            int(_article_category_name(candidate) == _article_category_name(article)),
             candidate.published_at or candidate.created_at,
             candidate.id,
         ),
@@ -254,6 +282,8 @@ def get_article(session: Session, article_id: int) -> Article | None:
 
 def create_article(session: Session, payload: ArticleCreate) -> Article:
     values = payload.model_dump()
+    values.pop("category_id", None)
+    values.pop("tag_ids", None)
     if values["series_id"] is not None and session.get(Series, values["series_id"]) is None:
         raise ValueError("所选专题不存在")
     if values["series_id"] is None:
@@ -264,6 +294,7 @@ def create_article(session: Session, payload: ArticleCreate) -> Article:
     if article.updated_at is None:
         article.updated_at = datetime.now()
     session.add(article)
+    apply_article_taxonomy(session, article, payload)
     try:
         session.commit()
     except IntegrityError as error:
@@ -276,6 +307,8 @@ def create_article(session: Session, payload: ArticleCreate) -> Article:
 
 def update_article(session: Session, article: Article, payload: ArticleUpdate) -> Article:
     values = payload.model_dump()
+    values.pop("category_id", None)
+    values.pop("tag_ids", None)
     if values["series_id"] is not None and session.get(Series, values["series_id"]) is None:
         raise ValueError("所选专题不存在")
     if values["series_id"] is None:
@@ -286,6 +319,7 @@ def update_article(session: Session, article: Article, payload: ArticleUpdate) -
         values.pop("updated_at")
     for key, value in values.items():
         setattr(article, key, value)
+    apply_article_taxonomy(session, article, payload)
     session.add(article)
     try:
         session.commit()

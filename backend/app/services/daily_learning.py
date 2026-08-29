@@ -31,6 +31,7 @@ from backend.app.schemas.daily_learning import (
     DailyLearningTestResponse,
     GeneratedQuestionSet,
 )
+from backend.app.services.taxonomy import apply_article_taxonomy
 
 logger = logging.getLogger(__name__)
 
@@ -547,6 +548,7 @@ def process_daily_learning_tick(
                 series_order=max_order + 1,
             )
             session.add(article)
+            apply_article_taxonomy(session, article)
             session.flush()
             run.status = "succeeded"
             run.article_id = article.id

@@ -17,6 +17,8 @@ class ArticlePayload(BaseModel):
     likes: int = Field(default=0, ge=0)
     tags: list[str] = Field(default_factory=list, max_length=20)
     category: str = Field(default="未分类", min_length=1, max_length=80)
+    category_id: int | None = Field(default=None, ge=1)
+    tag_ids: list[int] | None = Field(default=None, max_length=20)
     series_id: int | None = Field(default=None, ge=1)
     series_order: int | None = Field(default=None, ge=0, le=100000)
 
