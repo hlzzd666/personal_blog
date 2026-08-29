@@ -97,8 +97,8 @@ class ContentServicesTest(unittest.TestCase):
                 SeriesPayload(slug="deep-vue", title="重复专题"),
             )
 
-        self.article("second", series_id=series.id, series_order=20)
-        self.article("first", series_id=series.id, series_order=10)
+        self.article("second", series_id=series.id, series_order=20, published_offset=1)
+        self.article("first", series_id=series.id, series_order=10, published_offset=2)
         detail = get_series_detail(self.session, self.session.get(Series, series.id))
         self.assertEqual([article.slug for article in detail.articles], ["first", "second"])
 
@@ -119,9 +119,21 @@ class ContentServicesTest(unittest.TestCase):
             self.session,
             SeriesPayload(slug="route", title="阅读路线"),
         )
-        first = self.article("first", series_id=created.id, series_order=10, tags=["vue"])
-        current = self.article("current", series_id=created.id, series_order=20, tags=["vue", "api"])
-        third = self.article("third", series_id=created.id, series_order=30)
+        first = self.article(
+            "first",
+            series_id=created.id,
+            series_order=10,
+            tags=["vue"],
+            published_offset=3,
+        )
+        current = self.article(
+            "current",
+            series_id=created.id,
+            series_order=20,
+            tags=["vue", "api"],
+            published_offset=2,
+        )
+        third = self.article("third", series_id=created.id, series_order=30, published_offset=1)
         tagged = self.article("tagged", tags=["vue", "api"], published_offset=10)
         self.article("category-only", category="技术", published_offset=20)
 

@@ -241,7 +241,7 @@ def generate_daily_questions(
     )
     endpoint = f"{configuration.base_url}/chat/completions"
     try:
-        with httpx.Client(timeout=60, follow_redirects=False, trust_env=False) as client:
+        with httpx.Client(timeout=120, follow_redirects=False, trust_env=False) as client:
             response = client.post(
                 endpoint,
                 headers={

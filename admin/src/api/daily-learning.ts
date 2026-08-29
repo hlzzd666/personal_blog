@@ -18,7 +18,7 @@ export function testDailyLearningAI() {
   return request<DailyLearningTestResult>({
     url: "/daily-learning/test",
     method: "POST",
-    timeout: 70000,
+    timeout: 120000,
   });
 }
 

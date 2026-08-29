@@ -295,6 +295,9 @@ COOKIE_SECURE=false
 systemctl restart personal-blog-backend
 ```
 
+`personal-blog-daily-learning.service` 里的 `TimeoutStartSec=10min` 只影响定时执行器，不影响前台按钮的 `test` 请求。若上游 AI 偶尔超过 10 分钟，再单独把这个值调大。
+
+
 ### Nginx 配置
 
 文件：
@@ -344,6 +347,18 @@ location / {
     return 404;
 }
 ```
+
+如果服务器上已经有单独的 `/api/v1/` 反向代理段，`/daily-learning/test`、`/daily-learning/run-now` 和定时任务相关接口都要沿用同一套代理规则。由于测试 AI 和正式生成都会同步等待上游 AI 返回，建议把这类接口的代理超时调到高于 70 秒，避免 nginx 先返回 `504 Gateway Time-out`。生产服务器已经按这个要求调整过时，请保持一致。
+
+参考写法如下，直接加到 `/api/v1/` 的 `location` 中即可：
+
+```nginx
+proxy_connect_timeout 10s;
+proxy_send_timeout 120s;
+proxy_read_timeout 120s;
+send_timeout 120s;
+```
+
 
 前台正式入口固定为 `http://47.111.75.30/web/`。Vue Router 子路由也位于该前缀下，
 例如文章列表为 `/web/articles`、关于页面为 `/web/about`。根路径只负责跳转，

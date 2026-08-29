@@ -10,4 +10,4 @@ Group=personal_blog
 WorkingDirectory=/opt/personal_blog
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/personal_blog/.venv/bin/python -m backend.scripts.publish_daily_learning
-TimeoutStartSec=5min
+TimeoutStartSec=10min

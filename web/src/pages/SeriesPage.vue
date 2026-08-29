@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import { fetchSeries, type Series } from "../api/content";
 import OceanAtmosphere from "../components/OceanAtmosphere.vue";
@@ -7,6 +7,9 @@ import { useSeo } from "../composables/useSeo";
 import { useViewportReveal } from "../composables/useViewportReveal";
 
 const items = ref<Series[]>([]);
+const displayItems = computed(() =>
+  [...items.value].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
+);
 const loading = ref(true);
 const errorText = ref("");
 const pageRoot = ref<HTMLElement | null>(null);
@@ -43,7 +46,7 @@ onMounted(async () => {
 
     <section v-if="items.length" class="series-grid" aria-label="专题列表">
       <RouterLink
-        v-for="(series, index) in items"
+        v-for="(series, index) in displayItems"
         :key="series.id"
         class="series-card reveal-item"
         data-reveal
