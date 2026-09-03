@@ -306,7 +306,9 @@ systemctl restart personal-blog-backend
 /etc/nginx/sites-available/personal-blog-backend
 ```
 
-当前前台路径规则如下。`/api/`、`/uploads/` 和 `/admin/` 的原有规则必须保留：
+当前前台路径规则如下。若 IP 和域名同时使用，`47.111.75.30` 必须独立作为
+`listen 80 default_server` 的 `server_name`，不能和域名一起放进跳转到 HTTPS 域名的
+server 块；`/api/`、`/uploads/` 和 `/admin/` 的原有规则必须保留：
 
 ```nginx
 location = / {
@@ -340,7 +342,7 @@ location = /feed.xml {
 
 location /web/ {
     alias /var/www/personal_blog/web-current/;
-    try_files $uri $uri/ /web/index.html;
+    try_files $uri /web/index.html;
 }
 
 location / {
