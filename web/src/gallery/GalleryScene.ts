@@ -31,11 +31,13 @@ const WALKWAY_TILE_COLUMNS = 4;
 const POSTER_TEXTURE_WIDTH = 512;
 const POSTER_TEXTURE_HEIGHT = 768;
 const MAX_POSTER_TEXTURES = 12;
-const WATER_MAP_URL = "/gallery/generated/calm-ocean-color-tile.png";
-const STONE_MAP_URL = "/gallery/generated/light-travertine-color-tile.png";
-const FRAME_BRASS_MAP_URL = "/gallery/generated/frame-relief-champagne-brass-tile.png";
-const COMPASS_ROSE_URL = "/gallery/generated/compass-rose-inlay.png";
-const PANORAMA_URL = "/gallery/generated/sunrise-ocean-panorama-seamless.png";
+const WEB_BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "");
+const galleryAsset = (path: string) => `${WEB_BASE_PATH}/gallery/generated/${path}`;
+const WATER_MAP_URL = galleryAsset("calm-ocean-color-tile.png");
+const STONE_MAP_URL = galleryAsset("light-travertine-color-tile.png");
+const FRAME_BRASS_MAP_URL = galleryAsset("frame-relief-champagne-brass-tile.png");
+const COMPASS_ROSE_URL = galleryAsset("compass-rose-inlay.png");
+const PANORAMA_URL = galleryAsset("sunrise-ocean-panorama-seamless.png");
 
 export class GalleryScene {
   private readonly scene = new THREE.Scene();
