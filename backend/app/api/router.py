@@ -44,7 +44,6 @@ from backend.app.schemas.gallery import (
     GalleryCharacterOrderPayload,
     GalleryCharacterPayload,
     GalleryCharacterResponse,
-    GalleryImageRegenerationResponse,
     GalleryImageUploadResult,
     GalleryResponse,
     GallerySettingsPayload,
@@ -113,7 +112,6 @@ from backend.app.services.gallery import (
 from backend.app.services.gallery_media import (
     GalleryImageError,
     create_gallery_image_variants,
-    regenerate_gallery_image_derivatives,
 )
 from backend.app.services.daily_learning import (
     DailyLearningAIError,
@@ -771,24 +769,6 @@ def write_gallery_settings(
 
 
 @router.post(
-    "/gallery/media/regenerate",
-    tags=["gallery"],
-    response_model=ApiResponse[GalleryImageRegenerationResponse],
-)
-def regenerate_manage_gallery_images(
-    request: Request,
-    _admin_session: AdminSessionResponse = Depends(require_admin_session),
-    session: Session = Depends(get_db_session),
-) -> ApiResponse[GalleryImageRegenerationResponse]:
-    generated_count = regenerate_gallery_image_derivatives(session)
-    return build_success_response(
-        request,
-        GalleryImageRegenerationResponse(generated_count=generated_count),
-        message="展厅历史图片已检查",
-    )
-
-
-@router.post(
     "/gallery/media/{kind}",
     tags=["gallery"],
     response_model=ApiResponse[GalleryImageUploadResult],
@@ -816,11 +796,7 @@ async def upload_gallery_image(
         raise HTTPException(status_code=422, detail=str(error)) from error
     return build_success_response(
         request,
-        GalleryImageUploadResult(
-            original_url=variants.original_url,
-            display_url=variants.display_url,
-            frame_url=variants.frame_url,
-        ),
+        GalleryImageUploadResult(url=variants.url),
         message="展厅图片已处理",
     )
 

@@ -5,14 +5,13 @@ export type GallerySettings = {
   show_entry: boolean;
   show_logo: boolean;
   logo_url: string | null;
-  logo_display_url: string | null;
   created_at: string;
   updated_at: string;
 };
 
 export type GallerySettingsPayload = Pick<
   GallerySettings,
-  "hall_name" | "entry_title" | "show_entry" | "show_logo" | "logo_url" | "logo_display_url"
+  "hall_name" | "entry_title" | "show_entry" | "show_logo" | "logo_url"
 >;
 
 export type GalleryCharacter = {
@@ -25,8 +24,6 @@ export type GalleryCharacter = {
   description: string;
   quote: string;
   poster_url: string | null;
-  poster_frame_url: string | null;
-  poster_display_url: string | null;
   is_visible: boolean;
   sort_order: number;
   created_at: string;
@@ -43,8 +40,6 @@ export type GalleryCharacterPayload = Pick<
   | "description"
   | "quote"
   | "poster_url"
-  | "poster_frame_url"
-  | "poster_display_url"
   | "is_visible"
 >;
 

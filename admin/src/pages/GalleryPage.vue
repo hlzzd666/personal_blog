@@ -36,7 +36,6 @@ const emptySettings = (): GallerySettingsPayload => ({
   show_entry: true,
   show_logo: false,
   logo_url: null,
-  logo_display_url: null,
 });
 const emptyCharacter = (): GalleryCharacterPayload => ({
   name: "",
@@ -47,8 +46,6 @@ const emptyCharacter = (): GalleryCharacterPayload => ({
   description: "",
   quote: "",
   poster_url: null,
-  poster_frame_url: null,
-  poster_display_url: null,
   is_visible: false,
 });
 
@@ -80,8 +77,6 @@ function toPayload(item: GalleryCharacter): GalleryCharacterPayload {
     description: item.description,
     quote: item.quote,
     poster_url: item.poster_url,
-    poster_frame_url: item.poster_frame_url,
-    poster_display_url: item.poster_display_url,
     is_visible: item.is_visible,
   };
 }
@@ -96,7 +91,6 @@ async function loadGallery() {
       show_entry: result.settings.show_entry,
       show_logo: result.settings.show_logo,
       logo_url: result.settings.logo_url,
-      logo_display_url: result.settings.logo_display_url,
     });
     characters.value = result.characters;
     orderDirty.value = false;
@@ -117,7 +111,6 @@ async function saveSettings() {
     const result = await updateGallerySettings({
       ...settingsForm,
       logo_url: settingsForm.logo_url || null,
-      logo_display_url: settingsForm.logo_url ? settingsForm.logo_display_url || null : null,
     });
     Object.assign(settingsForm, result);
     ElMessage.success("展厅设置已保存");
@@ -168,8 +161,6 @@ async function saveCharacter() {
     const payload = {
       ...characterForm,
       poster_url: characterForm.poster_url || null,
-      poster_frame_url: characterForm.poster_url ? characterForm.poster_frame_url || null : null,
-      poster_display_url: characterForm.poster_url ? characterForm.poster_display_url || null : null,
     };
     if (editingId.value === null) await createGalleryCharacter(payload);
     else await updateGalleryCharacter(editingId.value, payload);
@@ -265,12 +256,9 @@ async function uploadSelected(kind: "logo" | "poster", event: Event) {
   try {
     const result = await uploadGalleryImage(kind, file);
     if (kind === "logo") {
-      settingsForm.logo_url = result.original_url;
-      settingsForm.logo_display_url = result.display_url;
+      settingsForm.logo_url = result.url;
     } else {
-      characterForm.poster_url = result.original_url;
-      characterForm.poster_frame_url = result.frame_url;
-      characterForm.poster_display_url = result.display_url;
+      characterForm.poster_url = result.url;
     }
     ElMessage.success(kind === "logo" ? "Logo 已上传，请保存设置" : "人物海报已上传");
   } catch (error) {
@@ -312,14 +300,14 @@ onMounted(loadGallery);
         </div>
         <div class="gallery-logo-row">
           <div class="gallery-logo-preview">
-            <img v-if="settingsForm.logo_url" :src="settingsForm.logo_display_url || settingsForm.logo_url" alt="展厅 Logo 预览" />
+            <img v-if="settingsForm.logo_url" :src="settingsForm.logo_url" alt="展厅 Logo 预览" />
             <el-icon v-else><Picture /></el-icon>
           </div>
           <div class="gallery-logo-actions">
             <el-switch v-model="settingsForm.show_logo" active-text="在入口显示 Logo" />
             <input ref="logoInput" class="media-upload-input" type="file" accept="image/jpeg,image/png,image/webp" @change="uploadSelected('logo', $event)" />
             <el-button :icon="Upload" :loading="uploading === 'logo'" @click="logoInput?.click()">上传 Logo</el-button>
-            <el-button v-if="settingsForm.logo_url" @click="settingsForm.logo_url = null; settingsForm.logo_display_url = null">移除 Logo</el-button>
+            <el-button v-if="settingsForm.logo_url" @click="settingsForm.logo_url = null">移除 Logo</el-button>
           </div>
         </div>
         <div class="gallery-entry-visibility-row">
@@ -356,7 +344,7 @@ onMounted(loadGallery);
           <template #default="{ row }">
             <div class="gallery-character-cell">
               <div class="gallery-poster-mini">
-                <img v-if="row.poster_url" :src="row.poster_display_url || row.poster_url" :alt="`${row.name}海报`" />
+                <img v-if="row.poster_url" :src="row.poster_url" :alt="`${row.name}海报`" />
                 <span v-else>{{ row.name.slice(0, 1) }}</span>
               </div>
               <div><strong>{{ row.name }}</strong><span>{{ row.epithet }}</span></div>
@@ -390,12 +378,12 @@ onMounted(loadGallery);
         <div class="gallery-character-editor">
           <div class="gallery-poster-editor">
             <div class="gallery-poster-preview">
-              <img v-if="characterForm.poster_url" :src="characterForm.poster_display_url || characterForm.poster_url" alt="人物海报预览" />
+              <img v-if="characterForm.poster_url" :src="characterForm.poster_url" alt="人物海报预览" />
               <div v-else><span>WANTED</span><strong>{{ characterForm.name || "人物海报" }}</strong></div>
             </div>
             <input ref="posterInput" class="media-upload-input" type="file" accept="image/jpeg,image/png,image/webp" @change="uploadSelected('poster', $event)" />
             <el-button :icon="Upload" :loading="uploading === 'poster'" @click="posterInput?.click()">上传 2:3 海报</el-button>
-            <el-button v-if="characterForm.poster_url" @click="characterForm.poster_url = null; characterForm.poster_frame_url = null; characterForm.poster_display_url = null">使用占位海报</el-button>
+            <el-button v-if="characterForm.poster_url" @click="characterForm.poster_url = null">使用占位海报</el-button>
             <small>建议至少 1200 × 1800，单张不超过 10 MB。</small>
           </div>
           <div class="gallery-character-fields">

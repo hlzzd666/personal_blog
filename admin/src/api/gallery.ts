@@ -9,9 +9,7 @@ import type {
 } from "../types/gallery";
 
 export type GalleryImageUploadResult = {
-  original_url: string;
-  display_url: string;
-  frame_url: string | null;
+  url: string;
 };
 
 export function fetchManageGallery() {

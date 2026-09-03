@@ -376,8 +376,8 @@ export class GalleryScene {
     this.posterFrames.push({
       material: posterMaterial,
       row: Math.floor(index / 2),
-      url: character.poster_frame_url || character.poster_url,
-      usesLegacySource: !character.poster_frame_url,
+      url: character.poster_url,
+      usesLegacySource: true,
     });
     group.userData.highlightMeshes = highlightMeshes;
     return group;

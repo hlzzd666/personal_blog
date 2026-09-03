@@ -7,7 +7,6 @@ export type GallerySettings = {
   show_entry: boolean;
   show_logo: boolean;
   logo_url: string | null;
-  logo_display_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -22,8 +21,6 @@ export type GalleryCharacter = {
   description: string;
   quote: string;
   poster_url: string | null;
-  poster_frame_url: string | null;
-  poster_display_url: string | null;
   is_visible: boolean;
   sort_order: number;
   created_at: string;

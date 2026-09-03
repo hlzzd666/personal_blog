@@ -26,11 +26,7 @@ from backend.app.services.gallery import (
     update_gallery_settings,
 )
 from backend.app.services.media import _collect_reference_candidates, _find_references
-from backend.app.services.gallery_media import (
-    GalleryImageError,
-    create_gallery_image_variants,
-    regenerate_gallery_image_derivatives,
-)
+from backend.app.services.gallery_media import GalleryImageError, create_gallery_image_variants
 
 
 def character_payload(index: int, *, visible: bool = True) -> GalleryCharacterPayload:
@@ -84,7 +80,6 @@ class GalleryTest(unittest.TestCase):
                 show_entry=False,
                 show_logo=False,
                 logo_url=None,
-                logo_display_url=None,
             ),
         )
         create_gallery_character(self.session, character_payload(1, visible=True))
@@ -117,69 +112,42 @@ class GalleryTest(unittest.TestCase):
                 entry_title="测试入口",
                 show_logo=True,
                 logo_url="/uploads/gallery/logo.png",
-                logo_display_url="/uploads/gallery/derived/logo.webp",
             ),
         )
         payload = character_payload(1)
         payload.poster_url = "/uploads/gallery/poster.png"
-        payload.poster_frame_url = "/uploads/gallery/derived/poster-frame.webp"
-        payload.poster_display_url = "/uploads/gallery/derived/poster-display.webp"
         create_gallery_character(self.session, payload)
 
         candidates = _collect_reference_candidates(self.session)
         logo_references = _find_references("gallery/logo.png", candidates)
         poster_references = _find_references("gallery/poster.png", candidates)
-        frame_references = _find_references("gallery/derived/poster-frame.webp", candidates)
         self.assertEqual([item.source for item in logo_references], ["3D 展厅"])
         self.assertEqual([item.source for item in poster_references], ["3D 展厅"])
-        self.assertEqual([item.source for item in frame_references], ["3D 展厅"])
 
-    def test_gallery_image_derivatives_and_legacy_regeneration(self) -> None:
+    def test_gallery_image_upload_uses_one_frontend_processed_file(self) -> None:
         poster_bytes = image_bytes("PNG", (1200, 1800))
         variants = create_gallery_image_variants(poster_bytes, "poster")
-        frame_path = upload_path_from_url(variants.frame_url)
-        display_path = upload_path_from_url(variants.display_url)
-        self.assertTrue(upload_path_from_url(variants.original_url).is_file())
-        with Image.open(frame_path) as frame:
-            self.assertEqual((frame.format, frame.size), ("WEBP", (512, 768)))
-        with Image.open(display_path) as display:
-            self.assertEqual((display.format, display.size), ("WEBP", (960, 1440)))
+        poster_path = upload_path_from_url(variants.url)
+        self.assertTrue(variants.url)
+        self.assertTrue(poster_path.is_file())
+        self.assertEqual(poster_path.suffix, ".png")
+        self.assertEqual(poster_path.read_bytes(), poster_bytes)
+        with Image.open(poster_path) as poster:
+            self.assertEqual((poster.format, poster.size), ("PNG", (1200, 1800)))
 
         logo = Image.new("RGBA", (900, 300), (20, 60, 80, 0))
         logo.putpixel((100, 100), (255, 210, 120, 255))
         logo_buffer = BytesIO()
         logo.save(logo_buffer, "PNG")
         logo_variants = create_gallery_image_variants(logo_buffer.getvalue(), "logo")
-        with Image.open(upload_path_from_url(logo_variants.display_url)) as rendered_logo:
-            self.assertEqual(rendered_logo.format, "WEBP")
-            self.assertLessEqual(max(rendered_logo.size), 512)
+        with Image.open(upload_path_from_url(logo_variants.url)) as rendered_logo:
+            self.assertEqual(rendered_logo.format, "PNG")
+            self.assertEqual(rendered_logo.size, (900, 300))
 
         with self.assertRaises(GalleryImageError):
             create_gallery_image_variants(b"not an image", "poster")
         with self.assertRaises(GalleryImageError):
             create_gallery_image_variants(image_bytes("GIF", (30, 30)), "poster")
-
-        legacy_path = settings.upload_path / "legacy-poster.png"
-        legacy_path.parent.mkdir(parents=True, exist_ok=True)
-        legacy_path.write_bytes(poster_bytes)
-        update_gallery_settings(
-            self.session,
-            GallerySettingsPayload(
-                hall_name="测试展厅",
-                entry_title="测试入口",
-                show_logo=True,
-                logo_url="/uploads/legacy-poster.png",
-                logo_display_url=None,
-            ),
-        )
-        legacy_character = character_payload(1)
-        legacy_character.poster_url = "/uploads/legacy-poster.png"
-        create_gallery_character(self.session, legacy_character)
-        self.assertEqual(regenerate_gallery_image_derivatives(self.session), 2)
-        refreshed = get_gallery(self.session, include_hidden=True)
-        self.assertTrue(refreshed.settings.logo_display_url)
-        self.assertTrue(refreshed.characters[0].poster_frame_url)
-        self.assertTrue(refreshed.characters[0].poster_display_url)
 
     def test_limit_reorder_and_delete_normalization(self) -> None:
         created = [create_gallery_character(self.session, character_payload(index)) for index in range(40)]
@@ -221,7 +189,6 @@ class GalleryTest(unittest.TestCase):
                 "show_entry": False,
                 "show_logo": False,
                 "logo_url": None,
-                "logo_display_url": None,
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -238,7 +205,7 @@ class GalleryTest(unittest.TestCase):
             files={"file": ("poster.png", image_bytes("PNG", (600, 900)), "image/png")},
         )
         self.assertEqual(upload_response.status_code, 200)
-        self.assertIn("frame_url", upload_response.json()["data"])
+        self.assertIn("url", upload_response.json()["data"])
 
 
 def image_bytes(image_format: str, size: tuple[int, int]) -> bytes:

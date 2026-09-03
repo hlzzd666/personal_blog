@@ -15,7 +15,6 @@ class GallerySettings(Base):
     show_entry: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     show_logo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     logo_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    logo_display_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -37,8 +36,6 @@ class GalleryCharacter(Base):
     description: Mapped[str] = mapped_column(Text)
     quote: Mapped[str] = mapped_column(String(500))
     poster_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    poster_frame_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    poster_display_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     is_visible: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -100,7 +100,7 @@ function handleImageError(event: Event) {
 }
 
 function posterDisplayUrl(character: GalleryCharacter) {
-  return character.poster_display_url || character.poster_url || undefined;
+  return character.poster_url || undefined;
 }
 
 onMounted(() => {
@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
         <div v-if="!entered" class="gallery-entry-layer">
           <div class="gallery-entry-copy">
             <div v-if="gallery.settings.show_logo && gallery.settings.logo_url" class="gallery-entry-mark">
-              <img :src="gallery.settings.logo_display_url || gallery.settings.logo_url" alt="展厅 Logo" width="512" height="512" fetchpriority="high" decoding="async" @error="handleImageError" />
+              <img :src="gallery.settings.logo_url" alt="展厅 Logo" width="512" height="512" fetchpriority="high" decoding="async" @error="handleImageError" />
             </div>
             <h1>{{ gallery.settings.hall_name }}</h1>
             <p>{{ gallery.settings.entry_title }}</p>

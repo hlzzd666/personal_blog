@@ -9,7 +9,6 @@ class GallerySettingsPayload(BaseModel):
     show_entry: bool = True
     show_logo: bool = False
     logo_url: str | None = Field(default=None, max_length=2048)
-    logo_display_url: str | None = Field(default=None, max_length=2048)
 
     @field_validator("hall_name", "entry_title")
     @classmethod
@@ -19,7 +18,7 @@ class GallerySettingsPayload(BaseModel):
             raise ValueError("不能为空")
         return normalized
 
-    @field_validator("logo_url", "logo_display_url")
+    @field_validator("logo_url")
     @classmethod
     def normalize_logo_url(cls, value: str | None) -> str | None:
         return value.strip() or None if value is not None else None
@@ -42,8 +41,6 @@ class GalleryCharacterPayload(BaseModel):
     description: str = Field(..., min_length=1, max_length=5000)
     quote: str = Field(..., min_length=1, max_length=500)
     poster_url: str | None = Field(default=None, max_length=2048)
-    poster_frame_url: str | None = Field(default=None, max_length=2048)
-    poster_display_url: str | None = Field(default=None, max_length=2048)
     is_visible: bool = False
 
     @field_validator(
@@ -56,7 +53,7 @@ class GalleryCharacterPayload(BaseModel):
             raise ValueError("不能为空")
         return normalized
 
-    @field_validator("poster_url", "poster_frame_url", "poster_display_url")
+    @field_validator("poster_url")
     @classmethod
     def normalize_poster_url(cls, value: str | None) -> str | None:
         return value.strip() or None if value is not None else None
@@ -88,10 +85,4 @@ class GalleryCharacterOrderPayload(BaseModel):
 
 
 class GalleryImageUploadResult(BaseModel):
-    original_url: str
-    display_url: str
-    frame_url: str | None = None
-
-
-class GalleryImageRegenerationResponse(BaseModel):
-    generated_count: int
+    url: str
