@@ -1,5 +1,6 @@
 import { request } from "./http";
 import type { MediaCleanupResponse, MediaListResponse } from "../types/media";
+import { compressImage } from "../utils/imageCompression";
 
 export type ImageUploadResult = {
   url: string;
@@ -24,8 +25,9 @@ export async function cleanupUnreferencedMediaFiles(): Promise<MediaCleanupRespo
 }
 
 export async function uploadMediaImage(file: File): Promise<ImageUploadResult> {
+  const compressedFile = await compressImage(file);
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", compressedFile);
   return request<ImageUploadResult>({
     method: "POST",
     url: "/media/images",

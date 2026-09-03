@@ -1,5 +1,6 @@
 import { request } from "./http";
 import type { SiteSettings } from "../types/site";
+import { compressImage } from "../utils/imageCompression";
 
 export type ImageUploadResult = {
   url: string;
@@ -28,8 +29,9 @@ export async function updateSiteSettings(payload: SiteSettings): Promise<SiteSet
 }
 
 export async function uploadImage(file: File): Promise<ImageUploadResult> {
+  const compressedFile = await compressImage(file);
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", compressedFile);
   return request<ImageUploadResult>({
     method: "POST",
     url: "/media/images",

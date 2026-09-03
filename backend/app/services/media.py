@@ -14,6 +14,7 @@ from backend.app.core.config import settings
 from backend.app.models.about_profile import AboutProfile
 from backend.app.models.article import Article
 from backend.app.models.content import Note, Series
+from backend.app.models.gallery import GalleryCharacter, GallerySettings
 from backend.app.schemas.media import (
     MediaCleanupResponse,
     MediaFileItem,
@@ -161,6 +162,25 @@ def _collect_reference_candidates(session: Session) -> list[MediaReferenceCandid
         candidates.extend(
             _collect_from_payload(
                 _model_to_payload(note), source="短动态", label_prefix=f"动态：{note.slug}"
+            )
+        )
+
+    gallery_settings = session.get(GallerySettings, 1)
+    if gallery_settings is not None:
+        candidates.extend(
+            _collect_from_payload(
+                _model_to_payload(gallery_settings),
+                source="3D 展厅",
+                label_prefix="展厅设置",
+            )
+        )
+
+    for character in session.scalars(select(GalleryCharacter)).all():
+        candidates.extend(
+            _collect_from_payload(
+                _model_to_payload(character),
+                source="3D 展厅",
+                label_prefix=f"展厅人物：{character.name}",
             )
         )
 

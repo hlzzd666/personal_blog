@@ -1,7 +1,7 @@
 import { request } from "./http";
 import type { Article, ArticlePayload, ArticleList } from "../types/article";
 
-export function fetchManageArticles(params: Record<string, string | number | undefined> = {}) {
+export function fetchManageArticles(params: Record<string, string | number | boolean | undefined> = {}) {
   return request<ArticleList>({ url: "/articles/manage", method: "GET", params });
 }
 

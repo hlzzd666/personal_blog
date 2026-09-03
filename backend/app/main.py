@@ -44,6 +44,8 @@ async def request_context_middleware(request: Request, call_next):
     request.state.request_id = request_id
     response = await call_next(request)
     response.headers["X-Request-Id"] = request_id
+    if request.url.path.startswith("/uploads/gallery/derived/") and response.status_code == 200:
+        response.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
     return response
 
 
@@ -101,7 +103,7 @@ def web_favicon() -> FileResponse:
 
 @app.get("/web/{path:path}", include_in_schema=False)
 def web_shell(path: str) -> HTMLResponse:
-    known_routes = {"", "articles", "series", "notes", "about", "privacy"}
+    known_routes = {"", "articles", "series", "notes", "gallery", "about", "privacy"}
     exists = path.strip("/") in known_routes
     title = "个人博客" if exists else "页面不存在"
     description = "个人博客文章、专题与短动态。" if exists else "没有找到这个页面。"

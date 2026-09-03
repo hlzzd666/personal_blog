@@ -5,6 +5,7 @@ export const adminNavigation = [
   { label: "专题管理", to: "/series", icon: "Collection", group: "content" },
   { label: "短动态", to: "/notes", icon: "ChatLineSquare", group: "content" },
   { label: "每日问答", to: "/daily-learning", icon: "MagicStick", group: "content" },
+  { label: "3D 展厅", to: "/gallery", icon: "View", group: "content" },
   { label: "媒体资源", to: "/media", icon: "Picture", group: "content" },
   { label: "关于我", to: "/about", icon: "User", group: "site" },
   { label: "站点设置", to: "/site-settings", icon: "Setting", group: "site" },

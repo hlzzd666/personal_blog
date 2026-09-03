@@ -1,5 +1,7 @@
+from datetime import datetime
 from pathlib import Path
 from hashlib import sha256
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
@@ -38,6 +40,16 @@ from backend.app.schemas.content import (
     SeriesResponse,
 )
 from backend.app.schemas.media import MediaCleanupResponse, MediaListResponse
+from backend.app.schemas.gallery import (
+    GalleryCharacterOrderPayload,
+    GalleryCharacterPayload,
+    GalleryCharacterResponse,
+    GalleryImageRegenerationResponse,
+    GalleryImageUploadResult,
+    GalleryResponse,
+    GallerySettingsPayload,
+    GallerySettingsResponse,
+)
 from backend.app.schemas.taxonomy import (
     ArticleTaxonomyResponse,
     TaxonomyItem,
@@ -89,6 +101,20 @@ from backend.app.services.auth import (
     require_admin_session,
 )
 from backend.app.services.media import cleanup_unreferenced_media_files, list_media_files
+from backend.app.services.gallery import (
+    create_gallery_character,
+    delete_gallery_character,
+    get_gallery,
+    get_gallery_character,
+    reorder_gallery_characters,
+    update_gallery_character,
+    update_gallery_settings,
+)
+from backend.app.services.gallery_media import (
+    GalleryImageError,
+    create_gallery_image_variants,
+    regenerate_gallery_image_derivatives,
+)
 from backend.app.services.daily_learning import (
     DailyLearningAIError,
     DailyLearningConfigurationError,
@@ -575,9 +601,19 @@ def read_manage_articles(
     category: str | None = None,
     tag: str | None = None,
     search: str | None = None,
+    is_repost: bool | None = None,
+    published_from: datetime | None = None,
+    published_to: datetime | None = None,
+    updated_from: datetime | None = None,
+    updated_to: datetime | None = None,
     _admin_session: AdminSessionResponse = Depends(require_admin_session),
     session: Session = Depends(get_db_session),
 ) -> ApiResponse[ArticleListResponse]:
+    if published_from and published_to and published_from > published_to:
+        raise HTTPException(status_code=422, detail="发表时间起始值不能晚于结束值")
+    if updated_from and updated_to and updated_from > updated_to:
+        raise HTTPException(status_code=422, detail="最后更新时间起始值不能晚于结束值")
+
     article_list, cache_status = get_article_list_response(
         session,
         public_only=False,
@@ -586,6 +622,11 @@ def read_manage_articles(
         category=category,
         tag=tag,
         search=search,
+        is_repost=is_repost,
+        published_from=published_from,
+        published_to=published_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
     )
     response.headers["X-Cache-Status"] = cache_status
     return build_success_response(
@@ -695,6 +736,166 @@ def delete_manage_article(
         raise HTTPException(status_code=404, detail="文章不存在")
     delete_article(session, article)
     return build_success_response(request, {"id": article_id}, message="文章已删除")
+
+
+@router.get("/gallery", tags=["gallery"], response_model=ApiResponse[GalleryResponse])
+def read_gallery(
+    request: Request,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GalleryResponse]:
+    return build_success_response(request, get_gallery(session))
+
+
+@router.get("/gallery/manage", tags=["gallery"], response_model=ApiResponse[GalleryResponse])
+def read_manage_gallery(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GalleryResponse]:
+    return build_success_response(request, get_gallery(session, include_hidden=True))
+
+
+@router.put(
+    "/gallery/settings",
+    tags=["gallery"],
+    response_model=ApiResponse[GallerySettingsResponse],
+)
+def write_gallery_settings(
+    request: Request,
+    payload: GallerySettingsPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GallerySettingsResponse]:
+    result = update_gallery_settings(session, payload)
+    return build_success_response(request, result, message="展厅设置已保存")
+
+
+@router.post(
+    "/gallery/media/regenerate",
+    tags=["gallery"],
+    response_model=ApiResponse[GalleryImageRegenerationResponse],
+)
+def regenerate_manage_gallery_images(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GalleryImageRegenerationResponse]:
+    generated_count = regenerate_gallery_image_derivatives(session)
+    return build_success_response(
+        request,
+        GalleryImageRegenerationResponse(generated_count=generated_count),
+        message="展厅历史图片已检查",
+    )
+
+
+@router.post(
+    "/gallery/media/{kind}",
+    tags=["gallery"],
+    response_model=ApiResponse[GalleryImageUploadResult],
+)
+async def upload_gallery_image(
+    kind: Literal["logo", "poster"],
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    file: UploadFile = File(...),
+) -> ApiResponse[GalleryImageUploadResult]:
+    size = 0
+    content = bytearray()
+    try:
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_IMAGE_SIZE:
+                raise HTTPException(status_code=413, detail="图片大小不能超过 10 MB")
+            content.extend(chunk)
+    finally:
+        await file.close()
+
+    try:
+        variants = create_gallery_image_variants(bytes(content), kind)
+    except GalleryImageError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return build_success_response(
+        request,
+        GalleryImageUploadResult(
+            original_url=variants.original_url,
+            display_url=variants.display_url,
+            frame_url=variants.frame_url,
+        ),
+        message="展厅图片已处理",
+    )
+
+
+@router.post(
+    "/gallery/characters",
+    tags=["gallery"],
+    response_model=ApiResponse[GalleryCharacterResponse],
+)
+def create_manage_gallery_character(
+    request: Request,
+    payload: GalleryCharacterPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GalleryCharacterResponse]:
+    try:
+        result = create_gallery_character(session, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, result, message="展厅人物已创建")
+
+
+@router.put(
+    "/gallery/characters/order",
+    tags=["gallery"],
+    response_model=ApiResponse[list[GalleryCharacterResponse]],
+)
+def reorder_manage_gallery_characters(
+    request: Request,
+    payload: GalleryCharacterOrderPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[list[GalleryCharacterResponse]]:
+    try:
+        result = reorder_gallery_characters(session, payload.character_ids)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, result, message="人物展示顺序已保存")
+
+
+@router.put(
+    "/gallery/characters/{character_id}",
+    tags=["gallery"],
+    response_model=ApiResponse[GalleryCharacterResponse],
+)
+def update_manage_gallery_character(
+    request: Request,
+    character_id: int,
+    payload: GalleryCharacterPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GalleryCharacterResponse]:
+    character = get_gallery_character(session, character_id)
+    if character is None:
+        raise HTTPException(status_code=404, detail="展厅人物不存在")
+    result = update_gallery_character(session, character, payload)
+    return build_success_response(request, result, message="展厅人物已更新")
+
+
+@router.delete(
+    "/gallery/characters/{character_id}",
+    tags=["gallery"],
+    response_model=ApiResponse[dict[str, int]],
+)
+def delete_manage_gallery_character(
+    request: Request,
+    character_id: int,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[dict[str, int]]:
+    character = get_gallery_character(session, character_id)
+    if character is None:
+        raise HTTPException(status_code=404, detail="展厅人物不存在")
+    delete_gallery_character(session, character)
+    return build_success_response(request, {"id": character_id}, message="展厅人物已删除")
 
 
 @router.get("/series", tags=["series"], response_model=ApiResponse[SeriesListResponse])

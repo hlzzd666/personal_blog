@@ -3,6 +3,7 @@ import { RouterView } from "vue-router";
 
 import AppHeader from "../components/AppHeader.vue";
 import AppSidebar from "../components/AppSidebar.vue";
+import AdminTabs from "../components/AdminTabs.vue";
 </script>
 
 <template>
@@ -10,8 +11,13 @@ import AppSidebar from "../components/AppSidebar.vue";
     <AppSidebar />
     <section class="workspace-shell">
       <AppHeader />
+      <AdminTabs />
       <div class="workspace-body">
-        <RouterView />
+        <RouterView v-slot="{ Component, route }">
+          <KeepAlive>
+            <component :is="Component" :key="route.fullPath" />
+          </KeepAlive>
+        </RouterView>
       </div>
     </section>
   </main>

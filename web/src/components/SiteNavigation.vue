@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import { fetchSiteSettings } from "../api/site-settings";
+import { fetchGallery } from "../api/gallery";
 import SiteSearchDialog from "./SiteSearchDialog.vue";
 
 const props = defineProps<{ brand?: string }>();
@@ -12,6 +13,7 @@ const loadedBrand = ref("个人空间");
 const navVisible = ref(true);
 const navRevealing = ref(false);
 const searchOpen = ref(false);
+const galleryEntryVisible = ref(true);
 const articleNavigationResetKey = "articles-navigation-reset";
 let lastScrollY = 0;
 let revealTimer: number | undefined;
@@ -28,6 +30,14 @@ async function loadBrand() {
     loadedBrand.value = (await fetchSiteSettings()).nav_brand;
   } finally {
     loadingBrand = false;
+  }
+}
+
+async function loadGalleryVisibility() {
+  try {
+    galleryEntryVisible.value = (await fetchGallery()).settings.show_entry;
+  } catch {
+    galleryEntryVisible.value = true;
   }
 }
 
@@ -90,6 +100,7 @@ function handleArticlesNavigation(event: MouseEvent) {
 
 onMounted(() => {
   void loadBrand();
+  void loadGalleryVisibility();
   window.addEventListener("scroll", handleScroll, { passive: true });
   window.addEventListener("keydown", handleShortcut);
   handleScroll();
@@ -103,6 +114,7 @@ watch(
     searchOpen.value = false;
     lastScrollY = window.scrollY;
     void loadBrand();
+    void loadGalleryVisibility();
   },
 );
 
@@ -142,6 +154,7 @@ onBeforeUnmount(() => {
       </RouterLink>
       <RouterLink to="/series">专题</RouterLink>
       <RouterLink to="/notes">动态</RouterLink>
+      <RouterLink v-if="galleryEntryVisible" to="/gallery">展厅</RouterLink>
       <RouterLink to="/about">关于我</RouterLink>
     </nav>
   </header>

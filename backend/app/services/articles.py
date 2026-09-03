@@ -51,6 +51,11 @@ def build_article_filters(
     category: str | None = None,
     tag: str | None = None,
     search: str | None = None,
+    is_repost: bool | None = None,
+    published_from: datetime | None = None,
+    published_to: datetime | None = None,
+    updated_from: datetime | None = None,
+    updated_to: datetime | None = None,
 ) -> list:
     filters = []
     if category:
@@ -86,6 +91,16 @@ def build_article_filters(
                 Article.content_markdown.like(keyword),
             )
         )
+    if is_repost is not None:
+        filters.append(Article.is_repost.is_(is_repost))
+    if published_from is not None:
+        filters.append(Article.published_at >= published_from)
+    if published_to is not None:
+        filters.append(Article.published_at <= published_to)
+    if updated_from is not None:
+        filters.append(Article.updated_at >= updated_from)
+    if updated_to is not None:
+        filters.append(Article.updated_at <= updated_to)
     return filters
 
 
@@ -98,11 +113,25 @@ def list_articles(
     category: str | None = None,
     tag: str | None = None,
     search: str | None = None,
+    is_repost: bool | None = None,
+    published_from: datetime | None = None,
+    published_to: datetime | None = None,
+    updated_from: datetime | None = None,
+    updated_to: datetime | None = None,
 ) -> tuple[list[Article], int]:
     query = select(Article)
     count_query = select(func.count(Article.id))
     # 文章不区分草稿和发布状态，public_only 参数保留用于兼容调用方。
-    filters = build_article_filters(category=category, tag=tag, search=search)
+    filters = build_article_filters(
+        category=category,
+        tag=tag,
+        search=search,
+        is_repost=is_repost,
+        published_from=published_from,
+        published_to=published_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
+    )
 
     # 归档按发表时间形成唯一时间线；未填写发表时间时回退到创建时间。
     query = query.where(*filters).order_by(
@@ -123,10 +152,26 @@ def get_article_list_stats(
     category: str | None = None,
     tag: str | None = None,
     search: str | None = None,
+    is_repost: bool | None = None,
+    published_from: datetime | None = None,
+    published_to: datetime | None = None,
+    updated_from: datetime | None = None,
+    updated_to: datetime | None = None,
 ) -> ArticleListStats:
     filtered_articles = list(
         session.scalars(
-            select(Article).where(*build_article_filters(category=category, tag=tag, search=search))
+            select(Article).where(
+                *build_article_filters(
+                    category=category,
+                    tag=tag,
+                    search=search,
+                    is_repost=is_repost,
+                    published_from=published_from,
+                    published_to=published_to,
+                    updated_from=updated_from,
+                    updated_to=updated_to,
+                )
+            )
         )
     )
     all_articles = list(session.scalars(select(Article)))
@@ -170,6 +215,11 @@ def get_article_list_response(
     category: str | None = None,
     tag: str | None = None,
     search: str | None = None,
+    is_repost: bool | None = None,
+    published_from: datetime | None = None,
+    published_to: datetime | None = None,
+    updated_from: datetime | None = None,
+    updated_to: datetime | None = None,
 ) -> tuple[ArticleListResponse, ArticleListCacheStatus]:
     cache_key = build_article_list_cache_key(
         public_only=public_only,
@@ -178,6 +228,11 @@ def get_article_list_response(
         category=category,
         tag=tag,
         search=search,
+        is_repost=is_repost,
+        published_from=published_from,
+        published_to=published_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
     )
     cached_value = get_cache_value(cache_key)
     if cached_value is not None:
@@ -196,13 +251,28 @@ def get_article_list_response(
         category=category,
         tag=tag,
         search=search,
+        is_repost=is_repost,
+        published_from=published_from,
+        published_to=published_to,
+        updated_from=updated_from,
+        updated_to=updated_to,
     )
     response = ArticleListResponse(
         items=items,
         total=total,
         page=page,
         page_size=page_size,
-        stats=get_article_list_stats(session, category=category, tag=tag, search=search),
+        stats=get_article_list_stats(
+            session,
+            category=category,
+            tag=tag,
+            search=search,
+            is_repost=is_repost,
+            published_from=published_from,
+            published_to=published_to,
+            updated_from=updated_from,
+            updated_to=updated_to,
+        ),
     )
     set_cache_value(cache_key, response.model_dump_json())
     return response, "MISS" if cache_key is not None else "BYPASS"

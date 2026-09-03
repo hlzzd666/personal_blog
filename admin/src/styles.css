@@ -150,6 +150,87 @@ body {
   padding-top: 1.5rem;
 }
 
+.admin-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  min-width: 0;
+  min-height: 42px;
+  border-bottom: 1px solid #dbe3eb;
+}
+
+.admin-tabs-scroll {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.admin-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  min-width: 104px;
+  height: 42px;
+  padding: 0 0.8rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #738394;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.admin-tab:hover {
+  color: var(--admin-ink);
+  background: #e9f0f5;
+}
+
+.admin-tab:focus-visible,
+.admin-tabs-clear:focus-visible,
+.admin-tab-close:focus-visible {
+  outline: 2px solid #d6a557;
+  outline-offset: -2px;
+}
+
+.admin-tab.is-active {
+  color: var(--admin-ink);
+  border-bottom-color: var(--admin-accent);
+  background: #ffffff;
+  font-weight: 700;
+}
+
+.admin-tab-close {
+  width: 17px;
+  height: 17px;
+  padding: 2px;
+  border-radius: 50%;
+  color: #94a1ad;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.admin-tab-close:hover {
+  color: #a5483e;
+  background: #f8e8e5;
+}
+
+.admin-tabs-clear {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: auto;
+  padding: 0 0.25rem;
+  white-space: nowrap;
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -662,21 +743,46 @@ body {
 }
 
 .article-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 1rem;
 }
 
 .article-filters {
-  display: flex;
-  flex: 1;
+  display: grid;
+  min-width: 0;
   gap: 0.65rem;
-  max-width: 680px;
+}
+
+.article-filter-primary {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 0.65rem;
+}
+
+.article-filter-options {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.article-filter-options .article-filter-select {
+  grid-column: span 2;
+  width: 100%;
+}
+
+.article-filter-options .el-date-editor {
+  grid-column: span 3;
+  width: 100%;
 }
 
 .articles-table-card {
   min-width: 0;
+}
+
+.articles-table-card .el-table__header-wrapper th {
+  white-space: nowrap;
 }
 
 .article-table-title {
@@ -728,6 +834,11 @@ body {
   width: 100%;
 }
 
+/* 时间选择面板挂载在文章抽屉中，避免传送到页面根节点后出现定位偏移。 */
+.article-date-picker-popper {
+  z-index: 3000 !important;
+}
+
 .article-editor-form .md-editor {
   min-height: 420px;
   border-color: var(--admin-border);
@@ -763,29 +874,67 @@ body {
 }
 
 .login-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: grid;
   place-items: center;
   min-height: 100vh;
   padding: 2rem 1.25rem;
-  background:
-    radial-gradient(circle at top left, rgba(214, 165, 87, 0.18), transparent 22rem),
-    linear-gradient(135deg, #f5f8fb 0%, #e8eef5 100%);
+  background: #edf3f7;
+}
+
+.login-shell::before {
+  position: absolute;
+  inset: 0 55% 0 0;
+  z-index: -2;
+  background: #10293d;
+  clip-path: polygon(0 0, 86% 0, 100% 50%, 86% 100%, 0 100%);
+  content: "";
 }
 
 .login-panel-wrap {
+  position: relative;
   width: min(100%, 460px);
 }
 
 .login-panel {
   width: min(100%, 440px);
-  border: 1px solid rgba(255, 255, 255, 0.72) !important;
-  border-radius: 10px !important;
-  box-shadow: 0 32px 80px rgba(13, 31, 50, 0.14) !important;
+  border: 1px solid #d9e2e9 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 24px 60px rgba(13, 31, 50, 0.16) !important;
+}
+
+.login-panel .el-card__body {
+  padding: 2.25rem 2.5rem 2.5rem;
+}
+
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.8rem;
+  color: #a66d25;
+  font: 600 0.72rem "IBM Plex Mono", monospace;
+  letter-spacing: 0.11em;
+}
+
+.login-logo {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #10293d;
+  background: #e5aa4c;
+  font: 700 1.05rem "ZCOOL KuaiLe", "Noto Sans SC", sans-serif;
 }
 
 .login-panel h2 {
   margin: 0 0 1.75rem;
-  font-size: 2.1rem;
+  color: var(--admin-ink);
+  font-size: 2rem;
+  line-height: 1.2;
 }
 
 .login-form {
@@ -795,6 +944,8 @@ body {
 .login-submit {
   width: 100%;
   margin-top: 0.5rem;
+  min-height: 44px;
+  font-weight: 700;
 }
 
 .empty-module-card {
@@ -1467,8 +1618,6 @@ body {
     gap: 0;
   }
 
-  .article-toolbar,
-  .article-filters,
   .content-admin-toolbar,
   .content-admin-toolbar > div,
   .note-filter,
@@ -1478,13 +1627,31 @@ body {
     flex-direction: column;
   }
 
+  .article-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .article-filter-primary,
+  .article-filter-options {
+    grid-template-columns: 1fr;
+  }
+
+  .article-filter-options .article-filter-select,
+  .article-filter-options .el-date-editor {
+    grid-column: auto;
+    width: 100%;
+  }
+
+  .article-create-button {
+    width: 100%;
+  }
+
   .content-admin-toolbar,
   .content-admin-toolbar > div,
   .note-filter {
     width: 100%;
   }
 
-  .article-filters,
   .media-search-input {
     max-width: none;
   }

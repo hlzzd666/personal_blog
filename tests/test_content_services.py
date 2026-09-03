@@ -176,6 +176,29 @@ class ContentServicesTest(unittest.TestCase):
         self.assertEqual(total, 1)
         self.assertEqual([item.id for item in items], [article.id])
 
+    def test_article_list_filters_by_attribute_and_time_ranges(self) -> None:
+        original = self.article("original", published_offset=1)
+        repost = self.article("repost", published_offset=3)
+        repost.is_repost = True
+        original.updated_at = datetime(2026, 2, 1, 10, 0)
+        repost.updated_at = datetime(2026, 2, 3, 10, 0)
+        self.session.commit()
+
+        items, total = list_articles(
+            self.session,
+            public_only=False,
+            page=1,
+            page_size=20,
+            is_repost=True,
+            published_from=datetime(2026, 1, 3),
+            published_to=datetime(2026, 1, 5),
+            updated_from=datetime(2026, 2, 2),
+            updated_to=datetime(2026, 2, 4),
+        )
+
+        self.assertEqual(total, 1)
+        self.assertEqual([item.id for item in items], [repost.id])
+
     def test_notes_filter_uses_exact_json_membership(self) -> None:
         create_note(
             self.session,

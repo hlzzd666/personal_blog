@@ -37,6 +37,10 @@ async function handleLogin() {
   <section class="login-shell">
     <div class="login-panel-wrap">
       <el-card shadow="never" class="login-panel">
+        <div class="login-brand" aria-label="博客后台">
+          <span class="login-logo" aria-hidden="true">B</span>
+          <span>CAPTAIN'S DESK</span>
+        </div>
         <h2>进入后台</h2>
 
         <el-form label-position="top" class="login-form" @submit.prevent="handleLogin">

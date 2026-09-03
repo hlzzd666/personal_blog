@@ -9,6 +9,7 @@ import {
   Picture,
   Setting,
   User,
+  View,
 } from "@element-plus/icons-vue";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -28,6 +29,7 @@ const iconMap = {
   Picture,
   Setting,
   User,
+  View,
 };
 
 const activePath = computed(() => (route.path === "/" ? "/" : route.path));

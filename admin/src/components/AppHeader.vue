@@ -5,13 +5,19 @@ import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { adminNavigation } from "../constants/navigation";
+import { useAdminTabsStore } from "../stores/admin-tabs";
 import { useAuthStore } from "../stores/auth";
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const tabsStore = useAdminTabsStore();
 
 const activeLabel = computed(() => {
+  const routeTitle = route.meta.title;
+  if (typeof routeTitle === "string") {
+    return routeTitle;
+  }
   const current = adminNavigation.find((item) => item.to === route.path);
   return current?.label ?? "控制台";
 });
@@ -24,6 +30,7 @@ async function handleLogout() {
   });
 
   await authStore.logout();
+  tabsStore.reset();
   await router.push("/login");
 }
 </script>

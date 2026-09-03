@@ -44,6 +44,9 @@ const editingId = ref<number | null>(null);
 const searchText = ref("");
 const categoryFilter = ref("");
 const tagFilter = ref("");
+const attributeFilter = ref<"" | "true" | "false">("");
+const publishedRange = ref<string[]>([]);
+const updatedRange = ref<string[]>([]);
 const page = ref(1);
 const form = reactive<ArticlePayload>(emptyArticle());
 const drawerTitle = computed(() => (editingId.value === null ? "写一篇新文章" : "编辑文章"));
@@ -53,10 +56,15 @@ const seriesOptions = ref<Series[]>([]);
 const categoryOptions = ref<TaxonomyItem[]>([]);
 const tagOptions = ref<TaxonomyItem[]>([]);
 const route = useRoute();
+const seriesNameById = computed(() => new Map(seriesOptions.value.map((item) => [item.id, item.title])));
 
 function formatDate(value: string | null) {
   if (!value) return "未设置";
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function getSeriesName(seriesId: number | null) {
+  return seriesId === null ? "-" : seriesNameById.value.get(seriesId) ?? "专题已移除";
 }
 
 function resetForm() {
@@ -72,6 +80,11 @@ async function loadArticles() {
       search: searchText.value || undefined,
       category: categoryFilter.value || undefined,
       tag: tagFilter.value || undefined,
+      is_repost: attributeFilter.value || undefined,
+      published_from: publishedRange.value[0],
+      published_to: publishedRange.value[1],
+      updated_from: updatedRange.value[0],
+      updated_to: updatedRange.value[1],
     });
     articles.value = result.items;
     total.value = result.total;
@@ -268,18 +281,46 @@ onMounted(async () => {
 
     <div class="article-toolbar">
       <div class="article-filters">
-        <el-input v-model="searchText" clearable placeholder="搜索标题、别名或摘要" @keyup.enter="page = 1; loadArticles()">
-          <template #prefix><el-icon><Search /></el-icon></template>
-        </el-input>
-        <el-select v-model="categoryFilter" clearable placeholder="按分类筛选" @change="page = 1; loadArticles()">
-          <el-option v-for="item in categoryOptions" :key="item.id" :label="item.name" :value="item.name" />
-        </el-select>
-        <el-select v-model="tagFilter" clearable placeholder="按标签筛选" @change="page = 1; loadArticles()">
-          <el-option v-for="item in tagOptions" :key="item.id" :label="item.name" :value="item.name" />
-        </el-select>
-        <el-button type="primary" :loading="loading" @click="page = 1; loadArticles()">查询</el-button>
+        <div class="article-filter-primary">
+          <el-input v-model="searchText" clearable placeholder="搜索标题、别名或摘要" @keyup.enter="page = 1; loadArticles()">
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+          <el-button type="primary" :loading="loading" @click="page = 1; loadArticles()">查询</el-button>
+        </div>
+        <div class="article-filter-options">
+          <el-select v-model="categoryFilter" class="article-filter-select" clearable placeholder="按分类筛选" @change="page = 1; loadArticles()">
+            <el-option v-for="item in categoryOptions" :key="item.id" :label="item.name" :value="item.name" />
+          </el-select>
+          <el-select v-model="tagFilter" class="article-filter-select" clearable placeholder="按标签筛选" @change="page = 1; loadArticles()">
+            <el-option v-for="item in tagOptions" :key="item.id" :label="item.name" :value="item.name" />
+          </el-select>
+          <el-select v-model="attributeFilter" class="article-filter-select" clearable placeholder="按属性筛选" @change="page = 1; loadArticles()">
+            <el-option label="原创" value="false" />
+            <el-option label="转载" value="true" />
+          </el-select>
+          <el-date-picker
+            v-model="publishedRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="发表开始时间"
+            end-placeholder="发表结束时间"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            format="YYYY年MM月DD日 HH:mm"
+            @change="page = 1; loadArticles()"
+          />
+          <el-date-picker
+            v-model="updatedRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="更新开始时间"
+            end-placeholder="更新结束时间"
+            value-format="YYYY-MM-DDTHH:mm:ss"
+            format="YYYY年MM月DD日 HH:mm"
+            @change="page = 1; loadArticles()"
+          />
+        </div>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openCreate">写入航行记录</el-button>
+      <el-button class="article-create-button" type="primary" :icon="Plus" @click="openCreate">写入航行记录</el-button>
     </div>
 
     <el-card shadow="never" class="articles-table-card">
@@ -292,11 +333,19 @@ onMounted(async () => {
             </div>
           </template>
         </el-table-column>
+        <el-table-column prop="author" label="作者" width="110" show-overflow-tooltip />
         <el-table-column prop="category" label="分类" width="110" />
+        <el-table-column label="所属专题" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ getSeriesName(row.series_id) }}</template>
+        </el-table-column>
         <el-table-column label="标签" min-width="180">
           <template #default="{ row }"><el-tag v-for="tag in row.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="时间" width="180"><template #default="{ row }">{{ formatDate(row.updated_at) }}</template></el-table-column>
+        <el-table-column label="属性" width="90">
+          <template #default="{ row }"><el-tag :type="row.is_repost ? 'warning' : 'success'" size="small">{{ row.is_repost ? "转载" : "原创" }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="发表时间" width="180"><template #default="{ row }">{{ formatDate(row.published_at) }}</template></el-table-column>
+        <el-table-column label="最后更新" width="180"><template #default="{ row }">{{ formatDate(row.updated_at) }}</template></el-table-column>
         <el-table-column label="阅读 / 喜欢" width="120"><template #default="{ row }">{{ row.views }} / {{ row.likes }}</template></el-table-column>
         <el-table-column label="操作" fixed="right" width="130">
           <template #default="{ row }">
@@ -365,8 +414,8 @@ onMounted(async () => {
           />
         </el-form-item>
         <div class="editor-form-grid">
-          <el-form-item label="发表时间"><el-date-picker v-model="form.published_at" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY年MM月DD日 HH:mm" placeholder="选择发表时间" /></el-form-item>
-          <el-form-item label="更新时间"><el-date-picker v-model="form.updated_at" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY年MM月DD日 HH:mm" placeholder="选择更新时间" /></el-form-item>
+          <el-form-item label="发表时间"><el-date-picker v-model="form.published_at" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY年MM月DD日 HH:mm" placeholder="选择发表时间" :teleported="false" popper-class="article-date-picker-popper" /></el-form-item>
+          <el-form-item label="更新时间"><el-date-picker v-model="form.updated_at" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY年MM月DD日 HH:mm" placeholder="选择更新时间" :teleported="false" popper-class="article-date-picker-popper" /></el-form-item>
         </div>
         <div class="editor-form-grid">
           <el-form-item label="封面图 URL"><el-input v-model="form.cover_image_url" placeholder="可选" /></el-form-item>

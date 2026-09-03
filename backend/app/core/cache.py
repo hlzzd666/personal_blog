@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 from functools import lru_cache
+from datetime import datetime
 
 from redis import Redis
 from redis.exceptions import RedisError
@@ -31,6 +32,11 @@ def build_article_list_cache_key(
     category: str | None,
     tag: str | None,
     search: str | None,
+    is_repost: bool | None,
+    published_from: datetime | None,
+    published_to: datetime | None,
+    updated_from: datetime | None,
+    updated_to: datetime | None,
 ) -> str | None:
     try:
         version = get_redis_client().get(ARTICLE_LIST_VERSION_KEY) or "0"
@@ -45,6 +51,11 @@ def build_article_list_cache_key(
         "category": category,
         "tag": tag,
         "search": search,
+        "is_repost": is_repost,
+        "published_from": published_from.isoformat() if published_from else None,
+        "published_to": published_to.isoformat() if published_to else None,
+        "updated_from": updated_from.isoformat() if updated_from else None,
+        "updated_to": updated_to.isoformat() if updated_to else None,
     }
     digest = hashlib.sha256(
         json.dumps(params, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()

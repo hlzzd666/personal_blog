@@ -8,6 +8,7 @@ import { fetchArticles, type Article, type ArticleListStats } from "./api/articl
 import { fetchSiteSettings, type SiteSettings } from "./api/site-settings";
 import { fetchVisitorLocation, type VisitorLocation } from "./api/visitor-location";
 import { fetchNotes, fetchSeries, type Note, type Series } from "./api/content";
+import { fetchGallery } from "./api/gallery";
 
 const fallbackSettings: SiteSettings = {
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
@@ -63,6 +64,7 @@ const fallbackArticleStats: ArticleListStats = {
 
 const route = useRoute();
 const isHome = computed(() => route.path === "/");
+const isGallery = computed(() => route.path === "/gallery");
 const settings = ref<SiteSettings>(fallbackSettings);
 const homeArticles = ref<Article[]>([]);
 const homeArticleStats = ref<ArticleListStats>(fallbackArticleStats);
@@ -72,6 +74,7 @@ const homeArticlesStatus = ref("最近文章");
 const homeProfile = ref<AboutProfile>(fallbackProfile);
 const homeSeries = ref<Series[]>([]);
 const homeNotes = ref<Note[]>([]);
+const homeGalleryEntryVisible = ref(true);
 const homeDiscoveryRoot = ref<HTMLElement | null>(null);
 const activeQuoteIndex = ref(0);
 const typedCharacters = ref(0);
@@ -111,6 +114,12 @@ const commandLinks = [
     to: "/notes",
     tone: "coral",
   },
+  {
+    label: "3D 展厅",
+    caption: "漫游伟大航路人物档案",
+    to: "/gallery",
+    tone: "brass",
+  },
 ];
 
 let quoteTimer: number | undefined;
@@ -137,6 +146,11 @@ const articleCategories = computed(() => homeArticleStats.value.categories.slice
 const articleTags = computed(() => homeArticleStats.value.tags.slice(0, 12));
 const featuredSeries = computed(() => homeSeries.value.slice(0, 2));
 const latestNotes = computed(() => homeNotes.value.slice(0, 3));
+const visibleCommandLinks = computed(() =>
+  homeGalleryEntryVisible.value
+    ? commandLinks
+    : commandLinks.filter((command) => command.to !== "/gallery"),
+);
 const currentTimeText = computed(() =>
   new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
@@ -298,7 +312,19 @@ async function loadHomeContent(session: number) {
   await Promise.allSettled([
     loadHomeArticles(session),
     loadHomeProfile(session),
+    loadHomeGalleryVisibility(session),
   ]);
+}
+
+async function loadHomeGalleryVisibility(session: number) {
+  try {
+    const result = await fetchGallery();
+    if (session === homeSession && isHome.value) {
+      homeGalleryEntryVisible.value = result.settings.show_entry;
+    }
+  } catch {
+    homeGalleryEntryVisible.value = true;
+  }
 }
 
 function observeHomeDiscovery(session: number) {
@@ -466,7 +492,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <SiteNavigation :brand="isHome ? settings.nav_brand : undefined" />
+  <SiteNavigation v-if="!isGallery" :brand="isHome ? settings.nav_brand : undefined" />
   <div
     v-if="isHome"
     class="page-shell"
@@ -548,7 +574,7 @@ onBeforeUnmount(() => {
           <nav class="home-route-nav home-reveal" aria-label="快捷航线">
             <span class="home-route-label"><strong>快捷航线</strong><small>选择下一站</small></span>
             <RouterLink
-              v-for="command in commandLinks"
+              v-for="command in visibleCommandLinks"
               :key="command.label"
               :class="`tone-${command.tone}`"
               :to="command.to"
@@ -632,7 +658,7 @@ onBeforeUnmount(() => {
       <component :is="Component" />
     </KeepAlive>
   </router-view>
-  <SiteFooter />
+  <SiteFooter v-if="!isGallery" />
 </template>
 
 <style scoped>
@@ -751,7 +777,7 @@ onBeforeUnmount(() => {
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: translateY(-0.28rem) rotate(45deg);
-  animation: arrow-bounce 2.8s ease-in-out 1.4s infinite;
+  animation: arrow-settle 0.8s cubic-bezier(0.22, 1, 0.36, 1) 1.4s both;
 }
 
 .content-shell {
@@ -1970,13 +1996,12 @@ onBeforeUnmount(() => {
   }
 }
 
-@keyframes arrow-bounce {
-  0%,
-  100% {
+@keyframes arrow-settle {
+  from {
     transform: translateY(-0.35rem) rotate(45deg);
   }
-  50% {
-    transform: translateY(0.35rem) rotate(45deg);
+  to {
+    transform: translateY(0) rotate(45deg);
   }
 }
 
@@ -4267,7 +4292,7 @@ onBeforeUnmount(() => {
 }
 
 .home-route-nav {
-  grid-template-columns: minmax(8.5rem, 0.7fr) repeat(5, minmax(0, 1fr));
+  grid-template-columns: minmax(8.5rem, 0.7fr) repeat(6, minmax(0, 1fr));
   overflow: hidden;
   border-bottom: 1px solid var(--flow-line);
 }
@@ -4512,7 +4537,8 @@ onBeforeUnmount(() => {
     border-bottom: 1px solid var(--flow-line);
   }
 
-  .home-route-nav > a:nth-child(4) {
+  .home-route-nav > a:nth-child(4),
+  .home-route-nav > a:nth-child(7) {
     border-right: 0;
   }
 
@@ -4610,8 +4636,7 @@ onBeforeUnmount(() => {
     border-right: 0;
   }
 
-  .home-route-nav > a:last-child {
-    grid-column: 1 / -1;
+  .home-route-nav > a:nth-last-child(-n + 2) {
     border-bottom: 0;
   }
 
