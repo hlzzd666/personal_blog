@@ -1742,6 +1742,11 @@ onBeforeUnmount(() => {
 }
 
 .resume-preview-dialog {
+  --preview-ink: #102a36;
+  --preview-muted: #667780;
+  --preview-border: #d8e1e6;
+  --preview-sea: #15939b;
+  --preview-coral: #ef735b;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(100%, 980px);
@@ -1765,12 +1770,17 @@ onBeforeUnmount(() => {
 }
 
 .resume-preview-dialog header {
-  border-bottom: 1px solid var(--border);
+  color: var(--preview-ink);
+  border-bottom: 1px solid var(--preview-border);
+}
+
+.resume-preview-dialog header .card-kicker {
+  color: var(--preview-coral);
 }
 
 .resume-preview-dialog header h2 {
   margin: 0.25rem 0 0;
-  color: var(--ink);
+  color: var(--preview-ink);
   font-size: 1rem;
 }
 
@@ -1780,7 +1790,7 @@ onBeforeUnmount(() => {
   place-items: center;
   width: 34px;
   height: 34px;
-  color: var(--ink);
+  color: var(--preview-ink);
   background: #edf2f5;
   font-size: 1.2rem;
   line-height: 1;
@@ -1795,12 +1805,13 @@ onBeforeUnmount(() => {
 
 .resume-preview-dialog footer {
   justify-content: flex-end;
-  border-top: 1px solid var(--border);
+  color: var(--preview-ink);
+  border-top: 1px solid var(--preview-border);
 }
 
 .resume-preview-dialog footer a {
   color: #fff;
-  background: var(--sea);
+  background: var(--preview-sea);
 }
 
 .connect-card {
