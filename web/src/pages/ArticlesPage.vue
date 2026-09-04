@@ -14,6 +14,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { fetchArticles, type Article, type ArticleListStats } from "../api/articles";
 import { readArticleReturnContext, saveArticleReturnContext } from "../composables/useArticleReturnContext";
 import { fetchSiteSettings, type SiteSettings, type VisualAssetItem } from "../api/site-settings";
+import OceanIcon from "../components/OceanIcon.vue";
 
 type ArticleView = "archive" | "tags" | "categories";
 
@@ -562,7 +563,7 @@ onBeforeUnmount(() => {
     </div>
     <header class="archive-masthead">
       <div class="archive-masthead-copy">
-        <RouterLink class="article-back-link" to="/">返回首页</RouterLink>
+        <RouterLink class="article-back-link" to="/"><OceanIcon name="home" :size="18" />返回首页</RouterLink>
         <p class="archive-eyebrow">
           <span aria-hidden="true"></span> LOGBOOK / {{ currentView.toUpperCase() }}
         </p>
@@ -596,7 +597,7 @@ onBeforeUnmount(() => {
             :class="{ active: currentView === view.key }"
             :to="{ path: '/articles', query: { view: view.key } }"
           >
-            {{ view.label }}
+            <OceanIcon v-if="view.key === 'archive'" name="archive" :size="18" />{{ view.label }}
           </RouterLink>
         </nav>
         <div class="archive-locate-meter" aria-label="文章定位统计">
@@ -635,7 +636,7 @@ onBeforeUnmount(() => {
             </button>
           </section>
           <section v-if="currentView !== 'categories'" class="filter-group filter-tags">
-            <p>标签</p>
+            <p><OceanIcon name="tag" :size="20" />标签</p>
             <button
               v-for="tag in tags"
               :key="tag"
@@ -650,12 +651,13 @@ onBeforeUnmount(() => {
 
         <section class="archive-results" aria-live="polite">
           <div v-if="loading" class="article-empty-state">正在校准航线……</div>
-          <div v-else-if="errorText" class="article-empty-state">{{ errorText }}</div>
+          <div v-else-if="errorText" class="article-empty-state"><OceanIcon name="warning" :size="28" />{{ errorText }}</div>
           <div v-else-if="!articles.length" class="article-empty-state">
             还没有文章，下一次靠岸会从这里开始。
           </div>
           <template v-else>
             <div v-if="!visibleArticles.length" class="article-empty-state">
+              <OceanIcon name="warning" :size="28" />
               这条筛选航线上还没有匹配的记录。
             </div>
             <div v-else class="archive-groups">
@@ -675,7 +677,7 @@ onBeforeUnmount(() => {
                     :data-article-id="article.id"
                     data-archive-entry
                   >
-                    <time :datetime="archiveDate(article)">{{
+                    <time :datetime="archiveDate(article)"><OceanIcon name="time" :size="18" />{{
                       formatDay(archiveDate(article))
                     }}</time>
                     <span class="archive-node" aria-hidden="true"></span>
@@ -694,8 +696,8 @@ onBeforeUnmount(() => {
                       </h2>
                       <p>{{ article.summary || "这段航行还没有摘要，打开文章查看完整记录。" }}</p>
                       <footer>
-                        <span>
-                          {{ article.views }} 次阅读 <i aria-hidden="true"></i>
+                        <span class="archive-entry-stats">
+                          <OceanIcon name="views" :size="18" />{{ article.views }} 次阅读 <i aria-hidden="true"></i>
                           {{ article.likes }} 个喜欢
                         </span>
                         <span class="article-tags">
@@ -727,7 +729,7 @@ onBeforeUnmount(() => {
       title="回到顶部"
       @click="scrollToTop"
     >
-      <span aria-hidden="true">↑</span>
+      <OceanIcon name="top" :size="24" />
     </button>
   </div>
 </template>
@@ -1286,14 +1288,6 @@ onBeforeUnmount(() => {
   font-size: 0.8rem;
   text-decoration: none;
 }
-.article-back-link::before {
-  content: "←";
-  font-size: 1rem;
-  transition: transform 0.2s ease;
-}
-.article-back-link:hover::before {
-  transform: translateX(-0.25rem);
-}
 .archive-eyebrow {
   display: flex;
   gap: 0.55rem;
@@ -1557,6 +1551,9 @@ onBeforeUnmount(() => {
 }
 .filter-rail-heading p,
 .filter-group > p {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
   margin: 0;
   color: #f7c951;
   font-family: "Noto Sans SC", sans-serif;
@@ -1881,6 +1878,9 @@ onBeforeUnmount(() => {
   transform: translate3d(0.1rem, -0.18rem, 0);
 }
 .archive-entry time {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
   padding-top: 0.15rem;
   color: #f7c951;
   font-family: "Noto Sans SC", sans-serif;
@@ -1990,6 +1990,7 @@ onBeforeUnmount(() => {
   font-size: 0.7rem;
   padding-right: 0.7rem;
 }
+.archive-entry-stats { display: inline-flex; gap: 0.3rem; align-items: center; }
 .archive-entry footer i {
   display: inline-block;
   width: 0.2rem;
@@ -2104,13 +2105,7 @@ onBeforeUnmount(() => {
     border-color 0.2s ease,
     background-color 0.2s ease;
 }
-.archive-back-to-top span {
-  display: block;
-  font-family: "Noto Sans SC", sans-serif;
-  font-size: 1.25rem;
-  line-height: 1;
-  transform: translateY(0.06rem);
-}
+.archive-back-to-top .ocean-icon { transform: translateY(0.02rem); }
 .archive-back-to-top:hover,
 .archive-back-to-top:focus-visible {
   border-color: #fff0a7;
@@ -2699,7 +2694,6 @@ onBeforeUnmount(() => {
   .chart-current {
     transform: none;
   }
-  .article-back-link::before,
   .archive-visual-layer,
   .archive-view-switcher a::after,
   .archive-view-switcher a,

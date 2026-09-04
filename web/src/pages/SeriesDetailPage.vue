@@ -5,6 +5,7 @@ import { onBeforeRouteLeave, useRoute } from "vue-router";
 import { ApiError } from "../api/http";
 import { fetchSeriesDetail, type SeriesDetail } from "../api/content";
 import OceanAtmosphere from "../components/OceanAtmosphere.vue";
+import OceanIcon from "../components/OceanIcon.vue";
 import { readArticleReturnContext, saveArticleReturnContext } from "../composables/useArticleReturnContext";
 import { useSeo } from "../composables/useSeo";
 import { useViewportReveal } from "../composables/useViewportReveal";
@@ -89,7 +90,7 @@ onBeforeRouteLeave((to) => {
         class="series-detail-hero"
         :style="series.cover_image_url ? { '--series-cover': `url(${series.cover_image_url})` } : undefined"
       >
-        <RouterLink to="/series">← 返回专题</RouterLink>
+        <RouterLink to="/series"><OceanIcon name="previous" :size="18" />返回专题</RouterLink>
         <p>SERIES / {{ series.slug }}</p>
         <h1>{{ series.title }}</h1>
         <span>{{ series.description || "沿着顺序阅读这组文章。" }}</span>
@@ -110,13 +111,14 @@ onBeforeRouteLeave((to) => {
             <h2>{{ article.title }}</h2>
             <span>{{ article.summary || "打开文章查看完整记录。" }}</span>
           </div>
-          <b aria-hidden="true">→</b>
+          <OceanIcon name="next" :size="20" />
         </RouterLink>
         <div v-if="!series.articles.length" class="content-state">这条航线还没有文章。</div>
       </section>
     </template>
     <section v-else-if="loading" class="content-state">正在读取专题航线…</section>
     <section v-else class="content-state error">
+      <OceanIcon name="warning" :size="28" />
       <p>{{ errorText }}</p>
       <RouterLink :to="notFound ? '/series' : route.fullPath">{{ notFound ? "返回专题列表" : "重新读取" }}</RouterLink>
     </section>

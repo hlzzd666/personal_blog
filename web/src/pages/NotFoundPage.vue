@@ -1,3 +1,7 @@
+<script setup lang="ts">
+import OceanIcon from "../components/OceanIcon.vue";
+</script>
+
 <template>
   <main class="not-found-page">
     <div class="lost-coordinate" aria-hidden="true"><span>404</span><i></i></div>
@@ -5,7 +9,7 @@
     <h1>这条航线没有留下坐标</h1>
     <span>地址可能已经改变，也可能从未存在。</span>
     <nav>
-      <RouterLink to="/">返回首页</RouterLink>
+      <RouterLink to="/"><OceanIcon name="home" :size="18" />返回首页</RouterLink>
       <RouterLink to="/articles">浏览文章</RouterLink>
     </nav>
   </main>

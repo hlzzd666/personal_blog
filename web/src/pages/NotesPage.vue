@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 
 import { fetchNotes, type Note } from "../api/content";
 import OceanAtmosphere from "../components/OceanAtmosphere.vue";
+import OceanIcon from "../components/OceanIcon.vue";
 import { useSeo } from "../composables/useSeo";
 import { useViewportReveal } from "../composables/useViewportReveal";
 
@@ -60,7 +61,7 @@ onMounted(() => {
     <OceanAtmosphere variant="notes" />
     <header class="content-hub-hero hub-masthead notes-masthead">
       <div class="hub-hero-copy">
-        <RouterLink class="hub-back" to="/">← 返回首页</RouterLink>
+        <RouterLink class="hub-back" to="/"><OceanIcon name="home" :size="18" />返回首页</RouterLink>
         <h1>短动态</h1>
         <p>不必展开成长文，也值得留下坐标。</p>
         <div class="hub-hero-meta"><span>SHORT SIGNALS</span><strong>{{ total }} 条信号</strong></div>
@@ -87,13 +88,13 @@ onMounted(() => {
           <p>{{ excerpt(note.content_markdown) }}</p>
           <footer>
             <span v-for="tag in note.tags" :key="tag"># {{ tag }}</span>
-            <RouterLink :to="`/notes/${note.slug}`">读取完整信号 <b aria-hidden="true">↗</b></RouterLink>
+            <RouterLink :to="`/notes/${note.slug}`">读取完整信号 <OceanIcon name="next" :size="18" /></RouterLink>
           </footer>
         </div>
       </article>
     </section>
     <section v-else-if="loading" class="content-state">正在监听动态信号…</section>
-    <section v-else-if="errorText" class="content-state error">{{ errorText }}</section>
+    <section v-else-if="errorText" class="content-state error"><OceanIcon name="warning" :size="28" />{{ errorText }}</section>
     <section v-else class="content-state">当前没有匹配的动态。</section>
   </main>
 </template>

@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 
 import { fetchSiteSettings } from "../api/site-settings";
 import { fetchGallery } from "../api/gallery";
+import OceanIcon from "./OceanIcon.vue";
 import SiteSearchDialog from "./SiteSearchDialog.vue";
 
 const props = defineProps<{ brand?: string }>();
@@ -22,6 +23,7 @@ let loadingBrand = false;
 
 const brand = computed(() => props.brand ?? loadedBrand.value);
 const usesLightSurface = computed(() => route.path === "/about" || route.path === "/privacy" || /^\/articles\/[^/]+/.test(route.path));
+const usesSystemSurface = computed(() => route.path === "/icons");
 
 async function loadBrand() {
   if (props.brand || loadingBrand) return;
@@ -132,7 +134,7 @@ onBeforeUnmount(() => {
   <header
     :class="[
       'floating-nav',
-      { hidden: !navVisible, revealing: navRevealing, 'light-surface': usesLightSurface },
+      { hidden: !navVisible, revealing: navRevealing, 'light-surface': usesLightSurface, 'system-surface': usesSystemSurface },
     ]"
   >
     <RouterLink class="brand" :to="{ path: '/', hash: '#hero' }">{{ brand }}</RouterLink>
@@ -143,19 +145,20 @@ onBeforeUnmount(() => {
         aria-haspopup="dialog"
         @click="searchOpen = true"
       >
+        <OceanIcon name="search" :size="20" />
         搜索
       </button>
-      <RouterLink :to="{ path: '/', hash: '#hero' }">首页</RouterLink>
+      <RouterLink :to="{ path: '/', hash: '#hero' }"><OceanIcon name="home" :size="20" />首页</RouterLink>
       <RouterLink
         :to="{ path: '/articles', query: { view: 'archive' } }"
         @click="handleArticlesNavigation"
       >
-        文章
+        <OceanIcon name="articles" :size="20" />文章
       </RouterLink>
-      <RouterLink to="/series">专题</RouterLink>
-      <RouterLink to="/notes">动态</RouterLink>
-      <RouterLink v-if="galleryEntryVisible" to="/gallery">展厅</RouterLink>
-      <RouterLink to="/about">关于我</RouterLink>
+      <RouterLink to="/series"><OceanIcon name="series" :size="20" />专题</RouterLink>
+      <RouterLink to="/notes"><OceanIcon name="notes" :size="20" />动态</RouterLink>
+      <RouterLink v-if="galleryEntryVisible" to="/gallery"><OceanIcon name="gallery" :size="20" />展厅</RouterLink>
+      <RouterLink to="/about"><OceanIcon name="about" :size="20" />关于我</RouterLink>
     </nav>
   </header>
   <SiteSearchDialog :open="searchOpen" @close="searchOpen = false" />
@@ -190,12 +193,14 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
 }
-.floating-nav.light-surface {
+.floating-nav.light-surface,
+.floating-nav.system-surface {
   background: transparent;
   border-bottom: 1px solid transparent;
   backdrop-filter: none;
 }
-.floating-nav.light-surface::before {
+.floating-nav.light-surface::before,
+.floating-nav.system-surface::before {
   display: block;
   border-bottom: 1px solid rgba(24, 49, 56, 0.07);
   background: rgba(255, 250, 242, 0.88);
@@ -203,12 +208,17 @@ onBeforeUnmount(() => {
 }
 .floating-nav.light-surface .brand,
 .floating-nav.light-surface nav a,
-.floating-nav.light-surface .nav-search-button {
+.floating-nav.light-surface .nav-search-button,
+.floating-nav.system-surface .brand,
+.floating-nav.system-surface nav a,
+.floating-nav.system-surface .nav-search-button {
   color: #183138;
   text-shadow: none;
 }
 .floating-nav.light-surface nav > a::before,
-.floating-nav.light-surface .nav-search-button::before {
+.floating-nav.light-surface .nav-search-button::before,
+.floating-nav.system-surface nav > a::before,
+.floating-nav.system-surface .nav-search-button::before {
   background: #276f6d;
   box-shadow: none;
 }
@@ -217,6 +227,13 @@ onBeforeUnmount(() => {
 .floating-nav.light-surface .nav-search-button:hover,
 .floating-nav.light-surface .nav-search-button:focus-visible,
 .floating-nav.light-surface nav > a.router-link-active {
+  color: #276f6d;
+}
+.floating-nav.system-surface nav > a:hover,
+.floating-nav.system-surface nav > a:focus-visible,
+.floating-nav.system-surface .nav-search-button:hover,
+.floating-nav.system-surface .nav-search-button:focus-visible,
+.floating-nav.system-surface nav > a.router-link-active {
   color: #276f6d;
 }
 .floating-nav.revealing::before {
@@ -252,6 +269,9 @@ nav {
 nav > a,
 .nav-search-button {
   position: relative;
+  display: inline-flex;
+  gap: 0.32rem;
+  align-items: center;
   padding-bottom: 0.45rem;
 }
 nav > a::before,
@@ -324,7 +344,32 @@ nav > a:focus-visible,
     font-size: 0.9rem;
   }
 }
+@media (prefers-color-scheme: dark) {
+  .floating-nav.system-surface::before {
+    border-color: rgba(246, 235, 212, 0.08);
+    background: rgba(7, 28, 41, 0.9);
+  }
+  .floating-nav.system-surface .brand,
+  .floating-nav.system-surface nav a,
+  .floating-nav.system-surface .nav-search-button {
+    color: #f6ebd4;
+  }
+  .floating-nav.system-surface nav > a::before,
+  .floating-nav.system-surface .nav-search-button::before {
+    background: #f0c162;
+  }
+  .floating-nav.system-surface nav > a:hover,
+  .floating-nav.system-surface nav > a:focus-visible,
+  .floating-nav.system-surface .nav-search-button:hover,
+  .floating-nav.system-surface .nav-search-button:focus-visible,
+  .floating-nav.system-surface nav > a.router-link-active {
+    color: #f0c162;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
+  .floating-nav {
+    transition: none;
+  }
   .floating-nav::before {
     animation: none;
   }

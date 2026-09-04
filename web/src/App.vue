@@ -3,17 +3,21 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRoute } from "vue-router";
 import SiteNavigation from "./components/SiteNavigation.vue";
 import SiteFooter from "./components/SiteFooter.vue";
+import OceanIcon from "./components/OceanIcon.vue";
 import { fetchAboutProfile, type AboutProfile } from "./api/about";
 import { fetchArticles, type Article, type ArticleListStats } from "./api/articles";
 import { fetchSiteSettings, type SiteSettings } from "./api/site-settings";
 import { fetchVisitorLocation, type VisitorLocation } from "./api/visitor-location";
 import { fetchNotes, fetchSeries, type Note, type Series } from "./api/content";
 import { fetchGallery } from "./api/gallery";
+import { type IconName } from "./icons";
 
 const fallbackSettings: SiteSettings = {
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
   hero_image_url: "https://images.hdqwalls.com/download/one-piece-anime-artwork-i6-2560x1440.jpg",
   nav_brand: "某某某的个人空间",
+  icp_filing_number: null,
+  police_filing_number: null,
   site_launched_on: "2026-01-01",
   owner_avatar_url: "/owner-avatar.jpg",
   owner_location_name: "未设置站长地址",
@@ -89,36 +93,42 @@ const commandLinks = [
     caption: "按时间回看全部记录",
     to: { path: "/articles", query: { view: "archive" } },
     tone: "brass",
+    icon: "archive" as IconName,
   },
   {
     label: "标签海图",
     caption: "沿主题定位相关内容",
     to: { path: "/articles", query: { view: "tags" } },
     tone: "tide",
+    icon: "tag" as IconName,
   },
   {
     label: "个人档案",
     caption: "项目、技术栈与联系方式",
     to: "/about",
     tone: "coral",
+    icon: "about" as IconName,
   },
   {
     label: "专题航线",
     caption: "按顺序连续阅读",
     to: "/series",
     tone: "sage",
+    icon: "series" as IconName,
   },
   {
     label: "短动态",
     caption: "接收最近的简短信号",
     to: "/notes",
     tone: "coral",
+    icon: "notes" as IconName,
   },
   {
     label: "3D 展厅",
     caption: "漫游伟大航路人物档案",
     to: "/gallery",
     tone: "brass",
+    icon: "gallery" as IconName,
   },
 ];
 
@@ -529,11 +539,11 @@ onBeforeUnmount(() => {
             >
               <div class="home-panel-heading">
                 <strong>最新文章</strong>
-                <time>{{ formatFullDate(featuredArticle.published_at ?? featuredArticle.created_at) }}</time>
+                <time><OceanIcon name="time" :size="18" />{{ formatFullDate(featuredArticle.published_at ?? featuredArticle.created_at) }}</time>
               </div>
               <h3>{{ featuredArticle.title }}</h3>
               <p>{{ featuredArticle.summary || "打开文章查看完整记录。" }}</p>
-              <span class="home-featured-meta">{{ featuredArticle.views }} 阅读 <i></i> {{ featuredArticle.likes }} 喜欢</span>
+              <span class="home-featured-meta"><OceanIcon name="views" :size="18" />{{ featuredArticle.views }} 阅读 <i></i> {{ featuredArticle.likes }} 喜欢</span>
             </RouterLink>
             <article v-else class="home-featured-log home-reveal">
               <div class="home-panel-heading"><strong>最新文章</strong></div>
@@ -565,7 +575,7 @@ onBeforeUnmount(() => {
                 <span><b>{{ latestArticleDate }}</b> 最近更新</span>
               </div>
               <div class="home-visitor-line">
-                <span>欢迎靠岸 · {{ visitorLocationText }}</span>
+                <span><OceanIcon name="location" :size="18" />欢迎靠岸 · {{ visitorLocationText }}</span>
                 <small>{{ distanceText }} · {{ visitorIpText }}</small>
               </div>
             </aside>
@@ -579,7 +589,7 @@ onBeforeUnmount(() => {
               :class="`tone-${command.tone}`"
               :to="command.to"
             >
-              <span class="action-mark" aria-hidden="true"></span>
+              <OceanIcon class="home-route-icon" :name="command.icon" :size="30" />
               <span><strong>{{ command.label }}</strong><small>{{ command.caption }}</small></span>
             </RouterLink>
           </nav>
@@ -597,7 +607,7 @@ onBeforeUnmount(() => {
                 :to="{ path: `/articles/${article.slug}` }"
               >
                 <span class="home-article-index">{{ String(index + 1).padStart(2, "0") }}</span>
-                <time>{{ formatArticleDate(article) }}</time>
+                <time><OceanIcon name="time" :size="16" />{{ formatArticleDate(article) }}</time>
                 <div><strong>{{ article.title }}</strong><small>{{ article.category }}</small></div>
                 <span class="home-article-likes">{{ article.likes }} 喜欢</span>
               </RouterLink>
@@ -3642,6 +3652,14 @@ onBeforeUnmount(() => {
   font-size: 0.64rem;
 }
 
+.home-panel-heading time,
+.home-article-row time,
+.home-visitor-line > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .home-status-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3760,6 +3778,19 @@ onBeforeUnmount(() => {
 .home-route-nav small {
   color: var(--home-muted);
   font-size: 0.61rem;
+}
+
+.home-route-nav .home-route-icon {
+  flex: 0 0 auto;
+  width: 1.8rem;
+  height: 1.8rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .home-route-nav > a:hover .home-route-icon,
+  .home-route-nav > a:focus-visible .home-route-icon {
+    transform: translateY(-0.12rem) scale(1.06);
+  }
 }
 
 .home-route-nav .action-mark {

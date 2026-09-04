@@ -14,6 +14,7 @@ import {
 } from "../api/articles";
 import { ApiError } from "../api/http";
 import OceanAtmosphere from "../components/OceanAtmosphere.vue";
+import OceanIcon from "../components/OceanIcon.vue";
 import { readArticleReturnContext } from "../composables/useArticleReturnContext";
 import { useSeo } from "../composables/useSeo";
 
@@ -537,7 +538,7 @@ onBeforeUnmount(() => {
         <div class="article-hero-inner">
           <div class="article-hero-copy">
             <button class="article-back-link" type="button" @click="returnToEntry">
-              <span aria-hidden="true">←</span> {{ articleReturnLabel }}
+              {{ articleReturnLabel }}
             </button>
             <div class="hero-heading">
               <p class="article-kicker"><span>LOGBOOK / {{ article.category }}</span><span>{{ formatDate(article.published_at) }}</span></p>
@@ -547,8 +548,8 @@ onBeforeUnmount(() => {
             <div class="article-manifest" aria-label="文章信息">
               <div><span>记录编号</span><strong>NO. {{ articleNumber }}</strong></div>
               <div><span>执笔</span><strong>{{ article.author }}</strong></div>
-              <div><span>阅读时间</span><strong>{{ readingMinutes }} 分钟</strong></div>
-              <div><span>浏览</span><strong>{{ article.views }}</strong></div>
+              <div><span><OceanIcon name="time" :size="18" />阅读时间</span><strong>{{ readingMinutes }} 分钟</strong></div>
+              <div><span><OceanIcon name="views" :size="18" />浏览</span><strong>{{ article.views }}</strong></div>
             </div>
           </div>
           <div v-if="article.cover_image_url" class="article-hero-visual" aria-label="文章封面信标">
@@ -572,7 +573,7 @@ onBeforeUnmount(() => {
               <p>READING<br />POSITION</p>
             </div>
             <nav v-if="articleToc.length" class="article-toc" aria-label="文章目录">
-              <p>航线节点</p>
+              <p><OceanIcon name="toc" :size="20" />航线节点</p>
               <div class="article-toc-list">
                 <button v-for="(item, index) in articleToc" :key="item.id" :class="[{ active: item.id === activeHeadingId }, `level-${item.level}`]" type="button" @click="scrollToHeading(item.id)">
                   <span>{{ String(index + 1).padStart(2, "0") }}</span>{{ item.text }}
@@ -591,7 +592,7 @@ onBeforeUnmount(() => {
           <!-- 内容已由 DOMPurify 清洗后再插入，保留 Markdown 的排版能力。 -->
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div ref="contentRoot" class="markdown-body" @click="handleContentClick" @keydown="handleContentKeydown" v-html="articleContent"></div>
-          <p v-if="article.is_repost && article.source_url" class="article-source">本文转载自 <a :href="article.source_url" target="_blank" rel="noreferrer noopener">原始来源</a></p>
+          <p v-if="article.is_repost && article.source_url" class="article-source">本文转载自 <a :href="article.source_url" target="_blank" rel="noreferrer noopener"><OceanIcon name="external" :size="16" />原始来源</a></p>
           <footer class="article-detail-footer">
             <div class="article-detail-tags">
               <RouterLink
@@ -604,33 +605,33 @@ onBeforeUnmount(() => {
             </div>
             <div class="article-like-area">
               <button :class="['article-like-button', { celebrated: likedRecently, 'is-liked': article.liked_by_current_visitor }]" type="button" :disabled="liking || article.liked_by_current_visitor" @click="handleLike">
-                <span class="like-symbol" aria-hidden="true">♥</span><span>{{ article.liked_by_current_visitor ? "已点赞" : liking ? "正在送达" : "点赞" }}</span><strong>{{ article.likes }}</strong>
+                <OceanIcon class="like-symbol" name="like" :size="22" /><span>{{ article.liked_by_current_visitor ? "已点赞" : liking ? "正在送达" : "点赞" }}</span><strong>{{ article.likes }}</strong>
               </button>
               <small v-if="likeError" role="status">{{ likeError }}</small>
             </div>
           </footer>
           <section class="article-share-panel" aria-label="分享文章">
-            <div><p>SHARE THIS LOG</p><span>把这段航行记录交给下一位读者。</span></div>
+            <div><p><OceanIcon name="share" :size="20" />SHARE THIS LOG</p><span>把这段航行记录交给下一位读者。</span></div>
             <div>
               <button type="button" :class="{ confirmed: copyState === 'copied' }" @click="copyArticleLink">
-                {{ copyState === "copied" ? "链接已复制" : copyState === "error" ? "复制失败" : "复制链接" }}
+                <OceanIcon v-if="copyState === 'copied'" name="success" :size="18" />{{ copyState === "copied" ? "链接已复制" : copyState === "error" ? "复制失败" : "复制链接" }}
               </button>
               <button type="button" :class="{ confirmed: shareState === 'shared' || shareState === 'copied' }" @click="shareArticle">
-                {{ shareState === "shared" ? "分享完成" : shareState === "copied" ? "链接已复制" : shareState === "error" ? "分享失败" : "系统分享" }}
+                <OceanIcon v-if="shareState === 'shared' || shareState === 'copied'" name="success" :size="18" />{{ shareState === "shared" ? "分享完成" : shareState === "copied" ? "链接已复制" : shareState === "error" ? "分享失败" : "系统分享" }}
               </button>
             </div>
           </section>
           <section v-if="articleContext" class="article-continuation" aria-label="继续阅读">
             <RouterLink v-if="articleContext.series" class="article-series-link" :to="`/series/${articleContext.series.slug}`">
-              <span>当前专题</span><strong>{{ articleContext.series.title }}</strong><i aria-hidden="true">查看完整航线 →</i>
+              <span>当前专题</span><strong>{{ articleContext.series.title }}</strong><i>查看完整航线 <OceanIcon name="next" :size="18" /></i>
             </RouterLink>
             <div class="article-adjacent-links">
               <RouterLink v-if="articleContext.previous" :to="`/articles/${articleContext.previous.slug}`">
-                <span>← 上一篇</span><strong>{{ articleContext.previous.title }}</strong>
+                <span><OceanIcon name="previous" :size="18" />上一篇</span><strong>{{ articleContext.previous.title }}</strong>
               </RouterLink>
               <div v-else aria-hidden="true"></div>
               <RouterLink v-if="articleContext.next" :to="`/articles/${articleContext.next.slug}`">
-                <span>下一篇 →</span><strong>{{ articleContext.next.title }}</strong>
+                <span>下一篇<OceanIcon name="next" :size="18" /></span><strong>{{ articleContext.next.title }}</strong>
               </RouterLink>
             </div>
             <div v-if="articleContext.related.length" class="related-articles">
@@ -668,6 +669,7 @@ onBeforeUnmount(() => {
       <span class="state-radar" aria-hidden="true"></span><p>正在读取航行记录</p><small>LOG SIGNAL CONNECTING</small>
     </div>
     <div v-else class="article-detail-state article-detail-error">
+      <OceanIcon name="warning" :size="32" />
       <p>{{ errorText }}</p>
       <button v-if="notFound" type="button" @click="returnToEntry">{{ articleReturnLabel }}</button>
       <button v-else type="button" @click="loadArticle">重新读取</button>
@@ -735,7 +737,7 @@ onBeforeUnmount(() => {
 .article-summary { max-width: 45rem; margin: 0.9rem 0 0; color: #526466; font-family: "Noto Sans SC", sans-serif; font-size: clamp(0.98rem, 1.25vw, 1.08rem); line-height: 1.78; }
 .article-manifest { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(43rem, 100%); margin-top: 1.35rem; border-top: 1px solid var(--line); animation: manifest-entry 0.65s 0.18s cubic-bezier(0.2, 0.76, 0.26, 1) both; }
 .article-manifest div { display: grid; gap: 0.2rem; padding: 0.65rem 0.75rem 0 0; }
-.article-manifest span { color: #7f918f; font-family: "Noto Sans SC", sans-serif; font-size: 0.62rem; }
+.article-manifest span { display: inline-flex; gap: 0.3rem; align-items: center; color: #7f918f; font-family: "Noto Sans SC", sans-serif; font-size: 0.62rem; }
 .article-manifest strong { color: var(--ink); font-family: "Noto Sans SC", sans-serif; font-size: 0.82rem; font-weight: 700; }
 .article-hero-visual { position: relative; display: grid; place-items: center; min-height: clamp(18rem, 31vw, 24rem); isolation: isolate; animation: cover-entry 0.8s 0.1s cubic-bezier(0.2, 0.76, 0.26, 1) both; }
 .cover-route-line { position: absolute; top: 47%; left: -2.25rem; width: 4.25rem; border-top: 1px dashed rgba(39, 111, 109, 0.55); transform: rotate(-13deg); transform-origin: right center; }
@@ -772,7 +774,7 @@ onBeforeUnmount(() => {
 .article-toc-list::-webkit-scrollbar { width: 4px; }
 .article-toc-list::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(35, 123, 120, 0.38); }
 .article-toc-list::-webkit-scrollbar-track { background: transparent; }
-.article-toc > p { margin: 0 0 0.75rem; color: #7d8b88; font-family: "Noto Sans SC", sans-serif; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em; }
+.article-toc > p { display: inline-flex; gap: 0.35rem; align-items: center; margin: 0 0 0.75rem; color: #7d8b88; font-family: "Noto Sans SC", sans-serif; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em; }
 .article-toc button { position: relative; display: grid; grid-template-columns: 1.65rem minmax(0, 1fr); gap: 0.45rem; width: 100%; padding: 0.5rem 0.4rem 0.5rem 0; border: 0; color: #6f807f; background: transparent; font-family: "Noto Sans SC", sans-serif; font-size: 0.74rem; line-height: 1.5; text-align: left; cursor: pointer; transition: color 0.2s ease, transform 0.2s ease; }
 .article-toc button::before { content: ""; position: absolute; top: 50%; left: -1.1rem; width: 0.42rem; height: 0.42rem; border: 1px solid currentColor; border-radius: 50%; opacity: 0; transform: translateY(-50%) scale(0.45); transition: opacity 0.25s ease, transform 0.25s ease; }
 .article-toc button span { color: rgba(35, 123, 120, 0.58); font-size: 0.58rem; }
@@ -861,7 +863,7 @@ onBeforeUnmount(() => {
 .markdown-body :deep(th) { color: var(--signal); font-weight: 500; }
 
 .article-source { margin: 3.5rem 0 0; padding: 0.85rem 1rem; border-left: 1px solid var(--current); color: #657879; background: rgba(39, 111, 109, 0.055); font-family: "Noto Sans SC", sans-serif; font-size: 0.78rem; }
-.article-source a { color: var(--current); }
+.article-source a { display: inline-flex; gap: 0.3rem; align-items: center; color: var(--current); }
 .article-detail-footer { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--line); }
 .article-detail-tags { display: flex; flex-wrap: wrap; gap: 0.55rem; }
 .article-detail-tags a { padding: 0.38rem 0; color: var(--current); font-family: "Noto Sans SC", sans-serif; font-size: 0.75rem; text-decoration: none; transition: color 180ms ease, transform 140ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -876,20 +878,20 @@ onBeforeUnmount(() => {
 .article-like-button.celebrated .like-symbol { animation: like-burst 0.72s cubic-bezier(0.2, 0.76, 0.26, 1); }
 .like-symbol { color: var(--coral); font-size: 1rem; }
 .article-share-panel { display: flex; justify-content: space-between; gap: 1.5rem; align-items: center; margin-top: 1.2rem; padding: 1.1rem; border: 1px solid rgba(39, 111, 109, 0.12); border-radius: 6px; background: rgba(255, 250, 242, 0.48); }
-.article-share-panel p { margin: 0 0 0.25rem; color: #7d8b88; font: 700 0.65rem "Noto Sans SC", sans-serif; letter-spacing: 0.04em; }
+.article-share-panel p { display: inline-flex; gap: 0.35rem; align-items: center; margin: 0 0 0.25rem; color: #7d8b88; font: 700 0.65rem "Noto Sans SC", sans-serif; letter-spacing: 0.04em; }
 .article-share-panel span { color: var(--muted); font: 500 0.74rem "Noto Sans SC", sans-serif; }
 .article-share-panel > div:last-child { display: flex; gap: 0.55rem; }
-.article-share-panel button { min-width: 6.8rem; padding: 0.58rem 0.8rem; border: 1px solid rgba(35, 123, 120, 0.24); border-radius: 5px; color: var(--ink); background: rgba(255, 252, 246, 0.68); font: 700 0.72rem "Noto Sans SC", sans-serif; cursor: pointer; touch-action: manipulation; transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms ease, background-color 150ms ease; }
+.article-share-panel button { display: inline-flex; gap: 0.3rem; align-items: center; justify-content: center; min-width: 6.8rem; padding: 0.58rem 0.8rem; border: 1px solid rgba(35, 123, 120, 0.24); border-radius: 5px; color: var(--ink); background: rgba(255, 252, 246, 0.68); font: 700 0.72rem "Noto Sans SC", sans-serif; cursor: pointer; touch-action: manipulation; transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms ease, background-color 150ms ease; }
 .article-share-panel button.confirmed { color: #fffaf0; background: var(--current); }
 .article-share-panel button:active { transform: scale(0.97); transition-duration: 0s; }
 .article-continuation { display: grid; gap: 1rem; margin-top: 4rem; }
 .article-series-link { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1rem; align-items: center; padding: 1rem 1.2rem; border: 1px solid rgba(159, 122, 49, 0.18); border-radius: 6px; color: var(--ink); background: rgba(159, 122, 49, 0.045); text-decoration: none; transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms ease; }
-.article-series-link span, .article-series-link i { color: var(--signal); font: 700 0.68rem "Noto Sans SC", sans-serif; }
+.article-series-link span, .article-series-link i { display: inline-flex; gap: 0.3rem; align-items: center; color: var(--signal); font: 700 0.68rem "Noto Sans SC", sans-serif; }
 .article-series-link i { font-style: normal; }
 .article-adjacent-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
 .article-adjacent-links a { display: grid; gap: 0.45rem; min-height: 6.8rem; padding: 1rem; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: rgba(255, 252, 246, 0.5); text-decoration: none; transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms ease, background-color 180ms ease; }
 .article-adjacent-links a:last-child { text-align: right; }
-.article-adjacent-links span { color: var(--current); font: 700 0.68rem "Noto Sans SC", sans-serif; }
+.article-adjacent-links span { display: inline-flex; gap: 0.3rem; align-items: center; color: var(--current); font: 700 0.68rem "Noto Sans SC", sans-serif; }
 .article-adjacent-links strong { font-family: var(--display-font); font-size: 1.05rem; }
 .related-articles { margin-top: 1.4rem; }
 .related-articles > p { margin: 0 0 0.8rem; color: var(--signal); font: 700 0.66rem "IBM Plex Mono", monospace; }

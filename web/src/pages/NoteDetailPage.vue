@@ -7,6 +7,7 @@ import { useRoute } from "vue-router";
 import { fetchNote, type Note } from "../api/content";
 import { ApiError } from "../api/http";
 import OceanAtmosphere from "../components/OceanAtmosphere.vue";
+import OceanIcon from "../components/OceanIcon.vue";
 import { useSeo } from "../composables/useSeo";
 
 const route = useRoute();
@@ -91,16 +92,16 @@ onBeforeUnmount(() => window.clearTimeout(copyTimer));
     <OceanAtmosphere variant="notes" />
     <article v-if="note" class="note-document">
       <header>
-        <RouterLink to="/notes">← 返回短动态</RouterLink>
+        <RouterLink to="/notes"><OceanIcon name="previous" :size="18" />返回短动态</RouterLink>
         <p>SHORT SIGNAL / {{ note.slug }}</p>
-        <time>{{ formatDate(note.published_at ?? note.created_at) }}</time>
+        <time><OceanIcon name="time" :size="18" />{{ formatDate(note.published_at ?? note.created_at) }}</time>
       </header>
       <!-- 内容已使用 DOMPurify 清洗。 -->
       <!-- eslint-disable-next-line vue/no-v-html -->
       <div class="note-markdown" v-html="renderedContent"></div>
       <footer>
         <div><span v-for="tag in note.tags" :key="tag"># {{ tag }}</span></div>
-        <a v-if="note.external_url" :href="note.external_url" target="_blank" rel="noreferrer noopener">打开相关链接 ↗</a>
+        <a v-if="note.external_url" :href="note.external_url" target="_blank" rel="noreferrer noopener"><OceanIcon name="external" :size="18" />打开相关链接</a>
         <button type="button" :class="{ confirmed: copyState === 'copied' }" @click="copyLink">
           {{ copyState === "copied" ? "链接已复制" : copyState === "error" ? "复制失败" : "复制链接" }}
         </button>
@@ -108,6 +109,7 @@ onBeforeUnmount(() => window.clearTimeout(copyTimer));
     </article>
     <section v-else-if="loading" class="content-state">正在读取动态信号…</section>
     <section v-else class="content-state error">
+      <OceanIcon name="warning" :size="28" />
       <p>{{ errorText }}</p>
       <RouterLink :to="notFound ? '/notes' : route.fullPath">{{ notFound ? "返回短动态" : "重新读取" }}</RouterLink>
     </section>

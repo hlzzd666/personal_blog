@@ -3,6 +3,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { fetchGallery, type GalleryCharacter, type GalleryResponse } from "../api/gallery";
 import { GalleryScene } from "../gallery/GalleryScene";
+import OceanIcon from "../components/OceanIcon.vue";
 
 const sceneRoot = ref<HTMLElement | null>(null);
 const detailDialog = ref<HTMLDialogElement | null>(null);
@@ -123,12 +124,12 @@ onBeforeUnmount(() => {
     </section>
 
     <section v-else-if="errorMessage" class="gallery-status-screen" role="alert">
-      <span class="gallery-status-mark">!</span>
+      <OceanIcon class="gallery-status-mark" name="warning" :size="48" />
       <h1>展厅暂未开启</h1>
       <p>{{ errorMessage }}</p>
       <div class="gallery-status-actions">
         <button type="button" class="gallery-primary-action" @click="loadGallery">重新读取</button>
-        <RouterLink class="gallery-secondary-action" to="/">返回博客</RouterLink>
+        <RouterLink class="gallery-secondary-action" to="/"><OceanIcon name="home" :size="18" />返回博客</RouterLink>
       </div>
     </section>
 
@@ -139,7 +140,7 @@ onBeforeUnmount(() => {
             <h1>{{ gallery.settings.hall_name }}</h1>
             <p>当前设备使用人物档案视图；电脑端可进入完整 3D 展厅。</p>
           </div>
-          <RouterLink class="gallery-secondary-action" to="/">返回博客</RouterLink>
+          <RouterLink class="gallery-secondary-action" to="/"><OceanIcon name="home" :size="18" />返回博客</RouterLink>
         </header>
         <div v-if="gallery.characters.length" class="gallery-fallback-grid">
           <article v-for="(character, index) in gallery.characters" :key="character.id" class="gallery-fallback-item">
@@ -191,7 +192,7 @@ onBeforeUnmount(() => {
               <button type="button" class="gallery-primary-action" :disabled="!gallery.characters.length" @click="startTour">
                 {{ gallery.characters.length ? "进入展厅" : "展厅正在布展" }}
               </button>
-              <RouterLink class="gallery-secondary-action" to="/">返回博客</RouterLink>
+              <RouterLink class="gallery-secondary-action" to="/"><OceanIcon name="home" :size="18" />返回博客</RouterLink>
             </div>
             <small>{{ gallery.characters.length }} 位人物档案已开放</small>
           </div>
@@ -332,6 +333,10 @@ onBeforeUnmount(() => {
 
 .gallery-primary-action,
 .gallery-secondary-action {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  justify-content: center;
   min-width: 138px;
   padding: 0.8rem 1.2rem;
   border: 1px solid #0f7898;

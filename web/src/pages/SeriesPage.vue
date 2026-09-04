@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 
 import { fetchSeries, type Series } from "../api/content";
 import OceanAtmosphere from "../components/OceanAtmosphere.vue";
+import OceanIcon from "../components/OceanIcon.vue";
 import { useSeo } from "../composables/useSeo";
 import { useViewportReveal } from "../composables/useViewportReveal";
 
@@ -38,7 +39,7 @@ onMounted(async () => {
     <OceanAtmosphere variant="series" />
     <header class="content-hub-hero hub-masthead">
       <div class="hub-hero-copy">
-        <RouterLink class="hub-back" to="/">← 返回首页</RouterLink>
+        <RouterLink class="hub-back" to="/"><OceanIcon name="home" :size="18" />返回首页</RouterLink>
         <h1>专题航线</h1>
         <p>把分散的文章连成可连续阅读的航段。</p>
         <div class="hub-hero-meta"><span>CURATED ROUTES</span><strong>{{ items.length }} 条航线</strong></div>
@@ -70,11 +71,11 @@ onMounted(async () => {
           <h2>{{ series.title }}</h2>
           <span>{{ series.description || "这条航线正在等待补充说明。" }}</span>
         </div>
-        <b aria-hidden="true">进入航线 →</b>
+        <b>进入航线 <OceanIcon name="next" :size="18" /></b>
       </RouterLink>
     </section>
     <section v-else-if="loading" class="content-state" aria-live="polite">正在校准专题航线…</section>
-    <section v-else-if="errorText" class="content-state error" role="alert">{{ errorText }}</section>
+    <section v-else-if="errorText" class="content-state error" role="alert"><OceanIcon name="warning" :size="28" />{{ errorText }}</section>
     <section v-else class="content-state">专题正在整理中，稍后回来看看。</section>
   </main>
 </template>

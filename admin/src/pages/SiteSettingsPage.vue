@@ -24,6 +24,8 @@ const form = ref<SiteSettings>({
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
   hero_image_url: "https://images.hdqwalls.com/download/one-piece-anime-artwork-i6-2560x1440.jpg",
   nav_brand: "某某某的个人空间",
+  icp_filing_number: null,
+  police_filing_number: null,
   site_launched_on: "2026-01-01",
   owner_avatar_url: "/owner-avatar.jpg",
   owner_location_name: "未设置站长地址",
@@ -246,6 +248,16 @@ onMounted(() => {
           <el-form-item label="导航品牌名">
             <el-input v-model="form.nav_brand" placeholder="某某某的个人空间" />
           </el-form-item>
+
+          <div class="filing-fields">
+            <el-form-item label="ICP备案号">
+              <el-input v-model="form.icp_filing_number" placeholder="例如：京ICP备12345678号" clearable />
+            </el-form-item>
+            <el-form-item label="公安备案号">
+              <el-input v-model="form.police_filing_number" placeholder="例如：京公网安备11000002000001号" clearable />
+            </el-form-item>
+          </div>
+          <p class="coordinate-hint">填写后会展示在前台页脚，并链接到官方备案查询页面；留空则不展示。</p>
 
           <el-form-item label="建站日期">
             <div class="site-date-field">

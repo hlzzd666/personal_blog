@@ -32,6 +32,9 @@
 
 .content-hub-hero > a,
 .series-detail-hero > a {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
   color: var(--hub-current);
   text-decoration: none;
 }
@@ -87,7 +90,7 @@
 .series-card p { color: var(--hub-signal); font-size: 0.68rem; }
 .series-card h2 { margin-top: 0.4rem; font-family: var(--display-font); font-size: clamp(1.8rem, 4vw, 3.2rem); }
 .series-card div > span { display: -webkit-box; margin-top: 0.75rem; overflow: hidden; color: var(--hub-muted); line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.series-card > b { position: absolute; right: 1.4rem; top: 1.3rem; color: rgba(244, 240, 223, 0.58); font-size: 0.72rem; }
+.series-card > b { position: absolute; right: 1.4rem; top: 1.3rem; display: inline-flex; gap: 0.3rem; align-items: center; color: rgba(244, 240, 223, 0.58); font-size: 0.72rem; }
 .series-card:active { transform: scale(0.98); transition-duration: 0s; }
 
 .series-detail-hero { min-height: 31rem; display: flex; flex-direction: column; justify-content: end; overflow: hidden; padding: 4rem; border: 1px solid rgba(244, 240, 223, 0.14); border-radius: 8px; background: linear-gradient(90deg, rgba(5, 25, 35, 0.96), rgba(5, 25, 35, 0.5)), var(--series-cover); background-position: center; background-size: cover; }
@@ -118,9 +121,9 @@
 
 .note-document { width: min(780px, 100%); margin: 2rem auto; padding: clamp(1.4rem, 5vw, 4rem); border: 1px solid rgba(244, 240, 223, 0.14); border-radius: 8px; background: rgba(8, 36, 47, 0.82); }
 .note-document header { padding-bottom: 2rem; border-bottom: 1px solid rgba(244, 240, 223, 0.12); }
-.note-document header a { color: var(--hub-current); text-decoration: none; }
+.note-document header a { display: inline-flex; gap: 0.35rem; align-items: center; color: var(--hub-current); text-decoration: none; }
 .note-document header p { margin: 2rem 0 0.4rem; color: var(--hub-signal); font: 700 0.68rem "IBM Plex Mono", monospace; }
-.note-document time { color: var(--hub-muted); font-size: 0.76rem; }
+.note-document time { display: inline-flex; gap: 0.35rem; align-items: center; color: var(--hub-muted); font-size: 0.76rem; }
 .note-markdown { padding: 2rem 0; font-size: 1rem; line-height: 2; }
 .note-markdown :is(h1, h2, h3) { margin: 2.5rem 0 0.8rem; font-family: var(--display-font); line-height: 1.25; }
 .note-markdown a { color: var(--hub-signal); }
@@ -128,12 +131,12 @@
 .note-document footer { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: center; padding-top: 1.5rem; border-top: 1px solid rgba(244, 240, 223, 0.12); }
 .note-document footer div { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .note-document footer span { color: var(--hub-current); font-size: 0.72rem; }
-.note-document footer > a { color: var(--hub-signal); font-size: 0.75rem; text-decoration: none; }
+.note-document footer > a { display: inline-flex; gap: 0.3rem; align-items: center; color: var(--hub-signal); font-size: 0.75rem; text-decoration: none; }
 .note-document footer button { margin-left: auto; min-width: 6.4rem; padding: 0.6rem 0.8rem; border: 1px solid rgba(117, 201, 189, 0.35); border-radius: 5px; color: var(--hub-ink); background: rgba(117, 201, 189, 0.08); cursor: pointer; transition: color 150ms ease, background-color 150ms ease, transform 140ms cubic-bezier(0.22, 1, 0.36, 1); touch-action: manipulation; }
 .note-document footer button.confirmed { color: #051923; background: var(--hub-current); }
 .note-document footer button:active { transform: scale(0.97); transition-duration: 0s; }
 
-.content-state { width: min(900px, 100%); margin: 4rem auto; padding: 3rem; border: 1px dashed rgba(117, 201, 189, 0.25); border-radius: 8px; color: var(--hub-muted); text-align: center; }
+.content-state { display: grid; justify-items: center; gap: 0.7rem; width: min(900px, 100%); margin: 4rem auto; padding: 3rem; border: 1px dashed rgba(117, 201, 189, 0.25); border-radius: 8px; color: var(--hub-muted); text-align: center; }
 .content-state.error { color: #f2a38b; border-color: rgba(223, 123, 89, 0.35); }
 .content-state a { color: var(--hub-signal); }
 .reveal-item { opacity: 0; transform: translate3d(0, 0.8rem, 0); transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1), transform 260ms cubic-bezier(0.22, 1, 0.36, 1); transition-delay: var(--reveal-delay, 0ms); }
@@ -216,7 +219,7 @@
 }
 
 .hub-hero-copy { min-width: 0; }
-.hub-back { color: var(--hub-current); text-decoration: none; }
+.hub-back { display: inline-flex; gap: 0.35rem; align-items: center; color: var(--hub-current); text-decoration: none; }
 .hub-back:hover, .hub-back:focus-visible { color: var(--hub-signal); }
 .hub-hero-copy h1 {
   max-width: 8ch;

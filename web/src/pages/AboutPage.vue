@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 import { fetchAboutProfile, type AboutProfile } from "../api/about";
 import AboutLocationMap from "../components/AboutLocationMap.vue";
+import OceanIcon from "../components/OceanIcon.vue";
 
 const fallbackProfile: AboutProfile = {
   id: 1,
@@ -269,7 +270,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="about-page" :aria-busy="loading">
-    <p v-if="errorText" class="about-offline-notice" role="status">{{ errorText }}</p>
+    <p v-if="errorText" class="about-offline-notice" role="status"><OceanIcon name="warning" :size="20" />{{ errorText }}</p>
 
     <header
       ref="mastRoot"
@@ -294,13 +295,12 @@ onBeforeUnmount(() => {
         </figure>
         <h1>关于我</h1>
         <p>
-          <strong>{{ profile.display_name }}</strong
-          ><span>/</span>{{ profile.role }}
+          <strong>{{ profile.display_name }}</strong><span>/</span>{{ profile.role }}
         </p>
         <small>{{ profile.status_text }}</small>
         <div v-if="hasResume" class="mast-resume-actions" aria-label="简历入口">
           <button type="button" @click="openResumePreview">预览简历</button>
-          <a :href="resumeDownloadUrl" :download="resumeFileName">下载 PDF</a>
+          <a :href="resumeDownloadUrl" :download="resumeFileName"><OceanIcon name="download" :size="18" />下载 PDF</a>
         </div>
       </div>
 
@@ -472,8 +472,7 @@ onBeforeUnmount(() => {
               rel="noreferrer noopener"
               :aria-label="`打开项目：${project.name}`"
               :title="`打开项目：${project.name}`"
-              >↗</a
-            >
+            ><OceanIcon name="external" :size="20" /></a>
           </article>
         </div>
         <p v-else class="compact-empty">代表项目正在整理中。</p>
@@ -483,7 +482,7 @@ onBeforeUnmount(() => {
         <header class="location-card-heading">
           <div>
             <p class="card-kicker">HOME PORT</p>
-            <h2><span>我现在住在</span> {{ profile.location_name }}</h2>
+            <h2><OceanIcon name="location" :size="24" /><span>我现在住在</span> {{ profile.location_name }}</h2>
           </div>
           <small>{{ coordinateLabel }}</small>
         </header>
@@ -524,7 +523,7 @@ onBeforeUnmount(() => {
         <p>{{ resumeFileName }}</p>
         <div class="resume-actions">
           <button type="button" @click="openResumePreview">在线预览</button>
-          <a :href="resumeDownloadUrl" :download="resumeFileName">下载 PDF</a>
+          <a :href="resumeDownloadUrl" :download="resumeFileName"><OceanIcon name="download" :size="18" />下载 PDF</a>
         </div>
       </article>
 
@@ -533,23 +532,21 @@ onBeforeUnmount(() => {
         <h2>保持联系</h2>
         <p>{{ profile.status_text }}</p>
         <div class="connect-links">
-          <a v-if="profile.email" :href="`mailto:${profile.email}`">邮件 ↗</a>
+          <a v-if="profile.email" :href="`mailto:${profile.email}`">邮件</a>
           <a
             v-for="link in profile.social_links"
             :key="link.url"
             :href="link.url"
             target="_blank"
             rel="noreferrer noopener"
-            >{{ link.platform }} ↗</a
-          >
+          ><OceanIcon name="external" :size="18" />{{ link.platform }}</a>
           <a
             v-if="profile.site_repository_url"
             :href="profile.site_repository_url"
             target="_blank"
             rel="noreferrer noopener"
-            >本站源码 ↗</a
-          >
-          <RouterLink to="/articles">阅读文章 →</RouterLink>
+          ><OceanIcon name="external" :size="18" />本站源码</a>
+          <RouterLink to="/articles">阅读文章 <OceanIcon name="next" :size="18" /></RouterLink>
         </div>
       </article>
     </section>
@@ -576,7 +573,7 @@ onBeforeUnmount(() => {
           </header>
           <iframe :src="profile.resume_url" title="在线预览简历"></iframe>
           <footer>
-            <a :href="resumeDownloadUrl" :download="resumeFileName">下载 PDF</a>
+            <a :href="resumeDownloadUrl" :download="resumeFileName"><OceanIcon name="download" :size="18" />下载 PDF</a>
           </footer>
         </section>
       </div>
@@ -584,7 +581,7 @@ onBeforeUnmount(() => {
 
     <footer class="about-footer">
       <span>ABOUT / {{ profile.display_name }}</span>
-      <RouterLink to="/">返回首页 ↑</RouterLink>
+      <RouterLink to="/"><OceanIcon name="home" :size="18" />返回首页</RouterLink>
     </footer>
   </main>
 </template>
@@ -1531,6 +1528,9 @@ onBeforeUnmount(() => {
 }
 
 .location-card-heading h2 {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
   font-size: 1.2rem;
 }
 
@@ -1827,6 +1827,9 @@ onBeforeUnmount(() => {
 }
 
 .connect-links a {
+  display: inline-flex;
+  gap: 0.28rem;
+  align-items: center;
   padding: 0.42rem 0.6rem;
   border: 1px solid rgba(248, 251, 252, 0.28);
   border-radius: 4px;

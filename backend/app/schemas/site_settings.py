@@ -28,6 +28,8 @@ class SiteSettings(BaseModel):
     site_subtitle: str = Field(..., min_length=1, max_length=120)
     hero_image_url: HttpUrl
     nav_brand: str = Field(..., min_length=1, max_length=60)
+    icp_filing_number: str | None = Field(default=None, max_length=80)
+    police_filing_number: str | None = Field(default=None, max_length=80)
     site_launched_on: date = Field(default=date(2026, 1, 1))
     owner_avatar_url: str = Field(default="/owner-avatar.jpg", min_length=1, max_length=2048)
     quotes: list[QuoteItem] = Field(default_factory=list, min_length=1)

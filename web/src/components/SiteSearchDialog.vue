@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 
 import { fetchArticles, type Article } from "../api/articles";
+import OceanIcon from "./OceanIcon.vue";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -150,7 +151,7 @@ onBeforeUnmount(() => {
           </header>
 
           <label class="site-search-field">
-            <span class="site-search-field-icon" aria-hidden="true"></span>
+            <OceanIcon class="site-search-field-icon" name="search" :size="20" />
             <input ref="searchInput" v-model="query" type="search" placeholder="搜索标题、摘要或文章内容" autocomplete="off" />
             <kbd>ESC</kbd>
           </label>
@@ -159,7 +160,7 @@ onBeforeUnmount(() => {
             <span v-if="loading">正在校准文章索引…</span>
             <span v-else-if="keyword && !errorText">定位到 {{ total }} 条相关记录</span>
             <span v-else-if="!keyword">输入关键词，开始检索文章。</span>
-            <span v-else>{{ errorText }}</span>
+            <span v-else class="site-search-error"><OceanIcon name="warning" :size="18" />{{ errorText }}</span>
           </div>
 
           <div v-if="results.length" class="site-search-results" @scroll="handleResultsScroll">
@@ -177,7 +178,7 @@ onBeforeUnmount(() => {
                 <strong>{{ article.title }}</strong>
                 <small>{{ article.summary || "打开文章查看完整航行记录。" }}</small>
               </span>
-              <span class="site-search-result-arrow" aria-hidden="true">→</span>
+              <OceanIcon class="site-search-result-arrow" name="next" :size="22" />
             </RouterLink>
             <div v-if="loadingMore || loadMoreError || hasMoreResults" class="site-search-load-more">
               <span v-if="loadingMore">正在继续定位记录…</span>
@@ -372,22 +373,7 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 1;
   left: 1rem;
-  width: 0.86rem;
-  height: 0.86rem;
-  border: 2px solid #87d2c7;
-  border-radius: 50%;
-
-  &::after {
-    content: "";
-    position: absolute;
-    right: -0.38rem;
-    bottom: -0.24rem;
-    width: 0.43rem;
-    height: 2px;
-    background: #87d2c7;
-    transform: rotate(45deg);
-    transform-origin: left center;
-  }
+  opacity: 0.9;
 }
 
 .site-search-status {
@@ -396,6 +382,13 @@ onBeforeUnmount(() => {
   color: rgba(247, 242, 223, 0.56);
   font-family: "Noto Sans SC", sans-serif;
   font-size: 0.76rem;
+}
+
+.site-search-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #f2a38b;
 }
 
 .site-search-results {

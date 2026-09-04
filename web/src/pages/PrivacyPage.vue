@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
+import OceanIcon from "../components/OceanIcon.vue";
 import { useSeo } from "../composables/useSeo";
 
 const { applySeo } = useSeo();
@@ -9,7 +10,7 @@ onMounted(() => applySeo({ title: "隐私说明", description: "了解本站如�
 <template>
   <main class="privacy-page">
     <header>
-      <RouterLink to="/">← 返回首页</RouterLink>
+      <RouterLink to="/"><OceanIcon name="home" :size="18" />返回首页</RouterLink>
       <p>PRIVACY / VISITOR NOTICE</p>
       <h1>隐私说明</h1>
       <span>这里说明本站会使用哪些信息，以及这些信息为什么会被使用。</span>

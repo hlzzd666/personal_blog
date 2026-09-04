@@ -11,7 +11,10 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   scrollBehavior(to, from) {
     if (to.hash) {
-      return { el: to.hash, behavior: "smooth" };
+      return {
+        el: to.hash,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      };
     }
     if (to.path === "/articles" && from.path.startsWith("/articles/")) {
       return false;
@@ -28,6 +31,7 @@ const router = createRouter({
     { path: "/notes", component: () => import("./pages/NotesPage.vue"), meta: { title: "短动态" } },
     { path: "/notes/:slug", component: () => import("./pages/NoteDetailPage.vue"), meta: { title: "动态详情" } },
     { path: "/gallery", component: () => import("./pages/GalleryPage.vue"), meta: { title: "3D 展厅" } },
+    { path: "/icons", component: () => import("./pages/IconGalleryPage.vue"), meta: { title: "图标航海图" } },
     { path: "/privacy", component: () => import("./pages/PrivacyPage.vue"), meta: { title: "隐私说明" } },
     { path: "/:pathMatch(.*)*", component: () => import("./pages/NotFoundPage.vue"), meta: { title: "页面不存在" } },
   ],
