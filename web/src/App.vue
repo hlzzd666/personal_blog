@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import SiteNavigation from "./components/SiteNavigation.vue";
 import SiteFooter from "./components/SiteFooter.vue";
@@ -11,6 +11,8 @@ import { fetchVisitorLocation, type VisitorLocation } from "./api/visitor-locati
 import { fetchNotes, fetchSeries, type Note, type Series } from "./api/content";
 import { fetchGallery } from "./api/gallery";
 import { type IconName } from "./icons";
+
+const GoingMerryHero = defineAsyncComponent(() => import("./components/GoingMerryHero.vue"));
 
 const fallbackSettings: SiteSettings = {
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
@@ -524,6 +526,13 @@ onBeforeUnmount(() => {
     </section>
 
     <main class="content-shell">
+      <!-- <section class="going-merry-section" aria-labelledby="going-merry-title">
+        <header class="going-merry-intro">
+          <h2 id="going-merry-title">梅利号</h2>
+          <p>草帽一伙的第一艘海贼船</p>
+        </header>
+        <GoingMerryHero />
+      </section> -->
       <section id="articles" class="content-section cards-section">
         <div class="compact-board-heading text-left">
           <h2>航海日志</h2>
@@ -2220,6 +2229,38 @@ onBeforeUnmount(() => {
 
 .content-shell::after {
   content: none;
+}
+
+.going-merry-section {
+  position: relative;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 248, 230, 0.14);
+}
+
+.going-merry-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+}
+
+.going-merry-intro h2 {
+  margin: 0;
+  color: var(--home-ink);
+  font-family: var(--display-font);
+  font-size: 2.55rem;
+  font-weight: 400;
+  line-height: 1.08;
+}
+
+.going-merry-intro p:last-child {
+  margin: 0;
+  color: var(--home-muted);
+  font: 0.9rem "Noto Sans SC", sans-serif;
+  line-height: 1.85;
 }
 
 .content-section {
