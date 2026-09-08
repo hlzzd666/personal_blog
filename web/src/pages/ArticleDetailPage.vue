@@ -878,9 +878,10 @@ onBeforeUnmount(() => {
 .article-like-button.celebrated .like-symbol { animation: like-burst 0.72s cubic-bezier(0.2, 0.76, 0.26, 1); }
 .like-symbol { color: var(--coral); font-size: 1rem; }
 .article-share-panel { display: flex; justify-content: space-between; gap: 1.5rem; align-items: center; margin-top: 1.2rem; padding: 1.1rem; border: 1px solid rgba(39, 111, 109, 0.12); border-radius: 6px; background: rgba(255, 250, 242, 0.48); }
-.article-share-panel p { display: inline-flex; gap: 0.35rem; align-items: center; margin: 0 0 0.25rem; color: #7d8b88; font: 700 0.65rem "Noto Sans SC", sans-serif; letter-spacing: 0.04em; }
+.article-share-panel > div:first-child { display: grid; min-width: 0; gap: 0.35rem; }
+.article-share-panel p { display: flex; gap: 0.35rem; align-items: center; margin: 0; color: #7d8b88; font: 700 0.65rem "Noto Sans SC", sans-serif; letter-spacing: 0; }
 .article-share-panel span { color: var(--muted); font: 500 0.74rem "Noto Sans SC", sans-serif; }
-.article-share-panel > div:last-child { display: flex; gap: 0.55rem; }
+.article-share-panel > div:last-child { display: flex; flex-shrink: 0; gap: 0.55rem; }
 .article-share-panel button { display: inline-flex; gap: 0.3rem; align-items: center; justify-content: center; min-width: 6.8rem; padding: 0.58rem 0.8rem; border: 1px solid rgba(35, 123, 120, 0.24); border-radius: 5px; color: var(--ink); background: rgba(255, 252, 246, 0.68); font: 700 0.72rem "Noto Sans SC", sans-serif; cursor: pointer; touch-action: manipulation; transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms ease, background-color 150ms ease; }
 .article-share-panel button.confirmed { color: #fffaf0; background: var(--current); }
 .article-share-panel button:active { transform: scale(0.97); transition-duration: 0s; }

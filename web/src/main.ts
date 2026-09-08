@@ -19,6 +19,9 @@ const router = createRouter({
     if (to.path === "/articles" && from.path.startsWith("/articles/")) {
       return false;
     }
+    if (to.path === "/notes" && from.path.startsWith("/notes/")) {
+      return false;
+    }
     return { top: 0 };
   },
   routes: [

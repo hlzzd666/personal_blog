@@ -9,6 +9,7 @@ import { ApiError } from "../api/http";
 import OceanAtmosphere from "../components/OceanAtmosphere.vue";
 import OceanIcon from "../components/OceanIcon.vue";
 import { useSeo } from "../composables/useSeo";
+import { noteReturnContext } from "../composables/useNoteReturnContext";
 
 const route = useRoute();
 const note = ref<Note | null>(null);
@@ -18,6 +19,7 @@ const errorText = ref("");
 const copyState = ref<"idle" | "copied" | "error">("idle");
 const { applySeo } = useSeo();
 let copyTimer: number | undefined;
+const returnPath = computed(() => noteReturnContext.slug === route.params.slug ? noteReturnContext.path : "/notes");
 
 const renderedContent = computed(() =>
   note.value ? DOMPurify.sanitize(marked.parse(note.value.content_markdown) as string) : "",
@@ -92,7 +94,7 @@ onBeforeUnmount(() => window.clearTimeout(copyTimer));
     <OceanAtmosphere variant="notes" />
     <article v-if="note" class="note-document">
       <header>
-        <RouterLink to="/notes"><OceanIcon name="previous" :size="18" />返回短动态</RouterLink>
+        <RouterLink :to="returnPath"><OceanIcon name="previous" :size="18" />返回短动态</RouterLink>
         <p>SHORT SIGNAL / {{ note.slug }}</p>
         <time><OceanIcon name="time" :size="18" />{{ formatDate(note.published_at ?? note.created_at) }}</time>
       </header>
@@ -111,7 +113,7 @@ onBeforeUnmount(() => window.clearTimeout(copyTimer));
     <section v-else class="content-state error">
       <OceanIcon name="warning" :size="28" />
       <p>{{ errorText }}</p>
-      <RouterLink :to="notFound ? '/notes' : route.fullPath">{{ notFound ? "返回短动态" : "重新读取" }}</RouterLink>
+      <RouterLink :to="notFound ? returnPath : route.fullPath">{{ notFound ? "返回短动态" : "重新读取" }}</RouterLink>
     </section>
   </main>
 </template>

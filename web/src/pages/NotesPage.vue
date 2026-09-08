@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, nextTick, onActivated, onMounted, ref, watch } from "vue";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 
 import { fetchNotes, type Note } from "../api/content";
 import OceanAtmosphere from "../components/OceanAtmosphere.vue";
 import OceanIcon from "../components/OceanIcon.vue";
 import { useSeo } from "../composables/useSeo";
 import { useViewportReveal } from "../composables/useViewportReveal";
+import { noteReturnContext } from "../composables/useNoteReturnContext";
+
+defineOptions({ name: "NotesPage" });
 
 const route = useRoute();
 const router = useRouter();
@@ -17,8 +20,13 @@ const errorText = ref("");
 const pageRoot = ref<HTMLElement | null>(null);
 const { applySeo } = useSeo();
 const { observe } = useViewportReveal();
-const activeTag = computed(() => String(route.query.tag ?? ""));
+const activeTag = ref(String(route.query.tag ?? ""));
 const tags = computed(() => [...new Set(notes.value.flatMap((note) => note.tags))]);
+const noteMonths = computed(() => notes.value.map((note) => {
+  const date = new Date(note.published_at ?? note.created_at);
+  return `${date.getFullYear()}-${date.getMonth()}`;
+}));
+let loadVersion = 0;
 
 function excerpt(markdown: string) {
   return markdown.replace(/```[\s\S]*?```/g, " ").replace(/[#>*_`[\]()!-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
@@ -31,17 +39,22 @@ function formatDate(value: string | null) {
 }
 
 async function loadNotes() {
+  const version = ++loadVersion;
   loading.value = true;
   errorText.value = "";
   try {
     const result = await fetchNotes({ page: 1, page_size: 100, tag: activeTag.value || undefined });
+    if (version !== loadVersion) return;
     notes.value = result.items;
     total.value = result.total;
   } catch {
+    if (version !== loadVersion) return;
     errorText.value = "动态信号暂时无法接收，请稍后重试。";
   } finally {
-    loading.value = false;
-    void observe(pageRoot.value);
+    if (version === loadVersion) {
+      loading.value = false;
+      void observe(pageRoot.value);
+    }
   }
 }
 
@@ -49,11 +62,32 @@ function selectTag(tag: string) {
   void router.push({ path: "/notes", query: tag ? { tag } : {} });
 }
 
-watch(activeTag, loadNotes);
-onMounted(() => {
-  applySeo({ title: "短动态", description: "开发进度、即时想法和沿途记录。", canonicalPath: "/notes" });
+watch(() => [route.path, route.query.tag], () => {
+  if (route.path !== "/notes") return;
+  const tag = String(route.query.tag ?? "");
+  if (tag === activeTag.value) return;
+  activeTag.value = tag;
   void loadNotes();
 });
+
+onBeforeRouteLeave((to) => {
+  noteReturnContext.path = route.fullPath;
+  noteReturnContext.scrollY = window.scrollY;
+  noteReturnContext.slug = to.path.startsWith("/notes/") ? String(to.params.slug) : "";
+});
+
+onActivated(async () => {
+  applySeo({ title: "短动态", description: "开发进度、即时想法和沿途记录。", canonicalPath: "/notes" });
+  await nextTick();
+  window.requestAnimationFrame(() => {
+    if (route.path !== "/notes") return;
+    if (!loading.value && noteReturnContext.path === route.fullPath) {
+      window.scrollTo({ top: noteReturnContext.scrollY, left: 0, behavior: "instant" });
+    }
+    void observe(pageRoot.value);
+  });
+});
+onMounted(() => void loadNotes());
 </script>
 
 <template>
@@ -81,7 +115,13 @@ onMounted(() => {
     </nav>
     <div class="hub-section-lead notes-section-lead"><span>信号记录</span><span>最新在前</span></div>
     <section v-if="notes.length" class="notes-stream">
-      <article v-for="note in notes" :key="note.id" class="note-signal reveal-item" data-reveal>
+      <article
+        v-for="(note, index) in notes"
+        :key="note.id"
+        class="note-signal reveal-item"
+        :class="{ 'is-month-end': index < notes.length - 1 && noteMonths[index] !== noteMonths[index + 1] }"
+        data-reveal
+      >
         <time>{{ formatDate(note.published_at ?? note.created_at) }}</time>
         <div class="note-signal-pulse" aria-hidden="true"><i></i></div>
         <div>

@@ -673,7 +673,7 @@ onBeforeUnmount(() => {
     </main>
   </div>
   <router-view v-else v-slot="{ Component }">
-    <KeepAlive include="ArticlesPage">
+    <KeepAlive include="ArticlesPage,NotesPage">
       <component :is="Component" />
     </KeepAlive>
   </router-view>
