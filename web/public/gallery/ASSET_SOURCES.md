@@ -1,16 +1,20 @@
-# 展馆资源说明
+# 展馆资源来源
 
-## 本地程序化/生成资源
+## 旗舰船舱
 
-| 文件 | 用途 | 来源 |
+| 资源 | 用途 | 来源 |
 | --- | --- | --- |
-| `generated/calm-ocean-color-tile.png` | 步道两侧与场景外部海面材质 | 本地生成资源 |
-| `generated/light-travertine-color-tile.png` | 主步道与人物展台的洞石材质 | 本地生成资源 |
-| `generated/sunrise-ocean-panorama-seamless.png` | 晴日海天背景与环境反射 | 本地生成资源 |
-| `generated/frame-relief-champagne-brass-tile.png` | 相框外层、角件与铭牌的黄铜浮雕纹理 | Image2 API，模型 `gpt-image-2` |
-| `generated/roof-sail-sea-glass-tile.png` | 预留的帆膜纹理；当前开放式场景未使用 | Image2 API，模型 `gpt-image-2` |
-| `generated/compass-rose-inlay.png` | 入口步道罗盘嵌花 | Image2 API，模型 `gpt-image-2` |
+| `flagship/flagship.glb` | 船舱、前后甲板、相框 | 本地 Blender 4.2 建模；可复现脚本 `scripts/gallery/build_flagship.py` |
+| `flagship/materials/teak-*` | 地板柚木 | Image2 API 基于主视角图提取颜色纹理，再派生粗糙度与法线 |
+| `flagship/materials/walnut-*` | 拱肋、墙板胡桃木 | Image2 API 基于主视角图提取颜色纹理，再派生粗糙度与法线 |
+| `flagship/materials/brass-*` | 黄铜相框与连接件 | 确定性程序纹理，PBR 金属度 0.86 |
+| `flagship/materials/canvas-*` | 帆布顶 | 确定性程序织物纹理 |
+| `generated/calm-ocean-color-tile.png` | 海面 | 既有本地生成资源 |
 
-Image2 生成提示词保存在 `output/image2-gallery/` 对应的 `*-prompt.txt` 文件中。API key 仅通过进程环境变量使用，未写入代码、资源或仓库。
+GLB 内嵌 12 张 PBR 图片。上述材质文件供重新建模使用，前台只请求 GLB 和海面纹理。天空使用 Three.js Sky，不使用远程图片。
 
-当前场景是开放式海上步道与双侧展台，不加载玻璃墙、顶棚、玻璃地面或室内水池相关材质。`champagne-brass-color-tile.png`、`gallery-frame-champagne-brass-tile.png`、`glass-micro-detail-tile.png`、`sunrise-ocean-panorama.png` 与 `roof-sail-sea-glass-tile.png` 均为保留资源，当前运行时未引用。
+主视角、俯视布局图、材质参考和生成记录保存在 `artifacts/gallery/reference/`；模型源文件、离线预览与验证报告保存在 `artifacts/gallery/model/`。接口模型为 `gpt-image-2`，元数据不包含密钥。完整提示词、实际输出尺寸和 SHA256 以相应生成目录为准。
+
+## 资源清理
+
+`generated/` 仅保留当前旗舰船舱实际加载的海面纹理；此前海上步道/玻璃展馆使用的石材、旧相框、罗盘、玻璃、帆膜和日出全景资源已移除，避免进入前台静态资源包。

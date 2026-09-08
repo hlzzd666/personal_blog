@@ -1,0 +1,21 @@
+{
+  "profile": "general",
+  "operation": "generate",
+  "status": "pass",
+  "issues": [],
+  "features": {
+    "characters": 1952,
+    "has_labeled_sections": false,
+    "requests_text": false,
+    "mentions_text": false,
+    "has_exact_copy": true,
+    "declares_no_text": false,
+    "image_count": 0,
+    "has_mask": false,
+    "quality": "high",
+    "size": "1024x1024",
+    "background": "auto",
+    "model": "gpt-image-2",
+    "model_family": "gpt-image-2"
+  }
+}

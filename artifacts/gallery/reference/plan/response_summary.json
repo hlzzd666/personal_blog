@@ -1,0 +1,35 @@
+{
+  "responses": [
+    {
+      "status_code": 200,
+      "request_id": "aae0b5f2-c179-44ca-885e-7a769590a87d",
+      "attempts": 1,
+      "payload": {
+        "created": 1788843665,
+        "data": [
+          {
+            "b64_json": "<base64 omitted: 2575928 chars>"
+          }
+        ],
+        "background": "opaque",
+        "output_format": "png",
+        "quality": "medium",
+        "size": "1254x1254",
+        "model": "gpt-image-2",
+        "usage": {
+          "input_tokens": 474,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 474
+          },
+          "output_tokens": 2058,
+          "output_tokens_details": {
+            "image_tokens": 2058,
+            "text_tokens": 0
+          },
+          "total_tokens": 2532
+        }
+      }
+    }
+  ]
+}

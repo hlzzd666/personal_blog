@@ -1,0 +1,50 @@
+{
+  "operation": "generate",
+  "config": {
+    "api_key_configured": true,
+    "base_url": "https://suoxie.codes/v1",
+    "model": "gpt-image-2",
+    "model_family": "gpt-image-2",
+    "generation_endpoint": "https://suoxie.codes/v1/images/generations",
+    "edit_endpoint": "https://suoxie.codes/v1/images/edits",
+    "timeout": 300.0,
+    "max_retries": 1,
+    "verify_ssl": true,
+    "extra_header_names": []
+  },
+  "batch_mode": "single",
+  "requests": [
+    {
+      "model": "gpt-image-2",
+      "prompt": "Create an architectural visualization for a buildable first-person web museum inside an original wooden sailing flagship. One square image, no text, no logos, no people, no UI. This is a precise Blender modeling reference, not a fantasy illustration.\nHuman eye-level camera 1.7 meters above the floor at the aft entrance looking forward along a straight single-level gallery, with a slight off-center perspective revealing the side wall and full ceiling. The exhibition cabin has a 10 meter outside width, 6 meter clear central aisle, 5.6 meter tall barrel-vaulted exposed timber ribs, and repeatable 3.4 meter structural bays. Show six bays, each containing one vertical blank 2:3 portrait display on each side. Displays are sea-green painted panels, slim aged brass frames, and small brass number plaques. No actual portraits, no characters painted into the architecture.\nThe cabin is airy, sunlit, with teak planks, ivory canvas ceiling strips, muted turquoise lower walls, walnut ribs and brass portholes between portrait bays. A narrow open longitudinal roof light admits daylight without glass. At the far forward end an open arch leads to an outdoor bow deck with a ship's wheel and railings, calm turquoise sea and a pale blue sky. A small brass compass rose is inlaid in the entrance deck. Maintain a level floor from entrance through cabin to bow, no stairs, no raised thresholds, no columns obstructing the middle aisle. Sea visible through windows and the open bow.\nMaterials are tactile but restrained: warm light timber grain, deep teal hull paint, oxidized brass details, ivory canvas and coral small navigation accents. Balanced neutral daylight, soft contact shadows, enough ambient light to read every exhibit, realistic PBR game environment. Sharp buildable geometry, consistent scale, no impossible rooms, no massive central statue, no multilevel structure, no glass walls, no dark cinematic fog. The architecture is the subject and fills the image.",
+      "n": 1,
+      "size": "1024x1024",
+      "quality": "medium",
+      "background": "auto",
+      "output_format": "png",
+      "moderation": "auto"
+    }
+  ],
+  "prompt_review": {
+    "profile": "photorealistic",
+    "operation": "generate",
+    "status": "pass",
+    "issues": [],
+    "features": {
+      "characters": 1969,
+      "has_labeled_sections": false,
+      "requests_text": false,
+      "mentions_text": true,
+      "has_exact_copy": false,
+      "declares_no_text": true,
+      "image_count": 0,
+      "has_mask": false,
+      "quality": "medium",
+      "size": "1024x1024",
+      "background": "auto",
+      "model": "gpt-image-2",
+      "model_family": "gpt-image-2"
+    }
+  },
+  "warnings": []
+}

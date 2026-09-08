@@ -1,232 +1,413 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { fetchGallery, type GalleryCharacter, type GalleryResponse } from "../api/gallery";
-import { GalleryScene } from "../gallery/GalleryScene";
+import { GalleryScene, localPosterUrl, type NavigationState } from "../gallery/GalleryScene";
 import OceanIcon from "../components/OceanIcon.vue";
 
 const sceneRoot = ref<HTMLElement | null>(null);
 const detailDialog = ref<HTMLDialogElement | null>(null);
-const gallery = ref<GalleryResponse | null>(null);
+const gallery = shallowRef<GalleryResponse | null>(null);
+const navigation = shallowRef<NavigationState | null>(null);
 const loading = ref(true);
-const errorMessage = ref("");
+const sceneLoading = ref(false);
+const error = ref("");
+const notice = ref("");
 const desktopSupported = ref(false);
 const entered = ref(false);
 const locked = ref(false);
-const activeCharacter = ref<GalleryCharacter | null>(null);
+const activeCharacter = shallowRef<GalleryCharacter | null>(null);
 const activeSlot = ref<number | null>(null);
-const selectedCharacter = ref<GalleryCharacter | null>(null);
+const selectedCharacter = shallowRef<GalleryCharacter | null>(null);
 const selectedSlot = ref<number | null>(null);
-let galleryScene: GalleryScene | null = null;
+let scene: GalleryScene | null = null;
+let generation = 0;
+let resumeAfterDialog = false;
+const characters = computed(() => gallery.value?.characters ?? []);
+const mapY = (z: number) =>
+  navigation.value
+    ? 18 +
+      ((z - navigation.value.hall.minZ) /
+        (navigation.value.hall.maxZ - navigation.value.hall.minZ)) *
+        224
+    : 0;
+const mapX = (x: number) => 90 + x * 11;
+const markers = computed(() => {
+  const result: NonNullable<NavigationState["markers"]> = [];
+  for (const marker of [...(navigation.value?.markers ?? [])].sort(
+    (a, b) => a.distance - b.distance,
+  )) {
+    if (marker.screenY < 15 || marker.screenY > 82 || marker.screenX > 79) continue;
+    if (
+      result.some(
+        (other) =>
+          Math.abs(other.screenX - marker.screenX) < 8 &&
+          Math.abs(other.screenY - marker.screenY) < 7,
+      )
+    )
+      continue;
+    result.push(marker);
+    if (result.length === 4) break;
+  }
+  return result;
+});
 
-function supportsGalleryExperience() {
-  if (window.innerWidth < 1024) return false;
-  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return false;
-  if (!("pointerLockElement" in document)) return false;
+function supportsGallery() {
+  if (
+    innerWidth < 1024 ||
+    !matchMedia("(hover: hover) and (pointer: fine)").matches ||
+    !("pointerLockElement" in document)
+  )
+    return false;
   const canvas = document.createElement("canvas");
-  return Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+  const gl = canvas.getContext("webgl2");
+  if (!gl) return false;
+  gl.getExtension("WEBGL_lose_context")?.loseContext();
+  return true;
+}
+
+function fallback(reason = "") {
+  notice.value = reason;
+  desktopSupported.value = false;
+  entered.value = locked.value = sceneLoading.value = false;
+  scene?.dispose();
+  scene = null;
 }
 
 async function loadGallery() {
-  galleryScene?.dispose();
-  galleryScene = null;
+  const run = ++generation;
+  scene?.dispose();
+  scene = null;
   loading.value = true;
-  errorMessage.value = "";
-  entered.value = false;
-  locked.value = false;
+  error.value = "";
+  notice.value = "";
+  entered.value = locked.value = false;
+  activeCharacter.value = null;
+  navigation.value = null;
   try {
-    gallery.value = await fetchGallery();
-    loading.value = false;
-    await nextTick();
-    if (desktopSupported.value && sceneRoot.value) {
-      galleryScene = new GalleryScene(
-        sceneRoot.value,
-        gallery.value.characters,
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-        {
-          onActiveCharacter(character, slot) {
-            activeCharacter.value = character;
-            activeSlot.value = slot;
-          },
-          onLockChange(value) {
-            locked.value = value;
-          },
-          onOpenCharacter(character, slot) {
-            openCharacter(character, slot);
-          },
-        },
-      );
-    }
+    const data = await fetchGallery();
+    if (run !== generation) return;
+    gallery.value = {
+      ...data,
+      characters: data.characters
+        .filter((item) => item.is_visible)
+        .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
+        .slice(0, 40),
+    };
   } catch {
-    loading.value = false;
-    errorMessage.value = "展厅档案读取失败，请确认服务可用后重试。";
+    if (run === generation) {
+      loading.value = false;
+      error.value = "人物档案读取失败，请稍后重试。";
+    }
+    return;
+  }
+  loading.value = false;
+  desktopSupported.value = supportsGallery();
+  if (!desktopSupported.value) return;
+  sceneLoading.value = true;
+  await nextTick();
+  if (run !== generation || !sceneRoot.value) return;
+  try {
+    const current = new GalleryScene(
+      sceneRoot.value,
+      characters.value,
+      matchMedia("(prefers-reduced-motion: reduce)").matches,
+      {
+        onActiveCharacter(character, slot) {
+          activeCharacter.value = character;
+          activeSlot.value = slot;
+        },
+        onLockChange(value) {
+          locked.value = value;
+        },
+        onOpenCharacter: openCharacter,
+        onNavigation(state) {
+          navigation.value = state;
+        },
+        onUnavailable: fallback,
+      },
+    );
+    scene = current;
+    await current.ready;
+    if (run !== generation) {
+      current.dispose();
+      return;
+    }
+    sceneLoading.value = false;
+  } catch {
+    if (run === generation) fallback("船舱暂时无法载入，人物档案仍可查阅。");
   }
 }
 
 function startTour() {
-  if (!gallery.value?.characters.length) return;
   entered.value = true;
-  galleryScene?.lock();
+  scene?.lock();
 }
-
-function pauseTour() {
-  galleryScene?.unlock();
+function toggleTour() {
+  if (locked.value) scene?.unlock();
+  else scene?.lock();
 }
-
-function resumeTour() {
-  galleryScene?.lock();
-}
-
-function openCharacter(character: GalleryCharacter, slot = activeSlot.value) {
+function openCharacter(character: GalleryCharacter, slot: number | null = activeSlot.value) {
+  resumeAfterDialog = locked.value;
   selectedCharacter.value = character;
   selectedSlot.value = slot;
-  galleryScene?.unlock();
+  scene?.unlock();
   void nextTick(() => detailDialog.value?.showModal());
 }
-
 function closeCharacter() {
   detailDialog.value?.close();
   selectedCharacter.value = null;
   selectedSlot.value = null;
-  galleryScene?.lock();
+  if (resumeAfterDialog) scene?.lock();
 }
-
-function handleDialogCancel(event: Event) {
-  event.preventDefault();
-  closeCharacter();
-}
-
-function handleImageError(event: Event) {
+function imageError(event: Event) {
   (event.currentTarget as HTMLImageElement).hidden = true;
 }
-
-function posterDisplayUrl(character: GalleryCharacter) {
-  return character.poster_url || undefined;
+function resizeDevice() {
+  if (innerWidth < 1024 && scene) fallback();
 }
-
 onMounted(() => {
-  desktopSupported.value = supportsGalleryExperience();
   void loadGallery();
+  window.addEventListener("resize", resizeDevice);
 });
-
 onBeforeUnmount(() => {
-  galleryScene?.dispose();
-  galleryScene = null;
+  generation++;
+  scene?.dispose();
+  scene = null;
+  window.removeEventListener("resize", resizeDevice);
 });
 </script>
 
 <template>
   <main class="gallery-page">
-    <section v-if="loading" class="gallery-status-screen" aria-live="polite">
-      <span class="gallery-compass-loader" aria-hidden="true"></span>
-      <h1>正在开启展厅</h1>
-      <p>航线与人物档案正在就位。</p>
-    </section>
-
-    <section v-else-if="errorMessage" class="gallery-status-screen" role="alert">
-      <OceanIcon class="gallery-status-mark" name="warning" :size="48" />
-      <h1>展厅暂未开启</h1>
-      <p>{{ errorMessage }}</p>
-      <div class="gallery-status-actions">
-        <button type="button" class="gallery-primary-action" @click="loadGallery">重新读取</button>
-        <RouterLink class="gallery-secondary-action" to="/"><OceanIcon name="home" :size="18" />返回博客</RouterLink>
+    <section v-if="loading || error" class="gallery-status" :role="error ? 'alert' : 'status'">
+      <OceanIcon :name="error ? 'warning' : 'gallery'" :size="48" />
+      <h1>{{ error ? "展馆暂未开启" : "正在开启展馆" }}</h1>
+      <p v-if="error">{{ error }}</p>
+      <div class="gallery-actions">
+        <button v-if="error" class="primary" @click="loadGallery">重新读取</button>
+        <RouterLink class="secondary" to="/"
+          ><OceanIcon name="home" :size="18" />返回博客</RouterLink
+        >
       </div>
     </section>
 
     <template v-else-if="gallery">
-      <section v-if="!desktopSupported" class="gallery-fallback">
-        <header class="gallery-fallback-header">
+      <section v-if="desktopSupported" class="gallery-experience" aria-label="旗舰船舱展馆">
+        <div ref="sceneRoot" class="gallery-scene-root"></div>
+        <header class="gallery-topbar">
+          <RouterLink to="/" class="exit-link"
+            ><OceanIcon name="previous" :size="22" />返回博客</RouterLink
+          >
+          <span class="hall-name">{{ gallery.settings.hall_name }}</span>
+          <button v-if="entered" class="secondary compact" @click="toggleTour">
+            {{ locked ? "暂停漫游" : "继续漫游" }}
+          </button>
+          <span v-else class="gallery-count">{{ characters.length }} / 40</span>
+        </header>
+
+        <div
+          v-if="!entered || (!locked && !selectedCharacter)"
+          class="entry-layer"
+          :class="{ paused: entered }"
+        >
+          <div class="entry-copy">
+            <img
+              v-if="gallery.settings.show_logo && gallery.settings.logo_url && !entered"
+              class="entry-logo"
+              :src="localPosterUrl(gallery.settings.logo_url)"
+              alt="展馆 Logo"
+              width="72"
+              height="72"
+              @error="imageError"
+            />
+            <h1>{{ entered ? "漫游已暂停" : gallery.settings.hall_name }}</h1>
+            <p>{{ entered ? navigation?.zone : gallery.settings.entry_title }}</p>
+            <div class="gallery-actions">
+              <button class="primary" :disabled="sceneLoading" @click="startTour">
+                <OceanIcon name="next" :size="22" />{{
+                  sceneLoading ? "船舱载入中" : entered ? "继续漫游" : "进入展馆"
+                }}
+              </button>
+              <button class="secondary" @click="fallback()">
+                <OceanIcon name="archive" :size="20" />人物档案
+              </button>
+            </div>
+            <p v-if="!characters.length" class="empty-note">展馆正在布展</p>
+          </div>
+        </div>
+
+        <template v-if="entered && navigation && !selectedCharacter">
+          <aside class="gallery-minimap" aria-label="船舱航图">
+            <div class="map-title">
+              <OceanIcon name="location" :size="20" /><strong>{{ navigation.zone }}</strong
+              ><span>{{ characters.length }} 位</span>
+            </div>
+            <svg viewBox="0 0 180 260" role="img" aria-label="船舱、当前所在位置与视野内展位">
+              <path
+                :d="`M 90 18 L 145 ${mapY(navigation.hall.cabinFront - 3)} L 145 228 Q 145 242 130 242 L 50 242 Q 35 242 35 228 L 35 ${mapY(navigation.hall.cabinFront - 3)} Z`"
+                fill="#d9e5de"
+                fill-opacity=".12"
+                stroke="#92bfb2"
+                stroke-width="1.2"
+              />
+              <path
+                :d="`M 35 ${mapY(navigation.hall.cabinFront)} H 145 M 35 ${mapY(navigation.hall.cabinBack)} H 145`"
+                stroke="#92bfb2"
+                stroke-dasharray="3 4"
+              />
+              <path
+                d="M 90 30 V 232"
+                stroke="#d9e5de"
+                stroke-opacity=".25"
+                stroke-dasharray="2 5"
+              />
+              <circle
+                v-for="marker in navigation.markers"
+                :key="marker.slot"
+                :cx="mapX(marker.x)"
+                :cy="mapY(marker.z)"
+                r="3"
+                :fill="marker.near ? '#ffd593' : '#a1cbbb'"
+              >
+                <title>{{ marker.slot }} · {{ marker.name }}</title>
+              </circle>
+              <g
+                :transform="`translate(${mapX(navigation.x)}, ${mapY(navigation.z)}) rotate(${(navigation.heading * 180) / Math.PI})`"
+              >
+                <path
+                  d="M 0 -8 L 5 5 L 0 2 L -5 5 Z"
+                  fill="#ff8f79"
+                  stroke="#fff3df"
+                  stroke-width="1"
+                />
+              </g>
+              <text x="90" y="10" fill="#d4e5dd" text-anchor="middle" font-size="8">船首</text>
+              <text x="90" y="255" fill="#d4e5dd" text-anchor="middle" font-size="8">船尾</text>
+            </svg>
+          </aside>
+          <template v-if="locked">
+            <div
+              class="gallery-crosshair"
+              :class="{ active: activeCharacter }"
+              aria-hidden="true"
+            ></div>
+            <div
+              v-for="marker in markers"
+              :key="marker.slot"
+              class="gallery-nav-marker"
+              :class="{ near: marker.near }"
+              :style="{ left: `${marker.screenX}%`, top: `${marker.screenY}%` }"
+              aria-hidden="true"
+            >
+              <b>{{ String(marker.slot).padStart(2, "0") }}</b
+              ><span>{{ marker.distance }} m</span>
+            </div>
+            <button
+              v-if="activeCharacter"
+              class="gallery-active-prompt"
+              @click="openCharacter(activeCharacter)"
+            >
+              <span>{{ String(activeSlot).padStart(2, "0") }}</span
+              ><strong>{{ activeCharacter.name }}</strong
+              ><span>查看档案</span><OceanIcon name="next" :size="20" />
+            </button>
+          </template>
+        </template>
+      </section>
+
+      <section v-else class="gallery-fallback">
+        <header class="fallback-header">
           <div>
             <h1>{{ gallery.settings.hall_name }}</h1>
-            <p>当前设备使用人物档案视图；电脑端可进入完整 3D 展厅。</p>
+            <p>{{ gallery.settings.entry_title }}</p>
           </div>
-          <RouterLink class="gallery-secondary-action" to="/"><OceanIcon name="home" :size="18" />返回博客</RouterLink>
+          <RouterLink class="secondary" to="/"
+            ><OceanIcon name="home" :size="18" />返回博客</RouterLink
+          >
         </header>
-        <div v-if="gallery.characters.length" class="gallery-fallback-grid">
-          <article v-for="(character, index) in gallery.characters" :key="character.id" class="gallery-fallback-item">
-            <div class="gallery-fallback-poster">
-              <div><small>WANTED · {{ String(index + 1).padStart(2, "0") }}</small><strong>{{ character.name }}</strong></div>
-              <img v-if="posterDisplayUrl(character)" :src="posterDisplayUrl(character)" :alt="`${character.name}海报`" width="960" height="1440" loading="lazy" decoding="async" @error="handleImageError" />
-            </div>
-            <div class="gallery-fallback-copy">
+        <p v-if="notice" class="gallery-notice" role="status">
+          {{ notice }} <button class="text-button" @click="loadGallery">重试</button>
+        </p>
+        <div v-if="characters.length" class="fallback-grid">
+          <article
+            v-for="(character, index) in characters"
+            :key="character.id"
+            class="fallback-item"
+          >
+            <button
+              class="poster-button"
+              :aria-label="`查看${character.name}档案`"
+              @click="openCharacter(character, index + 1)"
+            >
+              <span class="poster-placeholder"
+                ><small>{{ String(index + 1).padStart(2, "0") }}</small
+                ><strong>{{ character.name }}</strong
+                ><span>{{ character.bounty }}</span></span
+              >
+              <img
+                v-if="character.poster_url"
+                :src="localPosterUrl(character.poster_url)"
+                :alt="`${character.name}海报`"
+                width="512"
+                height="768"
+                loading="lazy"
+                decoding="async"
+                @error="imageError"
+              />
+            </button>
+            <div class="fallback-copy">
               <h2>{{ character.name }}</h2>
-              <p class="gallery-fallback-meta">{{ character.epithet }} · {{ character.faction }}</p>
-              <p>{{ character.description }}</p>
-              <dl><div><dt>悬赏</dt><dd>{{ character.bounty }}</dd></div><div><dt>能力</dt><dd>{{ character.ability }}</dd></div></dl>
-              <blockquote>“{{ character.quote }}”</blockquote>
+              <p>{{ character.epithet }} · {{ character.faction }}</p>
+              <button class="text-button" @click="openCharacter(character, index + 1)">
+                查看档案<OceanIcon name="next" :size="18" />
+              </button>
             </div>
           </article>
         </div>
-        <div v-else class="gallery-empty-state"><h2>展厅正在布展</h2><p>人物档案启用后会在这里出现。</p></div>
+        <p v-else class="fallback-empty">展馆正在布展</p>
       </section>
 
-      <section v-else class="gallery-experience">
-        <div ref="sceneRoot" class="gallery-scene-root"></div>
-
-        <div class="gallery-topbar">
-          <RouterLink class="gallery-exit-link" to="/">返回博客</RouterLink>
-          <span>{{ gallery.settings.hall_name }}</span>
-          <button v-if="entered && locked" type="button" class="gallery-pause-button" @click="pauseTour">暂停</button>
-        </div>
-
-        <div v-if="locked" class="gallery-crosshair" :class="{ active: activeCharacter }" aria-hidden="true"></div>
-        <button
-          v-if="locked && activeCharacter"
-          type="button"
-          class="gallery-active-prompt"
-          @click="openCharacter(activeCharacter, activeSlot)"
-        >
-          <span>{{ String(activeSlot).padStart(2, "0") }}</span>
-          <strong>{{ activeCharacter.name }}</strong>
-          <small>查看档案</small>
-        </button>
-
-        <div v-if="!entered" class="gallery-entry-layer">
-          <div class="gallery-entry-copy">
-            <div v-if="gallery.settings.show_logo && gallery.settings.logo_url" class="gallery-entry-mark">
-              <img :src="gallery.settings.logo_url" alt="展厅 Logo" width="512" height="512" fetchpriority="high" decoding="async" @error="handleImageError" />
+      <dialog
+        ref="detailDialog"
+        class="gallery-character-dialog"
+        aria-labelledby="character-title"
+        @cancel.prevent="closeCharacter"
+      >
+        <article v-if="selectedCharacter" class="character-record">
+          <button class="dialog-close secondary" autofocus @click="closeCharacter">关闭</button>
+          <div class="dialog-poster">
+            <div class="poster-placeholder">
+              <small>{{ String(selectedSlot).padStart(2, "0") }}</small
+              ><strong>{{ selectedCharacter.name }}</strong
+              ><span>{{ selectedCharacter.bounty }}</span>
             </div>
-            <h1>{{ gallery.settings.hall_name }}</h1>
-            <p>{{ gallery.settings.entry_title }}</p>
-            <div class="gallery-entry-actions">
-              <button type="button" class="gallery-primary-action" :disabled="!gallery.characters.length" @click="startTour">
-                {{ gallery.characters.length ? "进入展厅" : "展厅正在布展" }}
-              </button>
-              <RouterLink class="gallery-secondary-action" to="/"><OceanIcon name="home" :size="18" />返回博客</RouterLink>
-            </div>
-            <small>{{ gallery.characters.length }} 位人物档案已开放</small>
+            <img
+              v-if="selectedCharacter.poster_url"
+              :src="localPosterUrl(selectedCharacter.poster_url)"
+              :alt="`${selectedCharacter.name}海报`"
+              width="512"
+              height="768"
+              decoding="async"
+              @error="imageError"
+            />
           </div>
-        </div>
-
-        <div v-else-if="!locked && !selectedCharacter" class="gallery-entry-layer gallery-pause-layer">
-          <div class="gallery-entry-copy">
-            <h1>漫游已暂停</h1>
-            <p>航线停在当前位置。</p>
-            <div class="gallery-entry-actions">
-              <button type="button" class="gallery-primary-action" @click="resumeTour">继续漫游</button>
-              <RouterLink class="gallery-secondary-action" to="/">退出展厅</RouterLink>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <dialog ref="detailDialog" class="gallery-character-dialog" @cancel="handleDialogCancel">
-        <article v-if="selectedCharacter" class="gallery-character-record">
-          <button type="button" class="gallery-dialog-close" @click="closeCharacter">关闭</button>
-          <div class="gallery-dialog-poster">
-            <div><small>WANTED</small><strong>{{ selectedCharacter.name }}</strong><span>{{ selectedCharacter.bounty }}</span></div>
-            <img v-if="posterDisplayUrl(selectedCharacter)" :src="posterDisplayUrl(selectedCharacter)" :alt="`${selectedCharacter.name}海报`" width="960" height="1440" decoding="async" @error="handleImageError" />
-          </div>
-          <div class="gallery-dialog-copy">
-            <p class="gallery-dialog-index">GRAND LINE ARCHIVE · {{ String(selectedSlot).padStart(2, "0") }}</p>
-            <h2>{{ selectedCharacter.name }}</h2>
-            <p class="gallery-dialog-title">{{ selectedCharacter.epithet }} · {{ selectedCharacter.faction }}</p>
+          <div class="dialog-copy">
+            <h2 id="character-title">{{ selectedCharacter.name }}</h2>
+            <p class="character-meta">
+              {{ selectedCharacter.epithet }} · {{ selectedCharacter.faction }}
+            </p>
             <dl>
-              <div><dt>悬赏</dt><dd>{{ selectedCharacter.bounty }}</dd></div>
-              <div><dt>能力</dt><dd>{{ selectedCharacter.ability }}</dd></div>
+              <div>
+                <dt>悬赏</dt>
+                <dd>{{ selectedCharacter.bounty }}</dd>
+              </div>
+              <div>
+                <dt>能力</dt>
+                <dd>{{ selectedCharacter.ability }}</dd>
+              </div>
             </dl>
-            <p class="gallery-dialog-description">{{ selectedCharacter.description }}</p>
-            <blockquote>“{{ selectedCharacter.quote }}”</blockquote>
+            <p class="character-description">{{ selectedCharacter.description }}</p>
+            <blockquote>{{ selectedCharacter.quote }}</blockquote>
           </div>
         </article>
       </dialog>
@@ -236,541 +417,534 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .gallery-page {
-  min-height: 100vh;
-  color: #07334b;
-  background: #bcecff;
+  min-height: 100dvh;
+  background: #edf3ee;
+  color: #193e37;
   font-family: "Noto Sans SC", sans-serif;
+  letter-spacing: 0;
 }
-
+.gallery-page :is(button, a) {
+  -webkit-tap-highlight-color: transparent;
+}
+.gallery-page button {
+  font: inherit;
+  cursor: pointer;
+}
+.gallery-page :is(button, a):focus-visible {
+  outline: 3px solid #e76b51;
+  outline-offset: 4px;
+}
+.gallery-page ::selection {
+  background: #ffbaa3;
+  color: #173e35;
+}
+.gallery-page h1,
+.gallery-page h2 {
+  font-family: var(--display-font);
+  overflow-wrap: anywhere;
+  letter-spacing: 0;
+}
 .gallery-experience,
-.gallery-scene-root,
-.gallery-status-screen {
+.gallery-scene-root {
   position: fixed;
   inset: 0;
 }
-
-.gallery-scene-root :deep(.gallery-canvas) {
+.gallery-scene-root :deep(canvas) {
   display: block;
   width: 100%;
   height: 100%;
 }
-
-.gallery-status-screen {
-  z-index: 30;
+.gallery-status {
+  min-height: 100dvh;
   display: grid;
-  place-content: center;
+  align-content: center;
   justify-items: center;
-  padding: 2rem;
+  padding: 24px;
   text-align: center;
 }
-
-.gallery-status-screen h1,
-.gallery-entry-copy h1,
-.gallery-fallback h1,
-.gallery-character-record h2 {
-  font-family: var(--display-font);
-  letter-spacing: 0;
+.gallery-status h1 {
+  font-size: 30px;
 }
-
-.gallery-status-screen h1 {
-  margin: 1.4rem 0 0.5rem;
-  font-size: clamp(2rem, 5vw, 4.2rem);
+.gallery-status p {
+  line-height: 1.7;
 }
-
-.gallery-status-screen p,
-.gallery-entry-copy p {
-  color: #245b70;
-}
-
-.gallery-compass-loader {
-  width: 54px;
-  height: 54px;
-  border: 1px solid #157f9d;
-  border-radius: 50%;
-  animation: gallery-compass 1.4s linear infinite;
-}
-
-.gallery-compass-loader::before {
-  content: "";
-  display: block;
-  width: 2px;
-  height: 38px;
-  margin: 7px auto;
-  background: #f0ad45;
-  transform: rotate(26deg);
-}
-
-.gallery-status-mark {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid #db6d4c;
-  color: #c85238;
-  font-size: 1.5rem;
-}
-
-.gallery-status-actions,
-.gallery-entry-actions {
+.gallery-actions {
   display: flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
 }
-
-.gallery-primary-action,
-.gallery-secondary-action,
-.gallery-exit-link,
-.gallery-pause-button,
-.gallery-active-prompt,
-.gallery-dialog-close {
-  border-radius: 4px;
-  font: inherit;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.gallery-primary-action,
-.gallery-secondary-action {
+.primary,
+.secondary {
   display: inline-flex;
-  gap: 0.35rem;
   align-items: center;
   justify-content: center;
-  min-width: 138px;
-  padding: 0.8rem 1.2rem;
-  border: 1px solid #0f7898;
+  gap: 8px;
+  min-height: 46px;
+  padding: 10px 18px;
+  border-radius: 4px;
+  text-decoration: none;
+  box-sizing: border-box;
+  font-size: 14px;
   font-weight: 700;
 }
-
-.gallery-primary-action {
-  color: #07334b;
-  background: #f7bd55;
+.primary {
+  background: #174e43;
+  border: 1px solid #a4cabb;
+  color: #fffaf0;
 }
-
-.gallery-primary-action:disabled {
-  opacity: 0.48;
-  cursor: not-allowed;
+.primary:hover {
+  background: #276b5c;
 }
-
-.gallery-secondary-action {
-  color: #07334b;
-  background: rgba(236, 252, 255, 0.82);
+.primary:disabled {
+  opacity: 0.65;
+  cursor: progress;
 }
-
+.secondary {
+  border: 1px solid #8ba69b;
+  color: #24473c;
+  background: #edf3eeef;
+}
+.secondary:hover {
+  background: #d8e9df;
+}
+.compact {
+  min-height: 36px;
+  padding: 6px 12px;
+}
 .gallery-topbar {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 8;
+  position: absolute;
+  z-index: 15;
+  inset: 0 0 auto;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr minmax(0, 2fr) 1fr;
+  gap: 16px;
   align-items: center;
-  min-height: 58px;
-  padding: 0.65rem 1rem;
-  color: #07334b;
-  background: rgba(236, 252, 255, 0.78);
-  border-bottom: 1px solid rgba(6, 104, 132, 0.25);
-  backdrop-filter: blur(14px);
+  min-height: 62px;
+  padding: 8px 26px;
+  background: #f0f5eeef;
+  border-bottom: 1px solid #69877980;
+  box-sizing: border-box;
 }
-
-.gallery-topbar > span {
-  font-family: var(--display-font);
-  font-size: 0.92rem;
-}
-
-.gallery-exit-link,
-.gallery-pause-button {
-  width: fit-content;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid rgba(6, 104, 132, 0.32);
-  color: #07334b;
-  background: rgba(255, 255, 255, 0.58);
-}
-
-.gallery-pause-button {
+.gallery-topbar > :last-child {
   justify-self: end;
 }
-
+.exit-link {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #24473c;
+  text-decoration: none;
+  font-size: 13px;
+}
+.hall-name {
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+}
+.gallery-count {
+  font:
+    12px "IBM Plex Mono",
+    monospace;
+}
+.entry-layer {
+  position: absolute;
+  inset: 62px 0 0;
+  z-index: 8;
+  display: flex;
+  align-items: flex-end;
+  padding: 5% 5% 48px;
+  box-sizing: border-box;
+  pointer-events: none;
+  background: #071e1215;
+}
+.entry-copy {
+  max-width: 580px;
+  color: #123a30;
+  text-shadow: 0 1px 2px #fffbee;
+  pointer-events: auto;
+}
+.entry-copy h1 {
+  -webkit-text-stroke: 1.5px #fffbee;
+  paint-order: stroke fill;
+  font-size: 42px;
+  line-height: 1.2;
+  margin: 12px 0;
+  max-width: 13ch;
+  text-wrap: balance;
+}
+.entry-copy p {
+  font-size: 15px;
+  line-height: 1.8;
+  max-width: 48ch;
+}
+.entry-copy .gallery-actions {
+  text-shadow: none;
+  margin-top: 22px;
+}
+.entry-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+.entry-copy .empty-note {
+  font-size: 13px;
+}
+.paused .entry-copy h1 {
+  font-size: 34px;
+}
+.gallery-minimap {
+  position: absolute;
+  right: 22px;
+  top: 84px;
+  width: 190px;
+  height: 312px;
+  padding: 12px;
+  border: 1px solid #a8c5ae80;
+  border-radius: 4px;
+  box-sizing: border-box;
+  background: #143a32df;
+  color: #e0eee3;
+  pointer-events: none;
+  z-index: 9;
+}
+.map-title {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 12px;
+}
+.map-title > span {
+  margin-left: auto;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.gallery-minimap svg {
+  display: block;
+  width: 100%;
+  height: 266px;
+  margin-top: 4px;
+}
 .gallery-crosshair {
-  position: fixed;
+  position: absolute;
+  z-index: 7;
   top: 50%;
   left: 50%;
-  z-index: 7;
-  width: 10px;
-  height: 10px;
-  border: 1px solid rgba(3, 66, 92, 0.72);
+  width: 6px;
+  height: 6px;
+  border: 1px solid #244c3b;
   border-radius: 50%;
+  background: #fffef1;
   transform: translate(-50%, -50%);
-  transition: border-color 160ms ease, transform 160ms ease;
+  pointer-events: none;
 }
-
 .gallery-crosshair.active {
-  border-color: #e17d3f;
-  transform: translate(-50%, -50%) scale(1.45);
+  background: #ff9b76;
+  border-color: #fff6d5;
 }
-
-.gallery-active-prompt {
-  position: fixed;
-  bottom: 2rem;
-  left: 50%;
-  z-index: 8;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.7rem;
+.gallery-nav-marker {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  gap: 6px;
   align-items: center;
-  min-width: 320px;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid rgba(6, 104, 132, 0.4);
-  color: #07334b;
-  background: rgba(242, 253, 255, 0.92);
-  box-shadow: 0 12px 32px rgba(4, 76, 105, 0.16);
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
+  padding: 4px 7px;
+  border-bottom: 1px solid #bfd7c2;
+  color: #fffbee;
+  background: #173e34cb;
+  font:
+    11px "IBM Plex Mono",
+    monospace;
+  pointer-events: none;
+  white-space: nowrap;
 }
-
-.gallery-active-prompt span,
-.gallery-active-prompt small,
-.gallery-dialog-index {
-  color: #bc6b24;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.7rem;
+.gallery-nav-marker.near {
+  color: #ffdb9a;
+  border-color: #ffdb9a;
 }
-
-.gallery-entry-layer {
-  position: fixed;
-  inset: 0;
+.gallery-active-prompt {
+  position: absolute;
   z-index: 10;
-  display: grid;
-  place-items: center;
-  padding: 1.5rem;
-  background: rgba(175, 232, 248, 0.42);
-  backdrop-filter: blur(3px);
+  left: 50%;
+  bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: min(480px, calc(100% - 48px));
+  min-height: 54px;
+  padding: 12px 18px;
+  transform: translateX(-50%);
+  color: #fff7df;
+  background: #17483eee;
+  border: 1px solid #c6b27f;
+  border-radius: 4px;
 }
-
-.gallery-entry-copy {
-  width: min(760px, 100%);
-  display: grid;
-  justify-items: center;
-  text-align: center;
+.gallery-active-prompt strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
-
-.gallery-entry-mark {
-  display: grid;
-  width: 84px;
-  aspect-ratio: 1;
-  place-items: center;
-  box-sizing: border-box;
-  margin-bottom: 1.1rem;
-  padding: 0.7rem;
-  border: 1px solid rgba(181, 138, 81, 0.88);
-  border-radius: 50%;
-  background: rgba(7, 51, 75, 0.88);
-  box-shadow: inset 0 0 0 4px rgba(240, 189, 85, 0.16), 0 12px 28px rgba(4, 76, 105, 0.18);
+.gallery-active-prompt span {
+  font-size: 12px;
+  flex-shrink: 0;
 }
-
-.gallery-entry-mark img {
+.gallery-fallback {
+  max-width: 1200px;
+  margin: auto;
+  padding: 32px 24px 64px;
+}
+.fallback-header {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 26px;
+  border-bottom: 1px solid #adc6b9;
+}
+.fallback-header h1 {
+  margin: 0 0 12px;
+  font-size: 34px;
+}
+.fallback-header p {
+  margin: 0;
+  color: #527266;
+  line-height: 1.7;
+}
+.fallback-header .secondary {
+  flex-shrink: 0;
+}
+.fallback-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px 26px;
+  padding-top: 28px;
+}
+.fallback-item {
+  min-width: 0;
+}
+.poster-button,
+.dialog-poster {
+  position: relative;
   display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  background: #cbdcd1;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  color: #355c52;
+}
+.poster-placeholder {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+.poster-placeholder small {
+  font:
+    56px "IBM Plex Mono",
+    monospace;
+  color: #5b8070;
+}
+.poster-placeholder strong {
+  font-family: var(--display-font);
+  font-size: 28px;
+  line-height: 1.4;
+}
+.poster-placeholder span {
+  font-size: 13px;
+}
+.poster-button img,
+.dialog-poster img {
+  display: block;
+  position: relative;
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
-
-.gallery-entry-copy h1 {
-  max-width: min(100%, 12ch);
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: 4.25rem;
-  line-height: 1.08;
-  text-wrap: balance;
+.fallback-copy {
+  padding: 16px 0;
+  border-bottom: 1px solid #adc6b9;
 }
-
-.gallery-entry-copy p {
-  max-width: 56ch;
-  margin: 1rem auto 0;
-  color: #164f67;
-  font-size: 1.05rem;
+.fallback-copy h2 {
+  font-size: 24px;
+  margin: 0;
+}
+.fallback-copy p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #527266;
+}
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  padding: 7px 0;
+  background: transparent;
+  color: #215647;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.gallery-notice {
+  padding: 14px 0;
+  font-size: 14px;
   line-height: 1.7;
 }
-
-.gallery-entry-copy > small {
-  display: block;
-  margin-top: 1.25rem;
-  color: #326c7f;
-  font-family: "IBM Plex Mono", monospace;
+.fallback-empty {
+  text-align: center;
+  padding: 70px 12px;
 }
-
-.gallery-pause-layer {
-  background: rgba(170, 227, 246, 0.58);
-}
-
 .gallery-character-dialog {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  width: min(920px, calc(100vw - 2rem));
-  max-height: calc(100dvh - 2rem);
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  overflow: auto;
-  border: 1px solid rgba(10, 111, 139, 0.35);
-  border-radius: 6px;
-  color: #07334b;
-  background: rgba(240, 252, 255, 0.97);
-  box-shadow: 0 30px 90px rgba(4, 76, 105, 0.28);
-  transform: translate(-50%, -50%);
-}
-
-.gallery-character-dialog::backdrop {
-  background: rgba(5, 74, 102, 0.28);
-}
-
-.gallery-character-record {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(240px, 0.78fr) minmax(0, 1.22fr);
-  min-height: 570px;
-}
-
-.gallery-dialog-close {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  min-width: 56px;
-  height: 40px;
-  border: 1px solid rgba(6, 104, 132, 0.28);
-  color: #07334b;
-  background: rgba(220, 247, 255, 0.8);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.gallery-dialog-poster,
-.gallery-fallback-poster {
-  position: relative;
-  overflow: hidden;
-  background: #d8c49b;
-  color: #5d3c20;
-}
-
-.gallery-dialog-poster > div,
-.gallery-fallback-poster > div {
-  display: grid;
-  position: absolute;
   inset: 0;
-  z-index: 0;
-  place-content: center;
-  padding: 1.25rem;
-  text-align: center;
+  width: min(960px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid #789688;
+  border-radius: 6px;
+  background: #f1f5ee;
+  color: #234737;
+  overflow: auto;
+  scrollbar-color: #7b9e8b #e5eee5;
 }
-
-.gallery-dialog-poster img,
-.gallery-fallback-poster img {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.gallery-character-dialog::backdrop {
+  background: #071d18a6;
 }
-
-.gallery-dialog-poster small,
-.gallery-fallback-poster small {
-  font: 700 0.8rem "IBM Plex Mono", monospace;
-}
-
-.gallery-dialog-poster strong,
-.gallery-fallback-poster strong {
-  margin-top: 0.8rem;
-  font-family: var(--display-font);
-  font-size: 2rem;
-}
-
-.gallery-dialog-poster span {
-  margin-top: 1rem;
-  font-weight: 800;
-}
-
-.gallery-dialog-copy {
-  align-self: center;
-  padding: 4.2rem 3.2rem 3.2rem;
-}
-
-.gallery-dialog-copy h2 {
-  margin: 0.45rem 0 0;
-  font-size: clamp(2.4rem, 5vw, 4.5rem);
-  line-height: 1.08;
-}
-
-.gallery-dialog-title {
-  margin: 0.75rem 0 0;
-  color: #bb6a27;
-  font-weight: 700;
-}
-
-.gallery-dialog-copy dl,
-.gallery-fallback-copy dl {
+.character-record {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0;
-  margin: 1.5rem 0;
-  border-top: 1px solid rgba(6, 104, 132, 0.2);
-  border-bottom: 1px solid rgba(6, 104, 132, 0.2);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-items: start;
 }
-
-.gallery-dialog-copy dl div,
-.gallery-fallback-copy dl div {
-  padding: 0.8rem 1rem 0.8rem 0;
+.dialog-close {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 14px;
+  min-height: 38px;
 }
-
-.gallery-dialog-copy dt,
-.gallery-fallback-copy dt {
-  color: #437488;
-  font-size: 0.72rem;
+.dialog-copy {
+  padding: 60px 34px 32px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-
-.gallery-dialog-copy dd,
-.gallery-fallback-copy dd {
-  margin: 0.3rem 0 0;
-  line-height: 1.45;
+.dialog-copy h2 {
+  font-size: 32px;
+  line-height: 1.25;
+  margin: 0 0 12px;
 }
-
-.gallery-dialog-description {
-  color: #24576d;
-  line-height: 1.75;
+.character-meta {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #5b725d;
 }
-
-.gallery-dialog-copy blockquote,
-.gallery-fallback-copy blockquote {
-  margin: 1.5rem 0 0;
-  color: #bb6a27;
-  font-family: var(--display-font);
-  font-size: 1.22rem;
-  line-height: 1.65;
+.dialog-copy dl {
+  display: grid;
+  gap: 16px;
+  border-top: 1px solid #b6c9b9;
+  border-bottom: 1px solid #b6c9b9;
+  padding: 20px 0;
+  margin: 24px 0;
 }
-
-.gallery-fallback {
-  width: min(1120px, calc(100% - 2rem));
-  margin: 0 auto;
-  padding: 2rem 0 4rem;
+.dialog-copy dt {
+  color: #647966;
+  font-size: 12px;
+  margin-bottom: 6px;
 }
-
-.gallery-fallback-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid rgba(6, 104, 132, 0.24);
-}
-
-.gallery-fallback-header h1,
-.gallery-fallback-header p {
+.dialog-copy dd {
+  font-size: 15px;
   margin: 0;
+  line-height: 1.7;
 }
-
-.gallery-fallback-header h1 {
-  font-size: clamp(2rem, 8vw, 3.5rem);
+.character-description {
+  line-height: 1.9;
+  font-size: 15px;
+  white-space: pre-wrap;
 }
-
-.gallery-fallback-header p {
-  margin-top: 0.6rem;
-  color: #326c7f;
+.dialog-copy blockquote {
+  margin: 24px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid #b6c9b9;
+  color: #387862;
+  line-height: 1.8;
 }
-
-.gallery-fallback-grid {
-  display: grid;
-  gap: 1px;
-  margin-top: 1px;
-  background: rgba(6, 104, 132, 0.2);
+@media (max-height: 680px) {
+  .gallery-minimap {
+    height: 250px;
+    width: 155px;
+  }
+  .gallery-minimap svg {
+    height: 204px;
+  }
+  .entry-layer {
+    padding-bottom: 24px;
+  }
+  .entry-logo {
+    display: none;
+  }
+  .entry-copy h1 {
+    font-size: 32px;
+  }
 }
-
-.gallery-fallback-item {
-  display: grid;
-  grid-template-columns: minmax(160px, 0.5fr) minmax(0, 1.5fr);
-  min-height: 310px;
-  background: rgba(240, 252, 255, 0.96);
-}
-
-.gallery-fallback-copy {
-  align-self: center;
-  padding: 1.5rem;
-}
-
-.gallery-fallback-copy h2,
-.gallery-fallback-copy p {
-  margin-top: 0;
-}
-
-.gallery-fallback-copy h2 {
-  margin-bottom: 0.35rem;
-  font-family: var(--display-font);
-  font-size: 2rem;
-}
-
-.gallery-fallback-meta {
-  color: #bb6a27;
-}
-
-.gallery-fallback-copy > p:not(.gallery-fallback-meta) {
-  color: #24576d;
-  line-height: 1.65;
-}
-
-.gallery-empty-state {
-  padding: 5rem 1rem;
-  text-align: center;
-}
-
-button:focus-visible,
-a:focus-visible {
-  outline: 3px solid #f1c86e;
-  outline-offset: 3px;
-}
-
-@keyframes gallery-compass {
-  to { transform: rotate(360deg); }
-}
-
 @media (max-width: 720px) {
-  .gallery-entry-mark {
-    width: 72px;
-    margin-bottom: 0.9rem;
+  .gallery-fallback {
+    padding: 24px 18px 40px;
   }
-
-  .gallery-entry-copy h1 {
-    font-size: 2.8rem;
+  .fallback-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
   }
-
-  .gallery-fallback-header,
-  .gallery-fallback-item,
-  .gallery-character-record {
+  .fallback-header h1 {
+    font-size: 28px;
+  }
+  .fallback-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 14px;
+  }
+  .fallback-copy h2 {
+    font-size: 19px;
+  }
+  .poster-placeholder {
+    padding: 12px;
+    gap: 10px;
+  }
+  .poster-placeholder strong {
+    font-size: 20px;
+  }
+  .poster-placeholder small {
+    font-size: 34px;
+  }
+  .character-record {
     grid-template-columns: 1fr;
   }
-
-  .gallery-fallback-header {
-    align-items: flex-start;
-    flex-direction: column;
+  .dialog-poster {
+    max-width: 290px;
+    justify-self: center;
   }
-
-  .gallery-fallback-poster {
-    min-height: 360px;
+  .dialog-copy {
+    padding: 28px 22px;
   }
-
-  .gallery-dialog-poster {
-    min-height: 480px;
-  }
-
-  .gallery-dialog-copy {
-    padding: 2rem 1.25rem;
+  .dialog-copy h2 {
+    font-size: 28px;
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .gallery-compass-loader { animation: none; }
-  .gallery-crosshair { transition: none; }
+@media (max-width: 380px) {
+  .fallback-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

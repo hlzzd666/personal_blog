@@ -26,8 +26,9 @@ web
 ## Capabilities and Constraints
 
 - 前端使用 Vue 3、TypeScript 与 Vite，后端使用 FastAPI、SQLAlchemy、Alembic 与 MySQL。
-- 3D 展厅使用 Three.js WebGLRenderer，最多维护 40 位人物，公开页面只展示已启用人物。
-- 展厅首版不包含人物模型、音频、移动端漫游、WebGPU、小地图、瞬移或后台 3D 预览。
+- 3D 展厅使用 Three.js WebGLRenderer，公开页面按顺序展示 0～40 位已启用人物；旗舰船舱由已验证的 GLB 与 PBR 材质驱动。
+- 桌面端提供第一人称漫游、低入口层、小地图与展位档案交互；小屏和触摸设备提供二维档案降级，不承诺移动端 3D 漫游或普遍 60fps。
+- 展馆为依据设计参考完成的功能重建；细部连接件、老化材质、舵台/船边轮廓和环境仍有差异，不宣称严格 1:1 还原。
 - 《海贼王》人物资料、Logo 与正式海报由管理员后续维护；仓库只提供无版权图片依赖的程序化占位海报。
 
 ## Brand Commitments

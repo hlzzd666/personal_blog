@@ -1,0 +1,11 @@
+{
+  "bayLength": 3.4,
+  "width": 10,
+  "minimumBays": 6,
+  "maximumCharacters": 40,
+  "bowLength": 9,
+  "sternLength": 7,
+  "frameX": 3.2,
+  "cameraHeight": 1.7,
+  "playerRadius": 0.35
+}

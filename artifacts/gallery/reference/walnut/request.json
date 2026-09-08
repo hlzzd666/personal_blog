@@ -1,0 +1,70 @@
+{
+  "operation": "edit",
+  "config": {
+    "api_key_configured": true,
+    "base_url": "https://suoxie.codes/v1",
+    "model": "gpt-image-2",
+    "model_family": "gpt-image-2",
+    "generation_endpoint": "https://suoxie.codes/v1/images/generations",
+    "edit_endpoint": "https://suoxie.codes/v1/images/edits",
+    "timeout": 300.0,
+    "max_retries": 1,
+    "verify_ssl": true,
+    "extra_header_names": []
+  },
+  "batch_mode": "single",
+  "input_images": [
+    "D:\\codex-test\\personal_blog\\artifacts\\gallery\\reference\\perspective\\perspective.png"
+  ],
+  "mask": null,
+  "requests": [
+    {
+      "model": "gpt-image-2",
+      "prompt": "Image 1 is the approved wooden flagship museum design. Use ONLY the dark WALNUT ARCH RIBS and brown upper wall panel material from Image 1 as the material reference. Deliver one single square seamless physically based rendering base-color texture, an orthographic close scan of this warm dark walnut wood, filling the entire canvas. Continuous vertical longitudinal grain, subtle high-frequency fibrous ridges, realistic pores, narrow irregular wavy grain lines, moderate natural variation. Match the source's brown walnut tone and satin aged finish; do not make it near-black, pale, red mahogany, or orange. The texture is flat albedo without baked shadows, without highlights, no perspective, no borders, no text, no ships or furniture. No plank seams: the geometry will supply boards. The whole image is ONLY seamless walnut material.",
+      "n": 1,
+      "size": "1024x1024",
+      "quality": "high",
+      "background": "auto",
+      "output_format": "png",
+      "moderation": "auto"
+    }
+  ],
+  "prompt_review": {
+    "profile": "edit",
+    "operation": "edit",
+    "status": "warn",
+    "issues": [
+      {
+        "code": "missing-edit-invariants",
+        "severity": "warning",
+        "message": "The edit prompt does not state what must remain unchanged.",
+        "suggestion": "List identity, geometry, layout, camera angle, lighting, labels, or other invariants explicitly."
+      },
+      {
+        "code": "edit-scope-not-surgical",
+        "severity": "warning",
+        "message": "The edit scope is not bounded with a 'change only X' instruction.",
+        "suggestion": "State the exact change, then add 'keep everything else the same.'"
+      }
+    ],
+    "features": {
+      "characters": 837,
+      "has_labeled_sections": false,
+      "requests_text": false,
+      "mentions_text": true,
+      "has_exact_copy": false,
+      "declares_no_text": true,
+      "image_count": 1,
+      "has_mask": false,
+      "quality": "high",
+      "size": "1024x1024",
+      "background": "auto",
+      "model": "gpt-image-2",
+      "model_family": "gpt-image-2"
+    }
+  },
+  "warnings": [
+    "Prompt [missing-edit-invariants]: The edit prompt does not state what must remain unchanged.",
+    "Prompt [edit-scope-not-surgical]: The edit scope is not bounded with a 'change only X' instruction."
+  ]
+}
