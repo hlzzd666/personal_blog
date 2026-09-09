@@ -57,6 +57,9 @@ DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_RETRY_DELAYS_MINUTES = [10, 30]
 MAX_SAFE_ATTEMPTS = 10
 MAX_SAFE_RETRY_DELAY_MINUTES = 1440
+AI_REQUEST_TIMEOUT_SECONDS = 600
+RUN_LOCK_TTL_SECONDS = AI_REQUEST_TIMEOUT_SECONDS + 120
+RUN_STALE_AFTER = timedelta(seconds=RUN_LOCK_TTL_SECONDS)
 RUN_LOCK_KEY = "personal-blog:daily-learning:runner-lock"
 QUESTION_HEADING_PATTERN = re.compile(r"^##\s+\d+[.、]\s*(.+?)\s*$", re.MULTILINE)
 
@@ -537,7 +540,7 @@ def generate_daily_questions(
     )
     endpoint = f"{configuration.base_url}/chat/completions"
     try:
-        with httpx.Client(timeout=120, follow_redirects=False, trust_env=False) as client:
+        with httpx.Client(timeout=AI_REQUEST_TIMEOUT_SECONDS, follow_redirects=False, trust_env=False) as client:
             response = client.post(
                 endpoint,
                 headers={
@@ -556,6 +559,8 @@ def generate_daily_questions(
                     ],
                 },
             )
+    except httpx.ReadTimeout as error:
+        raise DailyLearningAIError("AI 服务响应超时") from error
     except httpx.HTTPError as error:
         raise DailyLearningAIError("AI 服务连接失败") from error
     if response.is_redirect:
@@ -702,7 +707,7 @@ def _mark_failed(
 def _acquire_runner_lock() -> str | None:
     token = uuid4().hex
     try:
-        acquired = get_redis_client().set(RUN_LOCK_KEY, token, nx=True, ex=300)
+        acquired = get_redis_client().set(RUN_LOCK_KEY, token, nx=True, ex=RUN_LOCK_TTL_SECONDS)
     except RedisError:
         logger.warning("Redis unavailable; continuing with database idempotency only")
         return token
@@ -742,7 +747,13 @@ def process_daily_learning_tick(
         if run and run.status == "succeeded":
             return "already-published"
         manually_queued = bool(run and run.status == "pending" and run.scheduled_for <= current_naive)
-        if not manually_queued:
+        retry_due = bool(
+            run
+            and run.status == "failed"
+            and run.attempt_count < (record.max_attempts or DEFAULT_MAX_ATTEMPTS)
+            and (run.next_retry_at is None or run.next_retry_at <= current_naive)
+        )
+        if not manually_queued and not retry_due:
             if not record.enabled:
                 return "disabled"
             if (
@@ -769,7 +780,7 @@ def process_daily_learning_tick(
         if run is None:
             return "not-due"
         if run.status == "running" and run.started_at:
-            if run.started_at > current_naive - timedelta(minutes=10):
+            if run.started_at > current_naive - RUN_STALE_AFTER:
                 return "running"
             run.status = "failed"
             run.last_error = "上一次任务运行超时"

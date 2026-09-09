@@ -191,6 +191,19 @@ class DailyLearningTest(unittest.TestCase):
         self.assertIn("只使用简短示例", request_payload["messages"][1]["content"])
         self.assertIn("恰好 3 道问答", request_payload["messages"][1]["content"])
 
+    def test_generation_request_reports_read_timeout(self) -> None:
+        configuration = AIConfiguration(
+            base_url="https://api.example.com/v1",
+            model="configured-model",
+            api_key="secret",
+        )
+        with patch("backend.app.services.daily_learning.httpx.Client") as client_class:
+            client_class.return_value.__enter__.return_value.post.side_effect = __import__(
+                "httpx"
+            ).ReadTimeout("timed out")
+            with self.assertRaisesRegex(DailyLearningAIError, "AI 服务响应超时"):
+                generate_daily_questions(configuration, [])
+
     def test_settings_support_dynamic_question_count_and_clear_series(self) -> None:
         record = self.add_settings()
         category = ArticleCategory(name="可配置分类")
@@ -332,6 +345,45 @@ class DailyLearningTest(unittest.TestCase):
         self.assertEqual(run.status, "failed")
         self.assertIsNone(run.next_retry_at)
         self.assertIsNone(self.session.scalar(select(Article)))
+
+    def test_failed_retry_runs_even_when_today_is_not_publish_day(self) -> None:
+        record = self.add_settings()
+        record.schedule_type = "weekly"
+        record.schedule_weekday = 1
+        run = DailyLearningRun(
+            run_date=datetime(2026, 9, 9).date(),
+            scheduled_for=datetime(2026, 9, 9, 16, 2),
+            status="failed",
+            attempt_count=1,
+            last_error="AI 服务响应超时",
+            next_retry_at=datetime(2026, 9, 9, 16, 13),
+        )
+        self.session.add(run)
+        self.session.commit()
+        calls = 0
+
+        def generator(_configuration, _previous):
+            nonlocal calls
+            calls += 1
+            return generated_questions()
+
+        now = datetime(2026, 9, 9, 16, 14, tzinfo=BEIJING)
+        with (
+            patch("backend.app.services.daily_learning._acquire_runner_lock", return_value="token"),
+            patch("backend.app.services.daily_learning._release_runner_lock"),
+            patch("backend.app.services.daily_learning.validate_ai_base_url", side_effect=lambda value: value),
+            patch("backend.app.services.daily_learning.invalidate_article_list_cache"),
+        ):
+            self.assertEqual(
+                process_daily_learning_tick(self.session, now=now, question_generator=generator),
+                "published",
+            )
+
+        self.assertEqual(calls, 1)
+        self.session.refresh(run)
+        self.assertEqual(run.attempt_count, 2)
+        self.assertEqual(run.status, "succeeded")
+        self.assertIsNotNone(run.article_id)
 
     def test_admin_endpoints_require_session_and_csrf(self) -> None:
         def override_session():

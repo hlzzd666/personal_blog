@@ -6,6 +6,8 @@ import type {
   DailyLearningTestResult,
 } from "../types/daily-learning";
 
+const DAILY_LEARNING_AI_TIMEOUT_MS = 600000;
+
 export function fetchDailyLearningSettings() {
   return request<DailyLearningSettings>({ url: "/daily-learning/settings", method: "GET" });
 }
@@ -18,12 +20,16 @@ export function testDailyLearningAI() {
   return request<DailyLearningTestResult>({
     url: "/daily-learning/test",
     method: "POST",
-    timeout: 120000,
+    timeout: DAILY_LEARNING_AI_TIMEOUT_MS,
   });
 }
 
 export function runDailyLearningNow() {
-  return request<DailyLearningRun>({ url: "/daily-learning/run-now", method: "POST", timeout: 120000 });
+  return request<DailyLearningRun>({
+    url: "/daily-learning/run-now",
+    method: "POST",
+    timeout: DAILY_LEARNING_AI_TIMEOUT_MS,
+  });
 }
 
 export function fetchDailyLearningRuns(limit = 20) {

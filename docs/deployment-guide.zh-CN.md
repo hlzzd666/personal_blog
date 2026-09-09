@@ -295,7 +295,7 @@ COOKIE_SECURE=false
 systemctl restart personal-blog-backend
 ```
 
-`personal-blog-daily-learning.service` 里的 `TimeoutStartSec=10min` 只影响定时执行器，不影响前台按钮的 `test` 请求。若上游 AI 偶尔超过 10 分钟，再单独把这个值调大。
+`personal-blog-daily-learning.service` 里的 `TimeoutStartSec=12min` 只影响定时执行器，不影响前台按钮的 `test` 请求。它比每日问答 AI 请求的 600 秒稍长，给启动、解析和落库留出余量。
 
 
 ### Nginx 配置
@@ -350,15 +350,35 @@ location / {
 }
 ```
 
-如果服务器上已经有单独的 `/api/v1/` 反向代理段，`/daily-learning/test`、`/daily-learning/run-now` 和定时任务相关接口都要沿用同一套代理规则。由于测试 AI 和正式生成都会同步等待上游 AI 返回，建议把这类接口的代理超时调到高于 70 秒，避免 nginx 先返回 `504 Gateway Time-out`。生产服务器已经按这个要求调整过时，请保持一致。
+如果服务器上已经有单独的 `/api/` 反向代理段，通用接口保持 120 秒。只有
+`/api/v1/daily-learning/test` 和 `/api/v1/daily-learning/run-now` 会同步等待上游 AI
+生成结果，需要单独放宽到 600 秒，避免一次性生成大量问答时先被 nginx 返回
+`504 Gateway Time-out`。生产服务器已经按这个要求调整过时，请保持一致。
 
-参考写法如下，直接加到 `/api/v1/` 的 `location` 中即可：
+参考写法如下，放在通用 `location ^~ /api/` 前面：
 
 ```nginx
-proxy_connect_timeout 10s;
-proxy_send_timeout 120s;
-proxy_read_timeout 120s;
-send_timeout 120s;
+location = /api/v1/daily-learning/test {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 600s;
+    proxy_read_timeout 600s;
+    send_timeout 600s;
+}
+
+location = /api/v1/daily-learning/run-now {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 600s;
+    proxy_read_timeout 600s;
+    send_timeout 600s;
+}
 ```
 
 
