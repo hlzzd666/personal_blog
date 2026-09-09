@@ -12,7 +12,7 @@ import { resolveErrorMessage } from "../api/http";
 import PageHeader from "../components/PageHeader.vue";
 import type { VisitorRecord, VisitorRecordListResponse } from "../types/visitor-record";
 
-type DateRange = [string, string] | [];
+type DateRange = [string, string] | null;
 
 const data = ref<VisitorRecordListResponse | null>(null);
 const records = computed(() => data.value?.items ?? []);
@@ -22,7 +22,7 @@ const filters = reactive({
   ip: "",
   city: "",
   page_path: "",
-  date_range: [] as DateRange,
+  date_range: null as DateRange,
 });
 
 const stats = computed(() => [
@@ -31,7 +31,7 @@ const stats = computed(() => [
   { label: "独立 IP", value: data.value?.unique_ips ?? 0, helper: "原始 IP 去重数量" },
 ]);
 
-const hasDateRange = computed(() => filters.date_range.length === 2);
+const hasDateRange = computed(() => Array.isArray(filters.date_range) && filters.date_range.length === 2);
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -57,14 +57,15 @@ function deviceText(deviceType: string) {
 }
 
 function queryParams() {
+  const dateRange = filters.date_range;
   return {
     page: page.value,
     page_size: 20,
     ip: filters.ip.trim() || undefined,
     city: filters.city.trim() || undefined,
     page_path: filters.page_path.trim() || undefined,
-    visited_from: filters.date_range[0] || undefined,
-    visited_to: filters.date_range[1] || undefined,
+    visited_from: dateRange?.[0] || undefined,
+    visited_to: dateRange?.[1] || undefined,
   };
 }
 
@@ -88,7 +89,7 @@ function resetFilters() {
   filters.ip = "";
   filters.city = "";
   filters.page_path = "";
-  filters.date_range = [];
+  filters.date_range = null;
   search();
 }
 
@@ -114,13 +115,14 @@ async function removeRecord(record: VisitorRecord) {
 }
 
 async function removeByDate() {
-  if (!hasDateRange.value) {
+  const dateRange = filters.date_range;
+  if (!Array.isArray(dateRange) || dateRange.length !== 2) {
     ElMessage.warning("请先选择批量删除的日期范围");
     return;
   }
   try {
     await ElMessageBox.confirm(
-      `确定删除 ${filters.date_range[0]} 至 ${filters.date_range[1]} 的全部访客记录吗？此操作无法恢复。`,
+      `确定删除 ${dateRange[0]} 至 ${dateRange[1]} 的全部访客记录吗？此操作无法恢复。`,
       "按日期删除访客记录",
       {
         type: "warning",
@@ -128,7 +130,7 @@ async function removeByDate() {
         cancelButtonText: "取消",
       },
     );
-    const result = await deleteVisitorRecords(filters.date_range[0], filters.date_range[1]);
+    const result = await deleteVisitorRecords(dateRange[0], dateRange[1]);
     ElMessage.success(`已删除 ${result.deleted_count} 条访客记录`);
     page.value = 1;
     await loadRecords();

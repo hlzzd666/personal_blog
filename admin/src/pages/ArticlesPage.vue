@@ -21,6 +21,7 @@ import type { Article, ArticlePayload } from "../types/article";
 import type { Series, TaxonomyItem } from "../types/content";
 
 type QuickCreateKind = "category" | "series" | "tag";
+type DateTimeRange = [string, string] | null;
 
 const emptyArticle = (): ArticlePayload => ({
   slug: "",
@@ -53,8 +54,8 @@ const searchText = ref("");
 const categoryFilter = ref("");
 const tagFilter = ref("");
 const attributeFilter = ref<"" | "true" | "false">("");
-const publishedRange = ref<string[]>([]);
-const updatedRange = ref<string[]>([]);
+const publishedRange = ref<DateTimeRange>(null);
+const updatedRange = ref<DateTimeRange>(null);
 const page = ref(1);
 const form = reactive<ArticlePayload>(emptyArticle());
 const drawerTitle = computed(() => (editingId.value === null ? "写一篇新文章" : "编辑文章"));
@@ -94,10 +95,10 @@ async function loadArticles() {
       category: categoryFilter.value || undefined,
       tag: tagFilter.value || undefined,
       is_repost: attributeFilter.value || undefined,
-      published_from: publishedRange.value[0],
-      published_to: publishedRange.value[1],
-      updated_from: updatedRange.value[0],
-      updated_to: updatedRange.value[1],
+      published_from: publishedRange.value?.[0],
+      published_to: publishedRange.value?.[1],
+      updated_from: updatedRange.value?.[0],
+      updated_to: updatedRange.value?.[1],
     });
     articles.value = result.items;
     total.value = result.total;
