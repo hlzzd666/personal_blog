@@ -128,6 +128,8 @@
 .note-markdown :is(h1, h2, h3) { margin: 2.5rem 0 0.8rem; font-family: var(--display-font); line-height: 1.25; }
 .note-markdown a { color: var(--hub-signal); }
 .note-markdown pre { overflow: auto; padding: 1rem; border-radius: 6px; background: #03151e; }
+.note-markdown img { display: block; max-width: 100%; height: auto; margin: 2rem auto; border: 1px solid rgba(244, 240, 223, 0.14); border-radius: 4px; box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.18); cursor: zoom-in; transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.note-markdown img:focus-visible { outline: 2px solid var(--hub-signal); outline-offset: 0.35rem; }
 .note-document footer { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: center; padding-top: 1.5rem; border-top: 1px solid rgba(244, 240, 223, 0.12); }
 .note-document footer div { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .note-document footer span { color: var(--hub-current); font-size: 0.72rem; }
@@ -139,6 +141,17 @@
 .content-state { display: grid; justify-items: center; gap: 0.7rem; width: min(900px, 100%); margin: 4rem auto; padding: 3rem; border: 1px dashed rgba(117, 201, 189, 0.25); border-radius: 8px; color: var(--hub-muted); text-align: center; }
 .content-state.error { color: #f2a38b; border-color: rgba(223, 123, 89, 0.35); }
 .content-state a { color: var(--hub-signal); }
+.note-image-preview { --hub-ink: #f4f0df; --hub-current: #75c9bd; --hub-signal: #f4ca58; position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: clamp(1rem, 4vw, 3rem); background: radial-gradient(circle at 76% 16%, rgba(244, 202, 88, 0.1), transparent 22rem), rgba(3, 15, 22, 0.86); backdrop-filter: blur(0.65rem); }
+.note-image-preview::before { content: ""; position: absolute; inset: clamp(0.7rem, 2vw, 1.35rem); border: 1px solid rgba(117, 201, 189, 0.22); pointer-events: none; }
+.note-image-preview figure { position: relative; display: grid; max-width: min(92vw, 86rem); max-height: min(86vh, 54rem); margin: 0; }
+.note-image-preview img { display: block; max-width: 100%; max-height: calc(86vh - 3rem); border: 1px solid rgba(244, 240, 223, 0.18); border-radius: 4px; object-fit: contain; box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(117, 201, 189, 0.08); }
+.note-image-preview figcaption { justify-self: center; max-width: min(100%, 52rem); margin-top: 0.85rem; color: rgba(244, 240, 223, 0.68); font-family: "Noto Sans SC", sans-serif; font-size: 0.78rem; line-height: 1.6; text-align: center; }
+.note-image-preview-close { position: fixed; top: clamp(1.1rem, 3vw, 2rem); right: clamp(1.1rem, 3vw, 2rem); z-index: 1; display: grid; width: 2.75rem; aspect-ratio: 1; place-items: center; border: 1px solid rgba(244, 202, 88, 0.54); border-radius: 50%; color: var(--hub-signal); background: rgba(5, 25, 35, 0.78); font-size: 1.55rem; line-height: 1; cursor: pointer; transition: color 200ms ease, border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease; }
+.note-image-preview-close:hover, .note-image-preview-close:focus-visible { color: #fff9e9; border-color: rgba(117, 201, 189, 0.72); box-shadow: 0 0 1.4rem rgba(117, 201, 189, 0.22); transform: rotate(6deg) scale(1.04); }
+.note-image-preview-enter-active, .note-image-preview-leave-active { transition: opacity 220ms ease; }
+.note-image-preview-enter-active figure, .note-image-preview-leave-active figure { transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+.note-image-preview-enter-from, .note-image-preview-leave-to { opacity: 0; }
+.note-image-preview-enter-from figure, .note-image-preview-leave-to figure { transform: translateY(0.8rem) scale(0.985); }
 .reveal-item { opacity: 0; transform: translate3d(0, 0.8rem, 0); transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1), transform 260ms cubic-bezier(0.22, 1, 0.36, 1); transition-delay: var(--reveal-delay, 0ms); }
 .reveal-item.is-revealed { opacity: 1; transform: translate3d(0, 0, 0); }
 
@@ -149,6 +162,7 @@
   .series-route-stop:hover, .series-route-stop:focus-visible { background: rgba(117, 201, 189, 0.06); transform: translateX(0.25rem); }
   .series-route-stop:hover .route-node, .series-route-stop:focus-visible .route-node { color: #051923; background: var(--hub-signal); transform: scale(1.06); }
   .note-signal:hover .note-signal-pulse i { transform: scale(1.15); box-shadow: 0 0 0 0.55rem rgba(117, 201, 189, 0.12); }
+  .note-markdown img:hover { border-color: rgba(244, 202, 88, 0.4); box-shadow: 0 1.2rem 2.8rem rgba(0, 0, 0, 0.24); transform: translateY(-0.08rem); }
 }
 
 @media (max-width: 760px) {
@@ -164,7 +178,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .reveal-item { opacity: 1; transform: none; transition: none; }
-  .series-card, .series-card-cover, .series-index i, .series-route-stop, .route-node, .notes-tags button, .note-signal-pulse i, .note-document footer button { transition: none; }
+  .series-card, .series-card-cover, .series-index i, .series-route-stop, .route-node, .notes-tags button, .note-signal-pulse i, .note-document footer button, .note-markdown img, .note-image-preview-close, .note-image-preview-enter-active, .note-image-preview-leave-active, .note-image-preview-enter-active figure, .note-image-preview-leave-active figure { transition: none; }
 }
 
 /* 专题与动态重设计：潮汐坐标系统。页面以航线和时间轴组织内容，装饰只承担方向提示。 */
@@ -368,12 +382,65 @@
 .note-signal:only-child .note-signal-pulse::before { display: none; }
 .note-signal-pulse i { width: 0.64rem; margin-top: 1.25rem; border-color: #07131f; background: var(--hub-current); box-shadow: 0 0 0 0.28rem rgba(126, 212, 199, 0.12); }
 .note-signal > div:last-child { min-width: 0; padding: 1.25rem 1.35rem; border: 1px solid var(--hub-rule); border-radius: 2px; background: rgba(5, 25, 35, 0.58); }
+.note-signal.has-image > div:last-child { padding: 0.85rem; }
+.note-signal.has-image p { padding: 0 0.5rem; }
 .note-signal p { color: rgba(247, 241, 223, 0.9); line-height: 1.85; overflow-wrap: anywhere; }
+.note-image-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  overflow: hidden;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 1px solid rgba(126, 212, 199, 0.22);
+  border-radius: 4px;
+  color: var(--hub-ink);
+  background: rgba(5, 25, 35, 0.72);
+  cursor: zoom-in;
+  touch-action: manipulation;
+}
+.note-image-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 18%, rgba(255, 211, 111, 0.12) 48%, transparent 68%);
+  opacity: 0;
+  transform: translateX(-35%);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.note-image-card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.9;
+  filter: saturate(0.92) contrast(1.05);
+  transition: opacity 180ms ease, transform 460ms cubic-bezier(0.16, 1, 0.3, 1), filter 180ms ease;
+}
+.note-image-card-label {
+  position: absolute;
+  z-index: 1;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.34rem 0.55rem;
+  color: #07131f;
+  background: rgba(255, 211, 111, 0.88);
+  font: 700 0.62rem "IBM Plex Mono", monospace;
+}
+.note-image-card:focus-visible { outline: 2px solid var(--hub-signal); outline-offset: 0.28rem; }
+.note-image-summary { color: rgba(247, 241, 223, 0.72); }
 .note-signal footer { align-items: baseline; gap: 0.55rem 0.85rem; margin-top: 1rem; }
 .note-signal footer span { color: var(--hub-current); }
 .note-signal footer a { display: inline-flex; gap: 0.35rem; align-items: center; margin-left: auto; color: var(--hub-signal); white-space: nowrap; }
 .note-signal footer a b { font-size: 0.95rem; font-weight: 400; transition: transform 180ms ease; }
 .note-signal footer a:hover b, .note-signal footer a:focus-visible b { transform: translate(0.15rem, -0.1rem); }
+@media (hover: hover) and (pointer: fine) {
+  .note-image-card:hover { border-color: rgba(255, 211, 111, 0.46); }
+  .note-image-card:hover::after { opacity: 1; transform: translateX(35%); }
+  .note-image-card:hover img { opacity: 1; filter: saturate(1.05) contrast(1.08); transform: scale(1.035); }
+}
 
 @keyframes hub-rise { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: translateY(0); } }
 @keyframes hub-tide-draw { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
@@ -404,12 +471,16 @@
   .note-signal-pulse { grid-row: 1 / span 2; }
   .note-signal-pulse i { margin-top: 0.45rem; }
   .note-signal > div:last-child { grid-column: 2; padding: 1rem; }
+  .note-signal.has-image > div:last-child { padding: 0.7rem; }
+  .note-image-card { aspect-ratio: 4 / 3; margin-bottom: 0.85rem; }
+  .note-image-card-label { top: 0.55rem; left: 0.55rem; font-size: 0.58rem; }
+  .note-signal.has-image p { padding: 0 0.3rem; }
   .note-signal p { font-size: 0.88rem; line-height: 1.8; }
   .note-signal footer a { width: 100%; margin-left: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hub-masthead::before, .hub-masthead::after, .hub-hero-copy h1, .hub-hero-copy > p, .hub-hero-meta, .hub-instrument, .hub-sweep i, .signal-meter i, .note-signal footer a b, .series-hub .reveal-item, .notes-hub .reveal-item, .note-signal > div:last-child, .note-signal-pulse::before { animation: none; transition: none; }
+  .hub-masthead::before, .hub-masthead::after, .hub-hero-copy h1, .hub-hero-copy > p, .hub-hero-meta, .hub-instrument, .hub-sweep i, .signal-meter i, .note-signal footer a b, .note-image-card::after, .note-image-card img, .series-hub .reveal-item, .notes-hub .reveal-item, .note-signal > div:last-child, .note-signal-pulse::before { animation: none; transition: none; }
   .series-hub .reveal-item, .series-hub .reveal-item.is-revealed,
   .notes-hub .reveal-item, .notes-hub .reveal-item.is-revealed { opacity: 1; transform: none; }
   .note-signal > div:last-child, .note-signal.is-revealed > div:last-child { opacity: 1; transform: none; }

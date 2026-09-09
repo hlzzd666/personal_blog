@@ -11,19 +11,32 @@ import OceanIcon from "../components/OceanIcon.vue";
 import { useSeo } from "../composables/useSeo";
 import { noteReturnContext } from "../composables/useNoteReturnContext";
 
+type PreviewImage = { src: string; alt: string; caption: string };
+
 const route = useRoute();
 const note = ref<Note | null>(null);
 const loading = ref(true);
 const notFound = ref(false);
 const errorText = ref("");
 const copyState = ref<"idle" | "copied" | "error">("idle");
+const previewImage = ref<PreviewImage | null>(null);
 const { applySeo } = useSeo();
 let copyTimer: number | undefined;
+let bodyOverflowBeforePreview: string | null = null;
 const returnPath = computed(() => noteReturnContext.slug === route.params.slug ? noteReturnContext.path : "/notes");
 
-const renderedContent = computed(() =>
-  note.value ? DOMPurify.sanitize(marked.parse(note.value.content_markdown) as string) : "",
-);
+const renderedContent = computed(() => {
+  if (!note.value) return "";
+  const safeDocument = new DOMParser().parseFromString(DOMPurify.sanitize(marked.parse(note.value.content_markdown) as string), "text/html");
+  safeDocument.body.querySelectorAll("img").forEach((image) => {
+    image.setAttribute("loading", "lazy");
+    image.setAttribute("decoding", "async");
+    image.setAttribute("tabindex", "0");
+    image.setAttribute("role", "button");
+    image.setAttribute("aria-label", image.getAttribute("alt") || "查看动态图片");
+  });
+  return safeDocument.body.innerHTML;
+});
 
 function plainText(markdown: string) {
   return markdown.replace(/```[\s\S]*?```/g, " ").replace(/[#>*_`[\]()!-]/g, " ").replace(/\s+/g, " ").trim();
@@ -57,6 +70,36 @@ async function copyLink() {
   copyTimer = window.setTimeout(() => { copyState.value = "idle"; }, 1600);
 }
 
+function openImagePreview(image: HTMLImageElement) {
+  const src = image.currentSrc || image.getAttribute("src");
+  if (!src) return;
+  const alt = image.getAttribute("alt")?.trim() || "";
+  previewImage.value = { src, alt: alt || "动态图片", caption: alt };
+}
+
+function handleContentClick(event: MouseEvent) {
+  if (!(event.target instanceof Element)) return;
+  const target = event.target.closest("img");
+  if (!(target instanceof HTMLImageElement)) return;
+  event.preventDefault();
+  openImagePreview(target);
+}
+
+function handleContentKeydown(event: KeyboardEvent) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  if (!(event.target instanceof HTMLImageElement)) return;
+  event.preventDefault();
+  openImagePreview(event.target);
+}
+
+function closeImagePreview() {
+  previewImage.value = null;
+}
+
+function handlePreviewKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") closeImagePreview();
+}
+
 async function loadNote() {
   loading.value = true;
   notFound.value = false;
@@ -86,7 +129,24 @@ async function loadNote() {
 }
 
 watch(() => route.params.slug, loadNote, { immediate: true });
-onBeforeUnmount(() => window.clearTimeout(copyTimer));
+
+watch(previewImage, (image) => {
+  if (image) {
+    if (bodyOverflowBeforePreview === null) bodyOverflowBeforePreview = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handlePreviewKeydown);
+    return;
+  }
+  window.removeEventListener("keydown", handlePreviewKeydown);
+  if (bodyOverflowBeforePreview !== null) document.body.style.overflow = bodyOverflowBeforePreview;
+  bodyOverflowBeforePreview = null;
+});
+
+onBeforeUnmount(() => {
+  window.clearTimeout(copyTimer);
+  window.removeEventListener("keydown", handlePreviewKeydown);
+  if (bodyOverflowBeforePreview !== null) document.body.style.overflow = bodyOverflowBeforePreview;
+});
 </script>
 
 <template>
@@ -100,7 +160,7 @@ onBeforeUnmount(() => window.clearTimeout(copyTimer));
       </header>
       <!-- 内容已使用 DOMPurify 清洗。 -->
       <!-- eslint-disable-next-line vue/no-v-html -->
-      <div class="note-markdown" v-html="renderedContent"></div>
+      <div class="note-markdown" @click="handleContentClick" @keydown="handleContentKeydown" v-html="renderedContent"></div>
       <footer>
         <div><span v-for="tag in note.tags" :key="tag"># {{ tag }}</span></div>
         <a v-if="note.external_url" :href="note.external_url" target="_blank" rel="noreferrer noopener"><OceanIcon name="external" :size="18" />打开相关链接</a>
@@ -115,5 +175,16 @@ onBeforeUnmount(() => window.clearTimeout(copyTimer));
       <p>{{ errorText }}</p>
       <RouterLink :to="notFound ? returnPath : route.fullPath">{{ notFound ? "返回短动态" : "重新读取" }}</RouterLink>
     </section>
+    <Teleport to="body">
+      <Transition name="note-image-preview">
+        <div v-if="previewImage" class="note-image-preview" role="dialog" aria-modal="true" :aria-label="previewImage.alt" tabindex="-1" @click.self="closeImagePreview" @keydown="handlePreviewKeydown">
+          <button class="note-image-preview-close" type="button" aria-label="关闭图片预览" @click="closeImagePreview">×</button>
+          <figure>
+            <img :src="previewImage.src" :alt="previewImage.alt" />
+            <figcaption v-if="previewImage.caption">{{ previewImage.caption }}</figcaption>
+          </figure>
+        </div>
+      </Transition>
+    </Teleport>
   </main>
 </template>

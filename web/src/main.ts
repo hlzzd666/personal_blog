@@ -5,8 +5,6 @@ import App from "./App.vue";
 import "./styles.css";
 import "./content-pages.css";
 
-const HomeRoute = { name: "HomeRoute", render: () => null };
-
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   scrollBehavior(to, from) {
@@ -25,7 +23,7 @@ const router = createRouter({
     return { top: 0 };
   },
   routes: [
-    { path: "/", component: HomeRoute, meta: { title: "首页" } },
+    { path: "/", component: () => import("./pages/HomePage.vue"), meta: { title: "首页" } },
     { path: "/dashboard", component: () => import("./pages/DashboardPage.vue"), meta: { title: "文章航行总览" } },
     { path: "/about", component: () => import("./pages/AboutPage.vue"), meta: { title: "关于我" } },
     { path: "/articles", component: () => import("./pages/ArticlesPage.vue"), meta: { title: "文章" } },
