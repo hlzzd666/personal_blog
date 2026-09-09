@@ -2,6 +2,7 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createRouter, createWebHistory } from "vue-router";
 import App from "./App.vue";
+import { recordVisitorVisit } from "./api/visitor-record";
 import "./styles.css";
 import "./content-pages.css";
 
@@ -41,6 +42,7 @@ const router = createRouter({
 
 router.afterEach((to) => {
   document.title = `${String(to.meta.title ?? "个人空间")} | 个人博客`;
+  void recordVisitorVisit(to.fullPath);
 });
 
 createApp(App).use(createPinia()).use(router).mount("#app");

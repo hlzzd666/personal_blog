@@ -32,6 +32,12 @@ export type GalleryResponse = {
   characters: GalleryCharacter[];
 };
 
+let galleryRequest: Promise<GalleryResponse> | undefined;
+
 export function fetchGallery() {
-  return request<GalleryResponse>({ url: "/gallery", method: "GET" });
+  galleryRequest ??= request<GalleryResponse>({ url: "/gallery", method: "GET" }).catch((error) => {
+    galleryRequest = undefined;
+    throw error;
+  });
+  return galleryRequest;
 }

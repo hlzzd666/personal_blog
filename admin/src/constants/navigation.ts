@@ -7,6 +7,7 @@ export const adminNavigation = [
   { label: "每日问答", to: "/daily-learning", icon: "MagicStick", group: "content" },
   { label: "3D 展厅", to: "/gallery", icon: "View", group: "content" },
   { label: "媒体资源", to: "/media", icon: "Picture", group: "content" },
+  { label: "访客记录", to: "/visitor-records", icon: "Location", group: "site" },
   { label: "关于我", to: "/about", icon: "User", group: "site" },
   { label: "站点设置", to: "/site-settings", icon: "Setting", group: "site" },
 ] as const;

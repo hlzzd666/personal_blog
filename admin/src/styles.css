@@ -1011,6 +1011,41 @@ body {
   min-width: 0;
 }
 
+.visitor-records-card {
+  min-width: 0;
+}
+
+.visitor-records-toolbar,
+.visitor-records-filters,
+.visitor-records-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.visitor-records-toolbar {
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.visitor-records-filters {
+  flex: 1;
+  min-width: 0;
+}
+
+.visitor-records-filters .el-input {
+  width: 160px;
+}
+
+.visitor-records-filters .el-date-editor {
+  width: 260px;
+}
+
+.visitor-records-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .media-toolbar {
   display: flex;
   align-items: center;
@@ -1637,6 +1672,24 @@ body {
   .media-toolbar-filters {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .visitor-records-toolbar,
+  .visitor-records-filters,
+  .visitor-records-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .visitor-records-filters .el-input,
+  .visitor-records-filters .el-date-editor {
+    width: 100%;
+  }
+
+  .visitor-records-actions .el-button {
+    width: 100%;
+    margin-left: 0;
   }
 
   .article-toolbar {

@@ -42,6 +42,12 @@ export const router = createRouter({
           meta: { title: "每日问答", cache: true },
         },
         { path: "media", name: "media", component: MediaPage, meta: { title: "媒体资源", cache: true } },
+        {
+          path: "visitor-records",
+          name: "visitor-records",
+          component: () => import("../pages/VisitorRecordsPage.vue"),
+          meta: { title: "访客记录", cache: true },
+        },
         { path: "about", name: "about", component: AboutPage, meta: { title: "关于我", cache: true } },
         { path: "site-settings", name: "site-settings", component: SiteSettingsPage, meta: { title: "站点设置", cache: true } },
       ],

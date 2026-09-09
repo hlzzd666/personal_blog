@@ -32,6 +32,12 @@ export type SiteSettings = {
   owner_longitude: number | null;
 };
 
+let siteSettingsRequest: Promise<SiteSettings> | undefined;
+
 export async function fetchSiteSettings() {
-  return request<SiteSettings>({ url: "/site-settings", method: "GET" });
+  siteSettingsRequest ??= request<SiteSettings>({ url: "/site-settings", method: "GET" }).catch((error) => {
+    siteSettingsRequest = undefined;
+    throw error;
+  });
+  return siteSettingsRequest;
 }

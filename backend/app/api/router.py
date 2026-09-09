@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from hashlib import sha256
 from typing import Literal
@@ -18,9 +18,22 @@ from backend.app.schemas.common import ApiResponse
 from backend.app.schemas.site_settings import SiteSettings, SiteSettingsUpdate
 from backend.app.services.site_settings import get_site_settings, update_site_settings
 from backend.app.schemas.visitor_location import VisitorLocation
+from backend.app.schemas.visitor_record import (
+    VisitorRecordCreate,
+    VisitorRecordDeleteResponse,
+    VisitorRecordListResponse,
+    VisitorRecordResponse,
+)
 from backend.app.services.visitor_location import resolve_visitor_location
+from backend.app.services.visitor_records import (
+    create_visitor_record,
+    delete_visitor_record,
+    delete_visitor_records,
+    list_visitor_records,
+)
 from backend.app.core.database import get_db_session
 from backend.app.models.article import ArticleLikeRecord
+from backend.app.models.visitor_record import VisitorRecord
 from backend.app.schemas.article import (
     ArticleContextResponse,
     ArticleCreate,
@@ -324,6 +337,116 @@ def read_visitor_location(request: Request) -> ApiResponse[VisitorLocation]:
             site_settings.owner_latitude,
             site_settings.owner_longitude,
         ),
+    )
+
+
+@router.post(
+    "/visitor-records",
+    tags=["visitor-records"],
+    response_model=ApiResponse[VisitorRecordResponse],
+)
+def write_visitor_record(
+    request: Request,
+    payload: VisitorRecordCreate,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[VisitorRecordResponse]:
+    ip = get_client_ip(request)
+    try:
+        location = resolve_visitor_location(ip, "", None, None)
+    except Exception:
+        location = VisitorLocation(ip=ip, location_available=False)
+    record = create_visitor_record(
+        session,
+        payload,
+        ip=ip,
+        referer=request.headers.get("referer"),
+        user_agent=request.headers.get("user-agent"),
+        location=location,
+    )
+    return build_success_response(request, record, message="访客记录已保存")
+
+
+@router.get(
+    "/visitor-records",
+    tags=["visitor-records"],
+    response_model=ApiResponse[VisitorRecordListResponse],
+)
+def read_visitor_records(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    ip: str | None = None,
+    city: str | None = None,
+    page_path: str | None = None,
+    visited_from: date | None = None,
+    visited_to: date | None = None,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[VisitorRecordListResponse]:
+    if visited_from and visited_to and visited_from > visited_to:
+        raise HTTPException(status_code=422, detail="访问日期起始值不能晚于结束值")
+    return build_success_response(
+        request,
+        list_visitor_records(
+            session,
+            page=page,
+            page_size=page_size,
+            ip=ip,
+            city=city,
+            page_path=page_path,
+            visited_from=visited_from,
+            visited_to=visited_to,
+        ),
+    )
+
+
+@router.delete(
+    "/visitor-records/{record_id}",
+    tags=["visitor-records"],
+    response_model=ApiResponse[dict[str, int]],
+)
+def remove_visitor_record(
+    request: Request,
+    record_id: int,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[dict[str, int]]:
+    record = session.get(VisitorRecord, record_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="访客记录不存在")
+    delete_visitor_record(session, record)
+    return build_success_response(request, {"id": record_id}, message="访客记录已删除")
+
+
+@router.delete(
+    "/visitor-records",
+    tags=["visitor-records"],
+    response_model=ApiResponse[VisitorRecordDeleteResponse],
+)
+def remove_visitor_records(
+    request: Request,
+    visited_from: date | None = None,
+    visited_to: date | None = None,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[VisitorRecordDeleteResponse]:
+    if visited_from is None and visited_to is None:
+        raise HTTPException(status_code=422, detail="批量删除必须指定访问日期范围")
+    if visited_from and visited_to and visited_from > visited_to:
+        raise HTTPException(status_code=422, detail="访问日期起始值不能晚于结束值")
+    deleted_count = delete_visitor_records(
+        session,
+        visited_from=visited_from,
+        visited_to=visited_to,
+    )
+    return build_success_response(
+        request,
+        VisitorRecordDeleteResponse(
+            deleted_count=deleted_count,
+            visited_from=visited_from,
+            visited_to=visited_to,
+        ),
+        message=f"已删除 {deleted_count} 条访客记录",
     )
 
 

@@ -4,6 +4,7 @@ from .article import Article, ArticleCategory, ArticleLikeRecord, ArticleTag, Ar
 from .content import Note, Series
 from .daily_learning import DailyLearningRun, DailyLearningSettings
 from .gallery import GalleryCharacter, GallerySettings
+from .visitor_record import VisitorRecord
 
 __all__ = [
     "AboutProfile",
@@ -19,4 +20,5 @@ __all__ = [
     "GallerySettings",
     "Note",
     "Series",
+    "VisitorRecord",
 ]
