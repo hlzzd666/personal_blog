@@ -18,6 +18,8 @@ const fallbackSettings: SiteSettings = {
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
   hero_image_url: "https://images.hdqwalls.com/download/one-piece-anime-artwork-i6-2560x1440.jpg",
   nav_brand: "某某某的个人空间",
+  dashboard_show_entry: true,
+  dashboard_years: [2024, 2025, 2026],
   icp_filing_number: null,
   police_filing_number: null,
   site_launched_on: "2026-01-01",
@@ -71,6 +73,7 @@ const fallbackArticleStats: ArticleListStats = {
 const route = useRoute();
 const isHome = computed(() => route.path === "/");
 const isGallery = computed(() => route.path === "/gallery");
+const isStandalone = computed(() => isGallery.value || route.path === "/dashboard");
 const settings = ref<SiteSettings>(fallbackSettings);
 const homeArticles = ref<Article[]>([]);
 const homeArticleStats = ref<ArticleListStats>(fallbackArticleStats);
@@ -504,7 +507,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <SiteNavigation v-if="!isGallery" :brand="isHome ? settings.nav_brand : undefined" />
+  <SiteNavigation v-if="!isStandalone" :brand="isHome ? settings.nav_brand : undefined" />
   <div
     v-if="isHome"
     class="page-shell"
@@ -677,7 +680,7 @@ onBeforeUnmount(() => {
       <component :is="Component" />
     </KeepAlive>
   </router-view>
-  <SiteFooter v-if="!isGallery" />
+  <SiteFooter v-if="!isStandalone" />
 </template>
 
 <style scoped>

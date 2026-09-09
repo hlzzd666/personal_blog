@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
@@ -28,6 +28,10 @@ class SiteSettings(BaseModel):
     site_subtitle: str = Field(..., min_length=1, max_length=120)
     hero_image_url: HttpUrl
     nav_brand: str = Field(..., min_length=1, max_length=60)
+    dashboard_show_entry: bool = True
+    dashboard_years: list[Annotated[int, Field(strict=True, ge=1970, le=2100)]] = Field(
+        default_factory=lambda: [2024, 2025, 2026], min_length=1, max_length=12
+    )
     icp_filing_number: str | None = Field(default=None, max_length=80)
     police_filing_number: str | None = Field(default=None, max_length=80)
     site_launched_on: date = Field(default=date(2026, 1, 1))
@@ -37,6 +41,11 @@ class SiteSettings(BaseModel):
     owner_location_name: str = Field(default="未设置站长地址", min_length=1, max_length=80)
     owner_latitude: float | None = Field(default=None, ge=-90, le=90)
     owner_longitude: float | None = Field(default=None, ge=-180, le=180)
+
+    @field_validator("dashboard_years")
+    @classmethod
+    def normalize_dashboard_years(cls, value: list[int]) -> list[int]:
+        return sorted(set(value))
 
     @field_validator("site_launched_on")
     @classmethod

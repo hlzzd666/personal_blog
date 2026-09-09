@@ -1,0 +1,43 @@
+{
+  "approved_design": "artifacts/blog-dashboard/article-focus/文章大屏-设计稿.png",
+  "approved_design_sha256": "eb34b58e44549169dfcf027525710f0fb0b286794caff190cbe3e5062f2e48e0",
+  "assets": [
+    {
+      "path": "web/public/dashboard/going-merry.webp",
+      "sha256": "dab302ab7bea358587e69f1459b68a1db35bb986463825ea9c970eaa48e8688a",
+      "width": 1536,
+      "height": 1536,
+      "origin": "Existing transparent render of the user-supplied Going Merry GLB."
+    },
+    {
+      "path": "web/public/dashboard/compass.png",
+      "sha256": "a88530b87ba7204d9af3e6bd968fb0bcc2552ca49e739072b9ba244c0b32665e",
+      "width": 51,
+      "height": 54,
+      "origin": "Raster extraction from the approved design, with pale ocean background removed."
+    },
+    {
+      "path": "web/public/dashboard/background.webp",
+      "sha256": "f362ee9aeb55cd94ef1f8e410e06edd3826afcbef58c668d22f7a26b23bf938b",
+      "width": 1672,
+      "height": 941,
+      "origin": "Composition from the existing generated ocean asset: clean central water, pale mist treatment, and feathered island patches positioned in design whitespace. No text, charts, or UI copied."
+    },
+    {
+      "path": "web/public/dashboard/merry-reference-sea.webp",
+      "sha256": "96517ffbcbde3911b5afc9891cf35a6debccb712b8b882241b94579408899874",
+      "width": 727,
+      "height": 381,
+      "origin": "Reference sea extracted with masked Image2 edit and Poisson texture blending; original unmasked pixels preserved. Contains no ship or interface controls."
+    }
+  ],
+  "model": {
+    "title": "One Piece -Going Merry",
+    "author": "Anex",
+    "source": "https://sketchfab.com/3d-models/one-piece-going-merry-0e1f16189e8b4b4d9d9c3c60893d692b",
+    "license": "CC BY 4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "path": "web/public/models/one_piece_-going_merry.glb",
+    "sha256": "ad5e0c8bc77c54ca47e35d55b0c1dcdabae9fda7a9f1506f4e8a50e14d11106c"
+  }
+}

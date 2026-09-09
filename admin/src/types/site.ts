@@ -17,6 +17,8 @@ export type SiteSettings = {
   site_subtitle: string;
   hero_image_url: string;
   nav_brand: string;
+  dashboard_show_entry: boolean;
+  dashboard_years: number[];
   icp_filing_number: string | null;
   police_filing_number: string | null;
   site_launched_on: string;

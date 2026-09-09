@@ -24,6 +24,8 @@ const form = ref<SiteSettings>({
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
   hero_image_url: "https://images.hdqwalls.com/download/one-piece-anime-artwork-i6-2560x1440.jpg",
   nav_brand: "某某某的个人空间",
+  dashboard_show_entry: true,
+  dashboard_years: [2024, 2025, 2026],
   icp_filing_number: null,
   police_filing_number: null,
   site_launched_on: "2026-01-01",
@@ -36,6 +38,7 @@ const form = ref<SiteSettings>({
 });
 const statusText = ref("正在读取站点设置...");
 const saving = ref(false);
+const dashboardYearOptions = Array.from({ length: 131 }, (_, index) => 1970 + index).reverse();
 const quoteDraft = ref("");
 const avatarInput = ref<HTMLInputElement | null>(null);
 const heroInput = ref<HTMLInputElement | null>(null);
@@ -179,13 +182,17 @@ async function loadSettings() {
       visual_assets: normalizeVisualAssets(payload.visual_assets),
     };
     formatQuotes(payload.quotes);
-    statusText.value = "站点设置已加载，可直接修改文章列表页视觉层。";
+    statusText.value = "站点设置已加载，可修改基础内容、大屏和文章列表页视觉层。";
   } catch (error) {
     statusText.value = `读取失败：${resolveErrorMessage(error, "请确认后端服务已启动")}`;
   }
 }
 
 async function saveSettings() {
+  if (!form.value.dashboard_years.length || form.value.dashboard_years.length > 12) {
+    ElMessage.error("请选择 1 至 12 个大屏年份");
+    return;
+  }
   saving.value = true;
   statusText.value = "正在保存站点设置...";
 
@@ -199,7 +206,7 @@ async function saveSettings() {
     const nextValue = await updateSiteSettings(payload);
     form.value = nextValue;
     formatQuotes(nextValue.quotes);
-    statusText.value = "保存成功，前台刷新后即可看到新的文章列表页视觉层。";
+    statusText.value = "保存成功，前台刷新后即可看到新的站点配置。";
     ElMessage.success("站点设置已保存");
   } catch (error) {
     const message = resolveErrorMessage(error, "站点设置保存失败，请检查建站日期、经纬度和语录格式");
@@ -220,7 +227,7 @@ onMounted(() => {
     <PageHeader
       eyebrow="SITE SETTINGS"
       title="站点设置"
-      description="这里管理站点基础信息，并维护文章列表页可复用的视觉层资源。"
+      description="管理站点基础信息、大屏入口与年份，以及文章列表页视觉资源。"
     />
 
     <div class="status-panel">
@@ -248,6 +255,19 @@ onMounted(() => {
           <el-form-item label="导航品牌名">
             <el-input v-model="form.nav_brand" placeholder="某某某的个人空间" />
           </el-form-item>
+
+          <el-divider content-position="left">文章大屏</el-divider>
+          <el-form-item label="显示大屏入口">
+            <el-switch v-model="form.dashboard_show_entry" active-text="是" inactive-text="否" aria-label="显示大屏入口" />
+          </el-form-item>
+          <p class="coordinate-hint">选择否后，前台导航隐藏“大屏”按钮。</p>
+          <el-form-item label="大屏可选年份">
+            <el-select v-model="form.dashboard_years" multiple filterable :multiple-limit="12" placeholder="选择年份，可输入年份搜索" aria-label="大屏可选年份">
+              <el-option v-for="value in dashboardYearOptions" :key="value" :label="`${value} 年`" :value="value" />
+            </el-select>
+          </el-form-item>
+          <p class="coordinate-hint">选择 1 至 12 个年份，前台按从早到晚排列，默认选中最新年份；示意数据与本站文章使用同一组年份。</p>
+          <el-divider />
 
           <div class="filing-fields">
             <el-form-item label="ICP备案号">

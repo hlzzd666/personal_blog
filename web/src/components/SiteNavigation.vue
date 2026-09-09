@@ -15,6 +15,7 @@ const navVisible = ref(true);
 const navRevealing = ref(false);
 const searchOpen = ref(false);
 const galleryEntryVisible = ref(true);
+const dashboardEntryVisible = ref(false);
 const articleNavigationResetKey = "articles-navigation-reset";
 let lastScrollY = 0;
 let revealTimer: number | undefined;
@@ -26,10 +27,14 @@ const usesLightSurface = computed(() => route.path === "/about" || route.path ==
 const usesSystemSurface = computed(() => route.path === "/icons");
 
 async function loadBrand() {
-  if (props.brand || loadingBrand) return;
+  if (loadingBrand) return;
   loadingBrand = true;
   try {
-    loadedBrand.value = (await fetchSiteSettings()).nav_brand;
+    const settings = await fetchSiteSettings();
+    loadedBrand.value = settings.nav_brand;
+    dashboardEntryVisible.value = settings.dashboard_show_entry;
+  } catch (error) {
+    console.error("导航站点设置加载失败", error);
   } finally {
     loadingBrand = false;
   }
@@ -156,6 +161,7 @@ onBeforeUnmount(() => {
         <OceanIcon name="articles" :size="20" />文章
       </RouterLink>
       <RouterLink to="/series"><OceanIcon name="series" :size="20" />专题</RouterLink>
+      <RouterLink v-if="dashboardEntryVisible" to="/dashboard"><OceanIcon name="views" :size="20" />大屏</RouterLink>
       <RouterLink to="/notes"><OceanIcon name="notes" :size="20" />动态</RouterLink>
       <RouterLink v-if="galleryEntryVisible" to="/gallery"><OceanIcon name="gallery" :size="20" />展厅</RouterLink>
       <RouterLink to="/about"><OceanIcon name="about" :size="20" />关于我</RouterLink>

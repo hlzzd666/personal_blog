@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import date
 from pathlib import Path
 
@@ -6,6 +7,7 @@ from backend.app.schemas.site_settings import SiteSettings, SiteSettingsUpdate
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 SETTINGS_PATH = DATA_DIR / "site_settings.json"
+logger = logging.getLogger(__name__)
 
 DEFAULT_SITE_SETTINGS = SiteSettings(
     site_subtitle="自由、梦想、伙伴，这里记录我向前航行的每一步。",
@@ -72,4 +74,5 @@ def update_site_settings(payload: SiteSettingsUpdate) -> SiteSettings:
     _ensure_data_dir()
     settings = SiteSettings.model_validate(payload.model_dump())
     SETTINGS_PATH.write_text(settings.model_dump_json(indent=2), encoding="utf-8")
+    logger.info("站点设置已保存：大屏入口=%s，大屏年份=%s", settings.dashboard_show_entry, settings.dashboard_years)
     return settings

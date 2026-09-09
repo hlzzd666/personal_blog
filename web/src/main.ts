@@ -26,6 +26,7 @@ const router = createRouter({
   },
   routes: [
     { path: "/", component: HomeRoute, meta: { title: "首页" } },
+    { path: "/dashboard", component: () => import("./pages/DashboardPage.vue"), meta: { title: "文章航行总览" } },
     { path: "/about", component: () => import("./pages/AboutPage.vue"), meta: { title: "关于我" } },
     { path: "/articles", component: () => import("./pages/ArticlesPage.vue"), meta: { title: "文章" } },
     { path: "/articles/:slug", component: () => import("./pages/ArticleDetailPage.vue"), meta: { title: "文章详情" } },

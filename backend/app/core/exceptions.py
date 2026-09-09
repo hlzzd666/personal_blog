@@ -41,6 +41,8 @@ _FIELD_LABELS: dict[str, str] = {
     "site_subtitle": "站点副标题",
     "hero_image_url": "首页横幅图链接",
     "nav_brand": "导航品牌名",
+    "dashboard_show_entry": "显示大屏入口",
+    "dashboard_years": "大屏可选年份",
     "icp_filing_number": "ICP备案号",
     "police_filing_number": "公安备案号",
     "site_launched_on": "建站日期",
