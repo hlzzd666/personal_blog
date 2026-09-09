@@ -266,7 +266,7 @@ onMounted(() => {
               <el-option v-for="value in dashboardYearOptions" :key="value" :label="`${value} 年`" :value="value" />
             </el-select>
           </el-form-item>
-          <p class="coordinate-hint">选择 1 至 12 个年份，前台按从早到晚排列，默认选中最新年份；示意数据与本站文章使用同一组年份。</p>
+          <p class="coordinate-hint">选择 1 至 12 个年份，前台按从早到晚排列，默认选中最新年份；仪表盘仅统计本站文章。</p>
           <el-divider />
 
           <div class="filing-fields">

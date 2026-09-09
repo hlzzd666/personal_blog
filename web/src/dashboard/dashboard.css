@@ -47,9 +47,6 @@
 .dashboard-years button:not(.active):hover { background: rgba(151,194,193,.3); }
 .dashboard-year-select { height: 34px; background: #e8f2ef; border: 1px solid #bad3d7; border-radius: 4px; }
 .dashboard-date { display: flex; gap: 12px; align-items: center; white-space: nowrap; font-family: Arial, "Microsoft YaHei", sans-serif; font-size: 14px; }
-.dashboard-source { position: relative; display: flex; align-items: center; color: #476c7a; }
-.dashboard-source select { appearance: none; font-size: 12px; border: 1px solid #bfd6d8; border-radius: 3px; background: rgba(219,235,235,.65); padding: 4px 20px 4px 8px; cursor: pointer; }
-.dashboard-source svg { position: absolute; right: 5px; pointer-events: none; }
 .article-dashboard .dashboard-tool { width: 32px; height: 34px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; color: #173e50; }
 .dashboard-tool:hover:not(:disabled) { background: rgba(189,217,213,.7); border-radius: 4px; }
 .dashboard-metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-bottom: 1px solid var(--dashboard-rule); align-items: center; }

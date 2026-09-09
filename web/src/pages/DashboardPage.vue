@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { CalendarDays, RefreshCw, Maximize, Minimize, X, ArrowUpRight, ChevronDown, LoaderCircle, Search } from "lucide-vue-next";
+import { CalendarDays, RefreshCw, Maximize, Minimize, X, ArrowUpRight, LoaderCircle, Search } from "lucide-vue-next";
 import DashboardChart, { type ChartSelection } from "../components/DashboardChart.vue";
 import DashboardMerry from "../components/DashboardMerry.vue";
-import { createSampleArticles, lengthIndex, sampleCutoff, summarizeArticles, type DashboardArticle } from "../dashboard/data";
+import { lengthIndex, summarizeArticles, type DashboardArticle } from "../dashboard/data";
 import { dashboardChartOptions } from "../dashboard/charts";
 import { fetchDashboardArticles } from "../api/dashboard";
 import { fetchSiteSettings } from "../api/site-settings";
@@ -18,17 +18,16 @@ const designHeight = 941;
 const screenScale = ref(Math.min(window.innerWidth / designWidth, window.innerHeight / designHeight));
 let viewportObserver: ResizeObserver | undefined;
 const year = ref(2026);
-const mode = ref("sample");
 const loading = ref(false);
 const error = ref("");
 const fullscreen = ref(false);
-const articles = ref<DashboardArticle[]>(createSampleArticles());
+const articles = ref<DashboardArticle[]>([]);
 const seriesNames = ref<string[]>([]);
-const refreshedAt = ref("2026.09.08 12:00");
+const refreshedAt = ref("");
 const reducedMotion = ref(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let loadId = 0;
-const today = computed(() => mode.value === "sample" ? sampleCutoff : new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()));
+const today = computed(() => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()));
 const years = ref<number[]>([]);
 const summary = computed(() => summarizeArticles(articles.value, year.value, today.value, seriesNames.value));
 const options = computed(() => dashboardChartOptions(summary.value, year.value, reducedMotion.value));
@@ -72,8 +71,8 @@ function selectChart(kind: string, selection: ChartSelection) {
   }
 }
 function openArticle(item: DashboardArticle) {
-  if (mode.value === "live") { closeDetails(); void router.push(`/articles/${encodeURIComponent(item.slug)}`); }
-  else showDetails(item.title, [item]);
+  closeDetails();
+  void router.push(`/articles/${encodeURIComponent(item.slug)}`);
 }
 
 async function refresh() {
@@ -86,16 +85,10 @@ async function refresh() {
       year.value = settings.dashboard_years[settings.dashboard_years.length - 1]!;
     }
     years.value = settings.dashboard_years;
-    if (mode.value === "sample") {
-      articles.value = createSampleArticles(); seriesNames.value = [];
-      refreshedAt.value = "2026.09.08 12:00";
-      await nextTick();
-    } else {
-      const result = await fetchDashboardArticles();
-      if (current !== loadId) return;
-      articles.value = result.items; seriesNames.value = result.seriesNames;
-      refreshedAt.value = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date()).replace(/-/g, ".");
-    }
+    const result = await fetchDashboardArticles();
+    if (current !== loadId) return;
+    articles.value = result.items; seriesNames.value = result.seriesNames;
+    refreshedAt.value = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date()).replace(/-/g, ".");
   } catch (reason) {
     if (current !== loadId) return;
     console.error("文章大屏数据加载失败", reason);
@@ -103,10 +96,6 @@ async function refresh() {
     error.value = reason instanceof Error ? reason.message : "文章数据加载失败，请重试。";
   } finally { if (current === loadId) loading.value = false; }
 }
-watch(mode, () => {
-  articles.value = []; seriesNames.value = [];
-  void refresh();
-});
 async function toggleFullscreen() {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
@@ -141,7 +130,6 @@ onBeforeUnmount(() => { loadId++; viewportObserver?.disconnect(); document.remov
           </div>
           <select v-else v-model="year" class="dashboard-year-select" aria-label="统计年度"><option v-for="value in years" :key="value" :value="value">{{ value }} 年</option></select>
           <div class="dashboard-date"><CalendarDays :size="20" /><span>{{ year }}.01.01 - {{ summary.cutoff.replace(/-/g, '.') }}</span></div>
-          <div class="dashboard-source"><select v-model="mode" aria-label="数据来源"><option value="sample">示意数据</option><option value="live">本站文章</option></select><ChevronDown :size="11" /></div>
           <button class="dashboard-tool" :disabled="loading" title="刷新数据" aria-label="刷新数据" @click="refresh"><RefreshCw :size="25" :class="{ 'dashboard-spin': loading }" /></button>
           <button class="dashboard-tool" :title="fullscreen ? '退出全屏' : '全屏'" :aria-label="fullscreen ? '退出全屏' : '全屏'" @click="toggleFullscreen"><Minimize v-if="fullscreen" :size="26" /><Maximize v-else :size="26" /></button>
         </div>
@@ -178,14 +166,14 @@ onBeforeUnmount(() => { loadId++; viewportObserver?.disconnect(); document.remov
         <section class="dashboard-panel recent-panel"><header><h2>最近文章更新</h2></header><div class="recent-articles"><button v-for="article in summary.recent" :key="article.id" @click="openArticle(article)"><span class="article-kind" :class="{ revision: article.updated.slice(0, 10) > article.published }">{{ article.updated.slice(0, 10) > article.published ? '修订' : '新文' }}</span><span class="recent-title">{{ article.title }}</span><time>{{ article.updated.slice(5, 10).replace('-', '.') }}</time></button><span v-if="!summary.recent.length" class="recent-empty">暂无文章更新</span></div></section>
       </div>
 
-      <footer class="dashboard-footer"><span>航行仍在继续，记录每一次抵达。</span><span>统计截至 {{ refreshedAt }} · {{ mode === 'sample' ? '示意数据' : '本站文章' }}</span></footer>
+      <footer class="dashboard-footer"><span>航行仍在继续，记录每一次抵达。</span><span>统计截至 {{ refreshedAt }} · 本站文章</span></footer>
       <div v-if="loading" class="dashboard-loading" role="status"><LoaderCircle :size="22" class="dashboard-spin" />正在汇总文章</div>
       <div v-if="error" class="dashboard-error" role="alert"><span>{{ error }}</span><button @click="refresh">重试</button><button class="dashboard-tool" title="关闭提示" aria-label="关闭提示" @click="error = ''"><X :size="17" /></button></div>
 
       <dialog ref="dialog" class="dashboard-dialog" aria-labelledby="dashboard-detail-title" @click="event => { if (event.target === dialog) closeDetails(); }" @close="focusPrevious">
-        <header><div><h2 id="dashboard-detail-title">{{ detailTitle }}</h2><small>{{ detailArticles.length }} 篇 · {{ mode === 'sample' ? '示意数据' : '本站文章' }}</small></div><button class="dashboard-tool" aria-label="关闭文章明细" @click="closeDetails"><X :size="24" /></button></header>
+        <header><div><h2 id="dashboard-detail-title">{{ detailTitle }}</h2><small>{{ detailArticles.length }} 篇 · 本站文章</small></div><button class="dashboard-tool" aria-label="关闭文章明细" @click="closeDetails"><X :size="24" /></button></header>
         <label class="detail-search"><Search :size="18" /><input v-model="detailSearch" placeholder="搜索文章标题" aria-label="搜索明细文章" /></label>
-        <div class="detail-list"><article v-for="article in visibleDetails" :key="article.id"><div><RouterLink v-if="mode === 'live'" :to="`/articles/${article.slug}`" @click="closeDetails">{{ article.title }}<ArrowUpRight :size="15" /></RouterLink><h3 v-else>{{ article.title }}</h3><p>{{ article.category }} · {{ article.published }} · {{ number(article.words) }} 字</p></div><span>{{ number(article.views) }} 阅读<br />{{ number(article.likes) }} 获赞</span></article><p v-if="!visibleDetails.length" class="detail-empty">没有符合条件的文章</p></div>
+        <div class="detail-list"><article v-for="article in visibleDetails" :key="article.id"><div><RouterLink :to="`/articles/${article.slug}`" @click="closeDetails">{{ article.title }}<ArrowUpRight :size="15" /></RouterLink><p>{{ article.category }} · {{ article.published }} · {{ number(article.words) }} 字</p></div><span>{{ number(article.views) }} 阅读<br />{{ number(article.likes) }} 获赞</span></article><p v-if="!visibleDetails.length" class="detail-empty">没有符合条件的文章</p></div>
         <footer><RouterLink to="/articles" @click="closeDetails">浏览本站文章<ArrowUpRight :size="16" /></RouterLink><button @click="closeDetails">关闭</button></footer>
       </dialog>
     </main>

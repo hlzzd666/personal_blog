@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import SiteNavigation from "./components/SiteNavigation.vue";
 import SiteFooter from "./components/SiteFooter.vue";
@@ -11,8 +11,6 @@ import { fetchVisitorLocation, type VisitorLocation } from "./api/visitor-locati
 import { fetchNotes, fetchSeries, type Note, type Series } from "./api/content";
 import { fetchGallery } from "./api/gallery";
 import { type IconName } from "./icons";
-
-const GoingMerryHero = defineAsyncComponent(() => import("./components/GoingMerryHero.vue"));
 
 const fallbackSettings: SiteSettings = {
   site_subtitle: "自由、梦想、伙伴，这里记录我向前航行的每一步。",
