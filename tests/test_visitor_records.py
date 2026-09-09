@@ -1,4 +1,5 @@
 import unittest
+from io import StringIO
 from datetime import datetime
 from unittest.mock import patch
 
@@ -13,6 +14,15 @@ from backend.app.models.base import Base
 from backend.app.schemas.auth import AdminSessionResponse
 from backend.app.schemas.visitor_location import VisitorLocation
 from backend.app.services.auth import require_admin_session
+from backend.app.services.visitor_location import resolve_visitor_location
+
+
+class FakeJsonResponse(StringIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc_value, _traceback):
+        self.close()
 
 
 class VisitorRecordsTest(unittest.TestCase):
@@ -103,6 +113,22 @@ class VisitorRecordsTest(unittest.TestCase):
         record = response.json()["data"]
         self.assertEqual(record["page_path"], "/privacy")
         self.assertIsNone(record["city"])
+
+    def test_location_resolver_requests_chinese_location(self) -> None:
+        payload = (
+            '{"success": true, "city": "南京", "region": "江苏省", '
+            '"country": "中国", "latitude": 32.06, "longitude": 118.77}'
+        )
+        with patch(
+            "backend.app.services.visitor_location.urlopen",
+            return_value=FakeJsonResponse(payload),
+        ) as mocked_urlopen:
+            location = resolve_visitor_location("180.109.104.115", "", None, None)
+
+        self.assertIn("?lang=zh-CN", mocked_urlopen.call_args.args[0])
+        self.assertEqual(location.city, "南京")
+        self.assertEqual(location.region, "江苏省")
+        self.assertEqual(location.country, "中国")
 
     def test_invalid_page_path_is_rejected(self) -> None:
         response = self.client.post("/api/v1/visitor-records", json={"page_path": "articles"})

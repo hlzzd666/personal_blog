@@ -49,7 +49,7 @@ def resolve_visitor_location(
         )
 
     try:
-        with urlopen(f"https://ipwho.is/{ip}", timeout=3) as response:
+        with urlopen(f"https://ipwho.is/{ip}?lang=zh-CN", timeout=3) as response:
             payload = json.load(response)
     except (TimeoutError, URLError, json.JSONDecodeError):
         return VisitorLocation(ip=ip, location_available=False, owner_location_name=owner_location_name)
