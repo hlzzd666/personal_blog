@@ -5,7 +5,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { MdEditor } from "md-editor-v3";
 import "md-editor-v3/lib/style.css";
 
-import { createNote, deleteNote, fetchNotes, updateNote } from "../api/content";
+import { createNote, deleteNote, fetchNextNoteSlug, fetchNotes, updateNote } from "../api/content";
 import { resolveErrorMessage } from "../api/http";
 import { uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
@@ -52,10 +52,15 @@ async function loadNotes() {
   }
 }
 
-function openCreate() {
+async function openCreate() {
   editingId.value = null;
   Object.assign(form, emptyNote());
   drawerVisible.value = true;
+  try {
+    form.slug = (await fetchNextNoteSlug()).slug;
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "动态别名生成失败，请手动填写"));
+  }
 }
 
 function openEdit(note: Note) {

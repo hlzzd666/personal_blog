@@ -834,6 +834,18 @@ body {
   width: 100%;
 }
 
+.select-with-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+}
+
+.select-with-create > .el-button {
+  width: 32px;
+  margin: 0;
+}
+
 /* 时间选择面板挂载在文章抽屉中，避免传送到页面根节点后出现定位偏移。 */
 .article-date-picker-popper {
   z-index: 3000 !important;

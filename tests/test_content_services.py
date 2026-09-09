@@ -25,6 +25,7 @@ from backend.app.services.content import (
     delete_series,
     get_series_detail,
     list_notes,
+    next_note_slug,
 )
 from backend.app.services.taxonomy import (
     apply_article_taxonomy,
@@ -115,6 +116,19 @@ class ContentServicesTest(unittest.TestCase):
         self.article("first", series_id=series.id, series_order=10, published_offset=2)
         detail = get_series_detail(self.session, self.session.get(Series, series.id))
         self.assertEqual([article.slug for article in detail.articles], ["first", "second"])
+
+    def test_next_note_slug_uses_highest_sequence_for_day(self) -> None:
+        self.session.add_all(
+            [
+                Note(slug="20260909-1", content_markdown="one", tags=[]),
+                Note(slug="20260909-3", content_markdown="three", tags=[]),
+                Note(slug="20260909-draft", content_markdown="draft", tags=[]),
+                Note(slug="20260908-9", content_markdown="old", tags=[]),
+            ]
+        )
+        self.session.commit()
+
+        self.assertEqual(next_note_slug(self.session, datetime(2026, 9, 9).date()), "20260909-4")
 
     def test_series_delete_unlinks_articles(self) -> None:
         created = create_series(

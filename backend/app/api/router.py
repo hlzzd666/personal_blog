@@ -84,6 +84,7 @@ from backend.app.services.content import (
     get_series_by_slug,
     get_series_detail,
     list_notes,
+    next_note_slug,
     list_series,
     update_note,
     update_series,
@@ -954,6 +955,15 @@ def read_notes(
     return build_success_response(
         request, list_notes(session, page=page, page_size=page_size, tag=tag)
     )
+
+
+@router.get("/notes/next-slug", tags=["notes"], response_model=ApiResponse[dict[str, str]])
+def read_next_note_slug(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[dict[str, str]]:
+    return build_success_response(request, {"slug": next_note_slug(session)})
 
 
 @router.get("/notes/{slug}", tags=["notes"], response_model=ApiResponse[NoteResponse])

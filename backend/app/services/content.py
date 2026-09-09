@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -137,6 +138,16 @@ def list_notes(
         page=page,
         page_size=page_size,
     )
+
+
+def next_note_slug(session: Session, day: date | None = None) -> str:
+    prefix = (day or date.today()).strftime("%Y%m%d")
+    slugs = session.scalars(select(Note.slug).where(Note.slug.like(f"{prefix}-%")))
+    sequence = max(
+        (int(suffix) for slug in slugs if (suffix := slug.removeprefix(f"{prefix}-")).isdigit()),
+        default=0,
+    )
+    return f"{prefix}-{sequence + 1}"
 
 
 def get_note_by_slug(session: Session, slug: str) -> Note | None:

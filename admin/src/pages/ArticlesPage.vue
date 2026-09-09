@@ -7,12 +7,20 @@ import { MdEditor } from "md-editor-v3";
 import "md-editor-v3/lib/style.css";
 
 import { createArticle, deleteArticle, fetchManageArticles, updateArticle } from "../api/articles";
-import { fetchArticleTaxonomy, fetchSeries } from "../api/content";
+import {
+  createArticleCategory,
+  createArticleTag,
+  createSeries,
+  fetchArticleTaxonomy,
+  fetchSeries,
+} from "../api/content";
 import { resolveErrorMessage } from "../api/http";
 import { uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
 import type { Article, ArticlePayload } from "../types/article";
 import type { Series, TaxonomyItem } from "../types/content";
+
+type QuickCreateKind = "category" | "series" | "tag";
 
 const emptyArticle = (): ArticlePayload => ({
   slug: "",
@@ -52,11 +60,16 @@ const form = reactive<ArticlePayload>(emptyArticle());
 const drawerTitle = computed(() => (editingId.value === null ? "写一篇新文章" : "编辑文章"));
 const markdownInput = ref<HTMLInputElement | null>(null);
 const importingMarkdown = ref(false);
+const quickCreateVisible = ref(false);
+const quickCreateKind = ref<QuickCreateKind>("category");
+const quickCreateSaving = ref(false);
+const quickCreateForm = reactive({ name: "", slug: "" });
 const seriesOptions = ref<Series[]>([]);
 const categoryOptions = ref<TaxonomyItem[]>([]);
 const tagOptions = ref<TaxonomyItem[]>([]);
 const route = useRoute();
 const seriesNameById = computed(() => new Map(seriesOptions.value.map((item) => [item.id, item.title])));
+const quickCreateLabel = computed(() => ({ category: "分类", series: "专题", tag: "标签" })[quickCreateKind.value]);
 
 function formatDate(value: string | null) {
   if (!value) return "未设置";
@@ -139,6 +152,53 @@ function openEdit(article: Article) {
           .filter((id): id is number => id !== undefined),
   });
   drawerVisible.value = true;
+}
+
+function openQuickCreate(kind: QuickCreateKind) {
+  quickCreateKind.value = kind;
+  Object.assign(quickCreateForm, { name: "", slug: "" });
+  quickCreateVisible.value = true;
+}
+
+async function saveQuickCreate() {
+  const name = quickCreateForm.name.trim();
+  if (!name) {
+    ElMessage.warning(`请输入${quickCreateLabel.value}名称`);
+    return;
+  }
+  if (quickCreateKind.value === "series" && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(quickCreateForm.slug.trim())) {
+    ElMessage.warning("专题别名只能包含小写字母、数字和连字符");
+    return;
+  }
+
+  quickCreateSaving.value = true;
+  try {
+    if (quickCreateKind.value === "category") {
+      const item = await createArticleCategory({ name, sort_order: 0 });
+      categoryOptions.value.push(item);
+      form.category_id = item.id;
+    } else if (quickCreateKind.value === "tag") {
+      const item = await createArticleTag({ name, sort_order: 0 });
+      tagOptions.value.push(item);
+      form.tag_ids = [...form.tag_ids, item.id];
+    } else {
+      const item = await createSeries({
+        title: name,
+        slug: quickCreateForm.slug.trim(),
+        description: "",
+        cover_image_url: null,
+        sort_order: 0,
+      });
+      seriesOptions.value.push(item);
+      form.series_id = item.id;
+    }
+    ElMessage.success(`${quickCreateLabel.value}已创建并选中`);
+    quickCreateVisible.value = false;
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, `${quickCreateLabel.value}创建失败，请检查名称或别名是否重复`));
+  } finally {
+    quickCreateSaving.value = false;
+  }
 }
 
 async function saveArticle() {
@@ -367,22 +427,37 @@ onMounted(async () => {
         <div class="editor-form-grid">
           <el-form-item label="文章作者"><el-input v-model="form.author" /></el-form-item>
           <el-form-item label="文章分类" required>
-            <el-select v-model="form.category_id" placeholder="选择分类">
-              <el-option v-for="item in categoryOptions" :key="item.id" :label="item.name" :value="item.id" />
-            </el-select>
+            <div class="select-with-create">
+              <el-select v-model="form.category_id" placeholder="选择分类">
+                <el-option v-for="item in categoryOptions" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+              <el-tooltip content="新建分类" placement="top">
+                <el-button :icon="Plus" aria-label="新建分类" @click="openQuickCreate('category')" />
+              </el-tooltip>
+            </div>
           </el-form-item>
         </div>
         <div class="editor-form-grid">
           <el-form-item label="所属专题">
-            <el-select v-model="form.series_id" clearable placeholder="不加入专题">
-              <el-option v-for="item in seriesOptions" :key="item.id" :label="item.title" :value="item.id" />
-            </el-select>
+            <div class="select-with-create">
+              <el-select v-model="form.series_id" clearable placeholder="不加入专题">
+                <el-option v-for="item in seriesOptions" :key="item.id" :label="item.title" :value="item.id" />
+              </el-select>
+              <el-tooltip content="新建专题" placement="top">
+                <el-button :icon="Plus" aria-label="新建专题" @click="openQuickCreate('series')" />
+              </el-tooltip>
+            </div>
           </el-form-item>
         </div>
         <el-form-item label="标签">
-          <el-select v-model="form.tag_ids" multiple filterable placeholder="选择标签">
-            <el-option v-for="tag in tagOptions" :key="tag.id" :label="tag.name" :value="tag.id" />
-          </el-select>
+          <div class="select-with-create">
+            <el-select v-model="form.tag_ids" multiple filterable placeholder="选择标签">
+              <el-option v-for="tag in tagOptions" :key="tag.id" :label="tag.name" :value="tag.id" />
+            </el-select>
+            <el-tooltip content="新建标签" placement="top">
+              <el-button :icon="Plus" aria-label="新建标签" @click="openQuickCreate('tag')" />
+            </el-tooltip>
+          </div>
         </el-form-item>
         <el-form-item required>
           <template #label>
@@ -429,5 +504,20 @@ onMounted(async () => {
         <div class="drawer-actions"><el-button @click="drawerVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveArticle">保存文章</el-button></div>
       </el-form>
     </el-drawer>
+
+    <el-dialog v-model="quickCreateVisible" :title="`新建${quickCreateLabel}`" width="min(480px, calc(100vw - 32px))" append-to-body destroy-on-close>
+      <el-form label-position="top" @submit.prevent="saveQuickCreate">
+        <el-form-item :label="`${quickCreateLabel}名称`" required>
+          <el-input v-model="quickCreateForm.name" :maxlength="quickCreateKind === 'series' ? 200 : 80" autofocus />
+        </el-form-item>
+        <el-form-item v-if="quickCreateKind === 'series'" label="专题别名" required>
+          <el-input v-model="quickCreateForm.slug" maxlength="160" placeholder="lowercase-slug" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="quickCreateVisible = false">取消</el-button>
+        <el-button type="primary" :loading="quickCreateSaving" :disabled="quickCreateSaving" @click="saveQuickCreate">创建并选中</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>

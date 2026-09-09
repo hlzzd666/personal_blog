@@ -62,6 +62,10 @@ export function fetchNotes(params: Record<string, string | number | undefined> =
   });
 }
 
+export function fetchNextNoteSlug() {
+  return request<{ slug: string }>({ url: "/notes/next-slug", method: "GET" });
+}
+
 export function createNote(payload: NotePayload) {
   return request<Note>({ url: "/notes", method: "POST", data: payload });
 }
