@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
@@ -7,6 +7,8 @@ from backend.app.models.visitor_record import VisitorRecord
 from backend.app.schemas.visitor_location import VisitorLocation
 from backend.app.schemas.visitor_record import (
     VisitorRecordCreate,
+    VisitorDailyCount,
+    VisitorDailyStatsResponse,
     VisitorRecordListResponse,
     VisitorRecordResponse,
 )
@@ -104,6 +106,26 @@ def list_visitor_records(
         today_visits=today_visits,
         unique_ips=unique_ips,
     )
+
+
+def get_visitor_daily_stats(session: Session, *, range_days: int = 7) -> VisitorDailyStatsResponse:
+    end_date = date.today()
+    start_date = end_date - timedelta(days=range_days - 1)
+    date_column = func.date(VisitorRecord.visited_at)
+    rows = session.execute(
+        select(date_column, func.count(VisitorRecord.id))
+        .where(
+            VisitorRecord.visited_at >= datetime.combine(start_date, time.min),
+            VisitorRecord.visited_at < datetime.combine(end_date + timedelta(days=1), time.min),
+        )
+        .group_by(date_column)
+    ).all()
+    counts = {str(day): int(count) for day, count in rows}
+    days = [
+        VisitorDailyCount(date=day, visits=counts.get(day.isoformat(), 0))
+        for day in (start_date + timedelta(days=offset) for offset in range(range_days))
+    ]
+    return VisitorDailyStatsResponse(days=days, today_visits=days[-1].visits)
 
 
 def delete_visitor_record(session: Session, record: VisitorRecord) -> None:

@@ -1,5 +1,6 @@
 import type { EChartsCoreOption } from "echarts/core";
 import { chartColors, type DashboardSummary } from "./data";
+import type { DailyVisitorStats } from "../api/dashboard";
 
 const ink = "#315563";
 const line = "rgba(66,119,128,.17)";
@@ -7,9 +8,8 @@ const font = '"Noto Sans SC", "Microsoft YaHei", sans-serif';
 const axis = { axisLine: { lineStyle: { color: line } }, axisTick: { show: false }, axisLabel: { color: ink, fontSize: 12 }, splitLine: { lineStyle: { color: line, type: "dashed" as const } }, nameTextStyle: { color: ink } };
 const base = { animationDuration: 450, color: chartColors, textStyle: { fontFamily: font, color: ink }, tooltip: { trigger: "item", renderMode: "richText", confine: true, backgroundColor: "#f4f9f6", borderColor: "#b6d4d3", textStyle: { color: "#254a4b", fontFamily: font } }, aria: { enabled: true } };
 
-export function dashboardChartOptions(summary: DashboardSummary, year: number, reducedMotion: boolean): Record<string, EChartsCoreOption> {
+export function dashboardChartOptions(summary: DashboardSummary, year: number, reducedMotion: boolean, visitors: DailyVisitorStats | null): Record<string, EChartsCoreOption> {
   const shared = { ...base, animation: !reducedMotion };
-  const categoryColor = (category: string) => chartColors[Math.max(0, summary.categories.findIndex((item) => item.name === category)) % chartColors.length];
   const calendarValues: [string, number][] = [];
   const dateCounts = new Map(summary.dates.map((item) => [item.name, item.value]));
   const end = new Date(`${summary.cutoff}T00:00:00Z`);
@@ -42,12 +42,13 @@ export function dashboardChartOptions(summary: DashboardSummary, year: number, r
         { option: { series: [{ label: { formatter: "{b}\n{c}", padding: [9, 4], fontSize: 12, lineHeight: 24 } }] } },
       ],
     },
-    scatter: {
-      ...shared, grid: { left: 39, top: 28, right: 20, bottom: 57 },
-      legend: { bottom: 0, itemWidth: 11, itemHeight: 11, itemGap: 12, textStyle: { color: ink, fontSize: 11 } },
-      xAxis: { ...axis, type: "value", name: "阅读次数", nameLocation: "middle", nameGap: 26, splitNumber: 4, axisLabel: { color: ink, formatter: (value: number) => value >= 1000 ? `${value / 1000}k` : String(value) } },
-      yAxis: { ...axis, type: "value", name: "获赞数", splitNumber: 3 },
-      series: summary.categories.map((category) => ({ type: "scatter", name: category.name, symbolSize: 7, itemStyle: { color: categoryColor(category.name), opacity: 0.9 }, data: summary.items.filter((item) => item.category === category.name).map((item) => ({ name: item.title, value: [item.views, item.likes], articleId: item.id })) })),
+    visitors: {
+      ...shared,
+      grid: { left: 39, top: 24, right: 18, bottom: 34 },
+      tooltip: { ...base.tooltip, trigger: "axis", axisPointer: { type: "shadow" } },
+      xAxis: { ...axis, type: "category", data: (visitors?.days ?? []).map((item) => item.date.slice(5).replace("-", ".")), axisLabel: { ...axis.axisLabel, interval: 0 } },
+      yAxis: { ...axis, type: "value", name: "次", minInterval: 1, splitNumber: 3 },
+      series: [{ type: "bar", name: "访问次数", barMaxWidth: 28, label: { show: true, position: "top", color: ink, fontSize: 12 }, data: (visitors?.days ?? []).map((item, index, items) => ({ value: item.visits, itemStyle: { color: index === items.length - 1 ? chartColors[1] : chartColors[0] } })) }],
     },
     lengths: {
       ...shared, grid: { left: 90, right: 38, top: 5, bottom: 8 },

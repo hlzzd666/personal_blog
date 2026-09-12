@@ -3,6 +3,12 @@ import DOMPurify from "dompurify";
 import { fetchArticles } from "./articles";
 import { fetchSeries } from "./content";
 import type { DashboardArticle } from "../dashboard/data";
+import { request } from "./http";
+
+export type DailyVisitorStats = {
+  days: Array<{ date: string; visits: number }>;
+  today_visits: number;
+};
 
 export function articleWordCount(markdown: string) {
   const document = new DOMParser().parseFromString(DOMPurify.sanitize(marked.parse(markdown, { async: false })), "text/html");
@@ -31,4 +37,8 @@ export async function fetchDashboardArticles() {
     views: Math.max(0, article.views), likes: Math.max(0, article.likes),
   }));
   return { items, seriesNames: [...series.values()] };
+}
+
+export function fetchDailyVisitorStats() {
+  return request<DailyVisitorStats>({ url: "/visitor-records/daily-stats", method: "GET" });
 }

@@ -32,6 +32,16 @@ class VisitorRecordListResponse(BaseModel):
     unique_ips: int
 
 
+class VisitorDailyCount(BaseModel):
+    date: date
+    visits: int
+
+
+class VisitorDailyStatsResponse(BaseModel):
+    days: list[VisitorDailyCount]
+    today_visits: int
+
+
 class VisitorRecordDeleteResponse(BaseModel):
     deleted_count: int
     visited_from: date | None = None

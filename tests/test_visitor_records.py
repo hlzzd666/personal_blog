@@ -149,6 +149,19 @@ class VisitorRecordsTest(unittest.TestCase):
         self.assertEqual(deleted.status_code, 200)
         self.assertEqual(self.client.get("/api/v1/visitor-records").json()["data"]["total"], 0)
 
+    def test_public_daily_stats_match_today_visits_without_exposing_details(self) -> None:
+        for path in ("/", "/about", "/articles"):
+            self.client.post("/api/v1/visitor-records", json={"page_path": path})
+
+        response = self.client.get("/api/v1/visitor-records/daily-stats")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(len(data["days"]), 7)
+        self.assertEqual(data["today_visits"], 3)
+        self.assertEqual(data["days"][-1]["visits"], 3)
+        self.assertEqual(set(data), {"days", "today_visits"})
+
     def test_batch_delete_requires_date_range_and_deletes_matching_rows(self) -> None:
         for path in ("/", "/about", "/articles"):
             self.client.post("/api/v1/visitor-records", json={"page_path": path})

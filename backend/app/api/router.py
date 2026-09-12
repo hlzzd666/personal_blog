@@ -20,6 +20,7 @@ from backend.app.services.site_settings import get_site_settings, update_site_se
 from backend.app.schemas.visitor_location import VisitorLocation
 from backend.app.schemas.visitor_record import (
     VisitorRecordCreate,
+    VisitorDailyStatsResponse,
     VisitorRecordDeleteResponse,
     VisitorRecordListResponse,
     VisitorRecordResponse,
@@ -29,6 +30,7 @@ from backend.app.services.visitor_records import (
     create_visitor_record,
     delete_visitor_record,
     delete_visitor_records,
+    get_visitor_daily_stats,
     list_visitor_records,
 )
 from backend.app.core.database import get_db_session
@@ -398,6 +400,18 @@ def read_visitor_records(
             visited_to=visited_to,
         ),
     )
+
+
+@router.get(
+    "/visitor-records/daily-stats",
+    tags=["visitor-records"],
+    response_model=ApiResponse[VisitorDailyStatsResponse],
+)
+def read_visitor_daily_stats(
+    request: Request,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[VisitorDailyStatsResponse]:
+    return build_success_response(request, get_visitor_daily_stats(session))
 
 
 @router.delete(

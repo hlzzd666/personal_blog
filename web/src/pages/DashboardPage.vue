@@ -6,7 +6,7 @@ import DashboardChart, { type ChartSelection } from "../components/DashboardChar
 import DashboardMerry from "../components/DashboardMerry.vue";
 import { lengthIndex, summarizeArticles, type DashboardArticle } from "../dashboard/data";
 import { dashboardChartOptions } from "../dashboard/charts";
-import { fetchDashboardArticles } from "../api/dashboard";
+import { fetchDailyVisitorStats, fetchDashboardArticles, type DailyVisitorStats } from "../api/dashboard";
 import { fetchSiteSettings } from "../api/site-settings";
 import "../dashboard/dashboard.css";
 
@@ -23,6 +23,8 @@ const error = ref("");
 const fullscreen = ref(false);
 const articles = ref<DashboardArticle[]>([]);
 const seriesNames = ref<string[]>([]);
+const visitorStats = ref<DailyVisitorStats | null>(null);
+const visitorError = ref(false);
 const refreshedAt = ref("");
 const reducedMotion = ref(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -30,7 +32,8 @@ let loadId = 0;
 const today = computed(() => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()));
 const years = ref<number[]>([]);
 const summary = computed(() => summarizeArticles(articles.value, year.value, today.value, seriesNames.value));
-const options = computed(() => dashboardChartOptions(summary.value, year.value, reducedMotion.value));
+const options = computed(() => dashboardChartOptions(summary.value, year.value, reducedMotion.value, visitorStats.value));
+const visitorEmpty = computed(() => !visitorStats.value || visitorStats.value.days.every((item) => item.visits === 0));
 const number = (value: number) => value.toLocaleString("en-US");
 const metrics = computed(() => [
   { label: "文章总数", value: number(summary.value.items.length), sub: `截至 ${Number(summary.value.cutoff.slice(5, 7))} 月 ${Number(summary.value.cutoff.slice(8, 10))} 日` },
@@ -65,10 +68,6 @@ function selectChart(kind: string, selection: ChartSelection) {
     const date = String(selection.value[0]);
     return showDetails(`${date} 发布`, source.filter((item) => item.published === date));
   }
-  if (kind === "scatter" && selection.data && typeof selection.data === "object" && "articleId" in selection.data) {
-    const id = selection.data.articleId;
-    showDetails(selection.name, source.filter((item) => item.id === id));
-  }
 }
 function openArticle(item: DashboardArticle) {
   closeDetails();
@@ -77,7 +76,7 @@ function openArticle(item: DashboardArticle) {
 
 async function refresh() {
   const current = ++loadId;
-  error.value = ""; loading.value = true;
+  error.value = ""; visitorError.value = false; loading.value = true;
   try {
     const settings = await fetchSiteSettings();
     if (current !== loadId) return;
@@ -85,14 +84,23 @@ async function refresh() {
       year.value = settings.dashboard_years[settings.dashboard_years.length - 1]!;
     }
     years.value = settings.dashboard_years;
-    const result = await fetchDashboardArticles();
+    let visitorRequestFailed = false;
+    const [result, visitors] = await Promise.all([
+      fetchDashboardArticles(),
+      fetchDailyVisitorStats().catch((reason) => {
+        console.error("访客统计加载失败", reason);
+        visitorRequestFailed = true;
+        return null;
+      }),
+    ]);
     if (current !== loadId) return;
     articles.value = result.items; seriesNames.value = result.seriesNames;
+    visitorStats.value = visitors; visitorError.value = visitorRequestFailed;
     refreshedAt.value = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date()).replace(/-/g, ".");
   } catch (reason) {
     if (current !== loadId) return;
     console.error("文章大屏数据加载失败", reason);
-    articles.value = []; seriesNames.value = [];
+    articles.value = []; seriesNames.value = []; visitorStats.value = null;
     error.value = reason instanceof Error ? reason.message : "文章数据加载失败，请重试。";
   } finally { if (current === loadId) loading.value = false; }
 }
@@ -156,7 +164,7 @@ onBeforeUnmount(() => { loadId++; viewportObserver?.disconnect(); document.remov
 
         <div class="dashboard-right">
           <section class="dashboard-panel tags-panel"><header><button @click="showDetails('技术标签', summary.items)"><h2>技术标签</h2></button><small>文章可含多个标签</small></header><DashboardChart :option="options.tags!" label="技术标签文章数矩形树图" :empty="!summary.tags.length" @select="selectChart('tags', $event)" /></section>
-          <section class="dashboard-panel scatter-panel"><header><button @click="showDetails('阅读与获赞', summary.items)"><h2>阅读与获赞</h2></button><small>每个点代表一篇文章</small></header><DashboardChart :option="options.scatter!" label="文章阅读次数与获赞数量散点图" :empty="!summary.items.length" @select="selectChart('scatter', $event)" /></section>
+          <section class="dashboard-panel visitor-panel"><header><h2>访客统计</h2><small>近 7 日 · 今日 {{ visitorStats?.today_visits ?? '—' }} 次</small></header><DashboardChart :option="options.visitors!" label="近七日每日访问次数柱状图" :empty="visitorEmpty" :empty-text="visitorError ? '访客数据加载失败' : '近 7 日暂无访问记录'" /></section>
         </div>
       </div>
 

@@ -70,7 +70,7 @@
 .dashboard-panel .dashboard-chart-wrap { flex: 1 1 auto; min-height: 0; height: auto; }
 .monthly-panel { padding-bottom: 14px; border-bottom: 1px solid var(--dashboard-rule); }
 .current-month { position: absolute; right: 15px; bottom: 9px; color: #ba654e; font-size: 12px; }
-.categories-panel, .scatter-panel { padding-top: 11px; }
+.categories-panel, .visitor-panel { padding-top: 11px; }
 .merry-panel { padding: 0 8px 0 16px; isolation: isolate; }
 .merry-panel::before { content: ""; position: absolute; inset: -10px 0 0; z-index: -1; background: #aed3d4 var(--dashboard-merry-ocean) center / cover no-repeat; pointer-events: none; }
 .merry-panel > header { justify-content: flex-start; gap: 12px; padding-left: 0; z-index: 2; pointer-events: none; }
@@ -81,7 +81,7 @@
 .series-panel header small { font-size: 13px; }
 .tags-panel { padding: 0 2px 16px 0; border-bottom: 1px solid var(--dashboard-rule); }
 .tags-panel > header { padding-left: 0; }
-.scatter-panel > header { padding-left: 0; }
+.visitor-panel > header { padding-left: 0; }
 .dashboard-bottom { padding-top: 10px; border-top: 1px solid var(--dashboard-rule); }
 .lengths-panel { padding-right: 16px; border-right: 1px solid var(--dashboard-rule); }
 .calendar-panel { padding: 0 16px 9px; }
