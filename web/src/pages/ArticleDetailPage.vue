@@ -20,6 +20,7 @@ import { useSeo } from "../composables/useSeo";
 
 type TocItem = { id: string; level: number; text: string };
 type PreviewImage = { src: string; alt: string };
+type ReadingCheckpoint = { progress: number; updatedAt: string };
 
 const route = useRoute();
 const router = useRouter();
@@ -30,6 +31,7 @@ const articleToc = ref<TocItem[]>([]);
 const contentRoot = ref<HTMLElement | null>(null);
 const readingRegion = ref<HTMLElement | null>(null);
 const documentScrollTrack = ref<HTMLElement | null>(null);
+const mobileTocDetails = ref<HTMLDetailsElement | null>(null);
 const loading = ref(true);
 const errorText = ref("");
 const notFound = ref(false);
@@ -41,6 +43,7 @@ const activeHeadingId = ref("");
 const documentIsScrollable = ref(false);
 const documentScrollThumbSize = ref(1);
 const pageScrollProgress = ref(0);
+const resumeProgress = ref<number | null>(null);
 const previewImage = ref<PreviewImage | null>(null);
 const copyState = ref<"idle" | "copied" | "error">("idle");
 const shareState = ref<"idle" | "shared" | "copied" | "error">("idle");
@@ -53,6 +56,9 @@ let loadVersion = 0;
 let documentScrollbarDragOffset = 0;
 let bodyOverflowBeforePreview: string | null = null;
 let feedbackTimer: number | undefined;
+let lastStoredReadingPercent = -1;
+
+const readingCheckpointPrefix = "article-reading-checkpoint:";
 
 const articleNumber = computed(() => String(article.value?.id ?? 0).padStart(4, "0"));
 const returnContext = computed(() => readArticleReturnContext());
@@ -60,6 +66,7 @@ const articleReturnLabel = computed(() =>
   returnContext.value?.source === "series" ? "返回专题" : "返回文章列表",
 );
 const readingPercent = computed(() => Math.round(readingProgress.value * 100));
+const resumePercent = computed(() => Math.round((resumeProgress.value ?? 0) * 100));
 const readingProgressStyle = computed(() => ({
   "--reading-progress": `${readingProgress.value * 360}deg`,
   "--reading-ratio": String(readingProgress.value),
@@ -87,6 +94,55 @@ const readingMinutes = computed(() => {
 
 function normalizeMarkdown(value: string) {
   return !value.includes("\n") && value.includes("\\n") ? value.replace(/\\n/g, "\n") : value;
+}
+
+function readingCheckpointKey(slug: string) {
+  return `${readingCheckpointPrefix}${slug}`;
+}
+
+function readReadingCheckpoint(currentArticle: Article) {
+  try {
+    const storedValue = localStorage.getItem(readingCheckpointKey(currentArticle.slug));
+    if (!storedValue) return null;
+    const checkpoint = JSON.parse(storedValue) as Partial<ReadingCheckpoint>;
+    if (
+      typeof checkpoint.progress !== "number" ||
+      checkpoint.progress < 0.08 ||
+      checkpoint.progress > 0.96 ||
+      checkpoint.updatedAt !== currentArticle.updated_at
+    ) {
+      localStorage.removeItem(readingCheckpointKey(currentArticle.slug));
+      return null;
+    }
+    return checkpoint.progress;
+  } catch {
+    return null;
+  }
+}
+
+function persistReadingCheckpoint() {
+  const currentArticle = article.value;
+  if (!currentArticle || readingProgress.value < 0.04) return;
+  const currentPercent = Math.round(readingProgress.value * 100);
+  if (currentPercent === lastStoredReadingPercent) return;
+  lastStoredReadingPercent = currentPercent;
+  try {
+    const key = readingCheckpointKey(currentArticle.slug);
+    if (readingProgress.value > 0.96) {
+      localStorage.removeItem(key);
+      return;
+    }
+    localStorage.setItem(
+      key,
+      JSON.stringify({ progress: readingProgress.value, updatedAt: currentArticle.updated_at }),
+    );
+  } catch {
+    // 浏览器禁用本地存储时保持普通阅读流程，不打断正文。
+  }
+}
+
+function preferredScrollBehavior(): "auto" | "smooth" {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 
 // 复制图标的内联 SVG：站点未引入图标库，保持与后台预览类似的极简剪贴板图形。
@@ -279,6 +335,7 @@ function updateReadingState() {
       });
       activeHeadingId.value = currentId;
     }
+    persistReadingCheckpoint();
     scrollFrame = undefined;
   });
 }
@@ -286,7 +343,22 @@ function updateReadingState() {
 function scrollToHeading(id: string) {
   const heading = document.getElementById(id);
   if (!heading) return;
-  heading.scrollIntoView({ behavior: "smooth", block: "start" });
+  mobileTocDetails.value?.removeAttribute("open");
+  heading.scrollIntoView({ behavior: preferredScrollBehavior(), block: "start" });
+}
+
+function restoreReadingPosition() {
+  const progress = resumeProgress.value;
+  const region = readingRegion.value;
+  resumeProgress.value = null;
+  if (progress === null || !region) return;
+  const start = region.offsetTop - window.innerHeight * 0.32;
+  const distance = Math.max(region.offsetHeight - window.innerHeight * 0.55, 1);
+  window.scrollTo({ top: start + progress * distance, behavior: preferredScrollBehavior() });
+}
+
+function scrollToPageTop() {
+  window.scrollTo({ top: 0, behavior: preferredScrollBehavior() });
 }
 
 function scrollDocumentToTrackPosition(clientY: number, thumbOffset: number) {
@@ -354,6 +426,9 @@ async function loadArticle() {
   articleContent.value = "";
   articleToc.value = [];
   readingProgress.value = 0;
+  resumeProgress.value = null;
+  lastStoredReadingPercent = -1;
+  mobileTocDetails.value?.removeAttribute("open");
   revealObserver?.disconnect();
   try {
     const slug = String(route.params.slug);
@@ -364,6 +439,7 @@ async function loadArticle() {
     if (currentLoad !== loadVersion) return;
     articleContext.value = context;
     buildArticleContent(result.content_markdown);
+    resumeProgress.value = readReadingCheckpoint(result);
     applySeo({
       title: result.title,
       description: result.summary || normalizeMarkdown(result.content_markdown).replace(/[#>*_`[\]()!-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 160),
@@ -566,6 +642,11 @@ onBeforeUnmount(() => {
       </header>
 
       <main ref="readingRegion" class="article-reading-layout">
+        <aside v-if="resumeProgress !== null" class="mobile-resume-prompt" aria-live="polite">
+          <span>上次读到 <strong>{{ resumePercent }}%</strong></span>
+          <button type="button" @click="restoreReadingPosition">继续阅读</button>
+          <button type="button" @click="resumeProgress = null">暂不恢复</button>
+        </aside>
         <aside class="reading-rail" aria-label="阅读导航">
           <div class="reading-rail-sticky">
             <div class="reading-gauge" :aria-label="`阅读进度 ${readingPercent}%`" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="readingPercent">
@@ -663,6 +744,37 @@ onBeforeUnmount(() => {
           <span class="document-scrollbar-thumb" :style="documentScrollThumbStyle"></span>
         </div>
       </main>
+      <nav class="mobile-reading-route" aria-label="移动阅读导航">
+        <div
+          class="mobile-reading-progress"
+          role="progressbar"
+          aria-label="文章阅读进度"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="readingPercent"
+        >
+          <span>阅读 {{ readingPercent }}%</span>
+          <i aria-hidden="true"><b></b></i>
+        </div>
+        <details v-if="articleToc.length" ref="mobileTocDetails" class="mobile-reading-toc">
+          <summary><OceanIcon name="toc" :size="20" />目录</summary>
+          <div class="mobile-toc-sheet">
+            <p>航线节点 <small>{{ articleToc.length }} 个章节</small></p>
+            <div>
+              <button
+                v-for="(item, index) in articleToc"
+                :key="item.id"
+                :aria-current="item.id === activeHeadingId ? 'location' : undefined"
+                type="button"
+                @click="scrollToHeading(item.id)"
+              >
+                <span>{{ String(index + 1).padStart(2, "0") }}</span>{{ item.text }}
+              </button>
+            </div>
+          </div>
+        </details>
+        <button type="button" @click="scrollToPageTop"><OceanIcon name="top" :size="20" />顶部</button>
+      </nav>
     </template>
 
     <div v-else-if="loading" class="article-detail-state" aria-live="polite">
@@ -708,6 +820,9 @@ onBeforeUnmount(() => {
   background:
     linear-gradient(180deg, rgba(239, 246, 241, 0.86) 0, rgba(247, 242, 233, 0.96) 22rem, #fbf7ef 100%);
 }
+
+.mobile-reading-route,
+.mobile-resume-prompt { display: none; }
 
 .reading-progress { position: fixed; z-index: 30; inset: 0 0 auto; height: 3px; pointer-events: none; }
 .reading-progress span { display: block; width: 100%; height: 100%; background: linear-gradient(90deg, var(--signal), var(--current)); box-shadow: none; transform: scaleX(var(--reading-ratio)); transform-origin: left; transition: transform 0.12s linear; }
@@ -950,6 +1065,88 @@ onBeforeUnmount(() => {
   .article-reading-layout { grid-template-columns: 1fr; width: min(56rem, calc(100% - 3rem)); padding-top: 2rem; }
   .reading-rail { display: none; }
   .document-scrollbar { right: 0.55rem; }
+  .mobile-reading-route {
+    position: fixed;
+    z-index: 40;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.25rem;
+    align-items: center;
+    min-height: calc(3.5rem + env(safe-area-inset-bottom));
+    padding: 0.35rem max(0.55rem, env(safe-area-inset-right)) max(0.35rem, env(safe-area-inset-bottom)) max(0.55rem, env(safe-area-inset-left));
+    border-top: 1px solid var(--line);
+    background: var(--paper-soft);
+    box-shadow: 0 -0.7rem 2.2rem rgba(14, 52, 59, 0.13);
+    backdrop-filter: blur(14px) saturate(1.08);
+  }
+  .mobile-reading-progress { display: grid; gap: 0.3rem; min-width: 0; padding: 0 0.55rem; }
+  .mobile-reading-progress > span { color: var(--muted); font-family: "Noto Sans SC", sans-serif; font-size: 0.72rem; font-weight: 700; }
+  .mobile-reading-progress > i { display: block; overflow: hidden; height: 3px; background: color-mix(in srgb, var(--current) 13%, transparent); }
+  .mobile-reading-progress > i > b { display: block; width: 100%; height: 100%; background: linear-gradient(90deg, var(--signal), var(--current)); transform: scaleX(var(--reading-ratio)); transform-origin: left; transition: transform 0.12s linear; }
+  .mobile-reading-route > button,
+  .mobile-reading-toc > summary {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: center;
+    justify-content: center;
+    min-width: 4.4rem;
+    min-height: 44px;
+    padding: 0.45rem 0.65rem;
+    border: 0;
+    border-left: 1px solid var(--line);
+    color: var(--ink);
+    background: transparent;
+    font-family: "Noto Sans SC", sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .mobile-reading-toc > summary { list-style: none; }
+  .mobile-reading-toc > summary::-webkit-details-marker { display: none; }
+  .mobile-reading-toc[open] > summary { color: var(--current); }
+  .mobile-toc-sheet {
+    position: fixed;
+    right: 0.5rem;
+    bottom: calc(3.85rem + env(safe-area-inset-bottom));
+    left: 0.5rem;
+    overflow: hidden;
+    max-height: min(62vh, 34rem);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper-soft);
+    box-shadow: 0 1.4rem 3.5rem rgba(14, 52, 59, 0.22);
+  }
+  .mobile-toc-sheet > p { display: flex; justify-content: space-between; margin: 0; padding: 0.95rem 1rem 0.75rem; border-bottom: 1px solid var(--line); color: var(--ink); font-family: "Noto Sans SC", sans-serif; font-size: 0.82rem; font-weight: 800; }
+  .mobile-toc-sheet > p small { color: var(--muted); font-size: 0.72rem; font-weight: 500; }
+  .mobile-toc-sheet > div { overflow-y: auto; max-height: calc(min(62vh, 34rem) - 3rem); overscroll-behavior: contain; }
+  .mobile-toc-sheet button { display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: 0.65rem; align-items: center; width: 100%; min-height: 44px; padding: 0.65rem 1rem; border: 0; border-bottom: 1px solid var(--line); color: var(--muted); background: transparent; font-family: "Noto Sans SC", sans-serif; font-size: 0.82rem; line-height: 1.45; text-align: left; cursor: pointer; }
+  .mobile-toc-sheet button span { color: var(--signal); font-family: "IBM Plex Mono", monospace; font-size: 0.72rem; }
+  .mobile-toc-sheet button[aria-current="location"] { color: var(--ink); background: color-mix(in srgb, var(--current) 9%, transparent); font-weight: 700; }
+  .mobile-resume-prompt {
+    position: fixed;
+    z-index: 39;
+    right: 0.5rem;
+    bottom: calc(4rem + env(safe-area-inset-bottom));
+    left: 0.5rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.35rem;
+    align-items: center;
+    min-height: 3.3rem;
+    padding: 0.4rem 0.45rem 0.4rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--signal) 28%, transparent);
+    border-radius: 6px;
+    color: var(--ink);
+    background: var(--paper-soft);
+    box-shadow: 0 1rem 2.8rem rgba(14, 52, 59, 0.18);
+    font-family: "Noto Sans SC", sans-serif;
+    font-size: 0.82rem;
+  }
+  .mobile-resume-prompt strong { color: var(--signal); font-variant-numeric: tabular-nums; }
+  .mobile-resume-prompt button { min-height: 44px; padding: 0.5rem 0.65rem; border: 0; border-left: 1px solid var(--line); color: var(--current); background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
 }
 
 @media (max-width: 600px) {
@@ -966,7 +1163,7 @@ onBeforeUnmount(() => {
   .cover-coordinate-top { top: 0.95rem; left: 0.95rem; }
   .cover-coordinate-bottom { right: 0.95rem; bottom: 0.88rem; }
   .cover-beacon { top: 0.82rem; right: 0.85rem; }
-  .article-reading-layout { width: calc(100% - 2rem); padding: 1.45rem 0 5rem; }
+  .article-reading-layout { width: calc(100% - 2rem); padding: 1.45rem 0 calc(6rem + env(safe-area-inset-bottom)); }
   .article-document { padding: 0; }
   .document-header { align-items: flex-start; flex-direction: column; }
   .document-header div { justify-content: flex-start; }
@@ -994,5 +1191,6 @@ onBeforeUnmount(() => {
   .markdown-body.motion-ready > :deep(*) { opacity: 1; transform: none; transition: none; }
   .article-detail-tags a, .article-share-panel button, .article-series-link, .article-adjacent-links a, .related-articles a, .cover-frame, .article-hero-cover { transition: none; }
   .reading-progress span, .article-toc button, .article-back-link, .article-like-button { transition: none; }
+  .mobile-reading-progress > i > b { transition: none; }
 }
 </style>

@@ -710,11 +710,15 @@ onBeforeUnmount(() => {
               </section>
             </div>
             <div ref="loadMoreSentinel" class="archive-load-more" aria-live="polite">
-              <span v-if="loadingMore">正在继续读取航行记录…</span>
-              <button v-else-if="loadMoreError" type="button" @click="loadMoreArticles">
-                {{ loadMoreError }} 点击重试
+              <button
+                v-if="loadingMore || hasMoreArticles"
+                type="button"
+                :aria-busy="loadingMore"
+                :aria-disabled="loadingMore"
+                @click="loadMoreArticles"
+              >
+                {{ loadingMore ? "正在继续读取航行记录…" : loadMoreError ? `${loadMoreError} 点击重试` : "加载更多文章" }}
               </button>
-              <span v-else-if="hasMoreArticles">继续向下查看更多记录</span>
               <span v-else>已抵达最早文章</span>
             </div>
           </template>

@@ -7,6 +7,7 @@ import OceanIcon from "./OceanIcon.vue";
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
+const searchDialog = ref<HTMLElement | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
 const query = ref("");
 const results = ref<Article[]>([]);
@@ -18,6 +19,7 @@ const loadMoreError = ref("");
 const searchRevision = ref(0);
 let searchTimer: number | undefined;
 let requestVersion = 0;
+let returnFocusTarget: HTMLElement | null = null;
 const searchPageSize = 8;
 const currentPage = ref(0);
 
@@ -115,7 +117,30 @@ function scheduleSearch() {
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (props.open && event.key === "Escape") close();
+  if (!props.open) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    close();
+    return;
+  }
+  if (event.key !== "Tab") return;
+
+  const focusableElements = Array.from(
+    searchDialog.value?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) ?? [],
+  ).filter((element) => element.offsetParent !== null);
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements[focusableElements.length - 1];
+  if (!firstElement || !lastElement) return;
+
+  if (event.shiftKey && document.activeElement === firstElement) {
+    event.preventDefault();
+    lastElement.focus();
+  } else if (!event.shiftKey && document.activeElement === lastElement) {
+    event.preventDefault();
+    firstElement.focus();
+  }
 }
 
 watch(query, scheduleSearch);
@@ -123,7 +148,13 @@ watch(
   () => props.open,
   async (isOpen) => {
     document.body.classList.toggle("site-search-open", isOpen);
-    if (!isOpen) return;
+    if (!isOpen) {
+      await nextTick();
+      returnFocusTarget?.focus();
+      returnFocusTarget = null;
+      return;
+    }
+    returnFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     await nextTick();
     searchInput.value?.focus();
   },
@@ -141,7 +172,7 @@ onBeforeUnmount(() => {
     <Transition name="site-search">
       <section v-if="open" class="site-search-layer" role="dialog" aria-modal="true" aria-labelledby="site-search-title" @keydown="handleKeydown">
         <button class="site-search-backdrop" type="button" tabindex="-1" aria-label="关闭文章搜索" @click="close"></button>
-        <div class="site-search-dialog">
+        <div ref="searchDialog" class="site-search-dialog">
           <header class="site-search-header">
             <div>
               <p>ARTICLE FINDER</p>

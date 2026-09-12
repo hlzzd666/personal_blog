@@ -23,11 +23,11 @@ void router.isReady().finally(() => {
   <router-view v-else v-slot="{ Component }">
     <div v-if="Component" class="app-shell">
       <SiteNavigation v-if="!isStandalone" />
-      <main class="app-content">
+      <div class="app-content">
         <KeepAlive include="ArticlesPage,NotesPage">
           <component :is="Component" />
         </KeepAlive>
-      </main>
+      </div>
       <SiteFooter v-if="!isStandalone" />
     </div>
     <div v-else class="app-boot" role="status" aria-live="polite">

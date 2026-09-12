@@ -623,7 +623,7 @@ onBeforeUnmount(() => {
             <aside class="home-index-panel home-reveal" aria-label="文章索引">
               <div class="home-section-heading"><h3>文章索引</h3><RouterLink :to="{ path: '/articles', query: { view: 'categories' } }">全部分类</RouterLink></div>
               <div v-if="articleCategories.length" class="home-category-lines">
-                <RouterLink v-for="category in articleCategories" :key="category.name" :to="{ path: '/articles', query: { view: 'categories' } }">
+                <RouterLink v-for="category in articleCategories" :key="category.name" :to="{ path: '/articles', query: { view: 'categories', category: category.name } }">
                   <span>{{ category.name }}</span><b>{{ category.count }}</b>
                 </RouterLink>
               </div>
