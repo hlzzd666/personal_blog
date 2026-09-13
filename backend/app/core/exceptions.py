@@ -106,6 +106,13 @@ _FIELD_LABELS: dict[str, str] = {
     "site_launched_at": "建站时间",
     "site_stack": "站点技术栈",
     "site_repository_url": "仓库链接",
+    # 留言板
+    "nickname": "昵称",
+    "content": "留言内容",
+    "honeypot": "留言校验字段",
+    "status": "留言状态",
+    "reason": "审核原因",
+    "admin_reply": "站长回复",
     # 每日问答
     "publish_time": "发布时间",
     "ai_base_url": "AI 接口地址",

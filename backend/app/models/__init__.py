@@ -4,6 +4,7 @@ from .article import Article, ArticleCategory, ArticleLikeRecord, ArticleTag, Ar
 from .content import Note, Series
 from .daily_learning import DailyLearningRun, DailyLearningSettings
 from .gallery import GalleryCharacter, GallerySettings
+from .guestbook import GuestbookMessage
 from .visitor_record import VisitorRecord
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "DailyLearningSettings",
     "GalleryCharacter",
     "GallerySettings",
+    "GuestbookMessage",
     "Note",
     "Series",
     "VisitorRecord",

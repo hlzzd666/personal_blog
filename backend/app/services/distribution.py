@@ -193,7 +193,7 @@ def build_sitemap(session: Session) -> str:
         if modified:
             SubElement(node, "lastmod").text = _iso_date(modified)
 
-    for path in ("", "articles", "series", "notes", "about", "privacy"):
+    for path in ("", "articles", "series", "notes", "guestbook", "gallery", "dashboard", "icons", "about", "privacy"):
         add_url(_web_url(path))
     for article in session.scalars(select(Article)):
         add_url(_web_url(f"articles/{article.slug}"), article.updated_at)

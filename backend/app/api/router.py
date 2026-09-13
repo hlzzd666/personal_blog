@@ -77,6 +77,14 @@ from backend.app.schemas.daily_learning import (
     DailyLearningSettingsUpdate,
     DailyLearningTestResponse,
 )
+from backend.app.schemas.guestbook import (
+    GuestbookCreate,
+    GuestbookManageItem,
+    GuestbookManageList,
+    GuestbookPublicList,
+    GuestbookReplyUpdate,
+    GuestbookStatusUpdate,
+)
 from backend.app.services.articles import (
     create_article,
     delete_article,
@@ -151,6 +159,14 @@ from backend.app.services.taxonomy import (
     update_category,
     update_tag,
 )
+from backend.app.models.guestbook import GuestbookMessage
+from backend.app.services.guestbook import (
+    create_message,
+    list_manage_messages,
+    list_public_messages,
+    update_reply,
+    update_status,
+)
 
 router = APIRouter()
 
@@ -165,6 +181,78 @@ ALLOWED_IMAGE_TYPES = {
 ALLOWED_RESUME_TYPES = {
     "application/pdf": ".pdf",
 }
+
+
+@router.get("/guestbook", tags=["guestbook"], response_model=ApiResponse[GuestbookPublicList])
+def read_guestbook(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=50),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GuestbookPublicList]:
+    return build_success_response(request, list_public_messages(session, page, page_size))
+
+
+@router.post("/guestbook", tags=["guestbook"], response_model=ApiResponse, status_code=202)
+def write_guestbook(
+    request: Request,
+    payload: GuestbookCreate,
+    response: Response,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse:
+    visitor_id = request.cookies.get("guestbook_visitor_id") or uuid4().hex
+    if "guestbook_visitor_id" not in request.cookies:
+        response.set_cookie("guestbook_visitor_id", visitor_id, max_age=60 * 60 * 24 * 365, httponly=True, samesite="lax")
+    try:
+        message = create_message(session, payload, visitor_id)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, {"id": message.id, "status": message.status}, message="留言已提交，审核通过后会公开显示")
+
+
+@router.get("/guestbook/manage", tags=["guestbook"], response_model=ApiResponse[GuestbookManageList])
+def read_manage_guestbook(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    status: str | None = None,
+    keyword: str | None = None,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GuestbookManageList]:
+    return build_success_response(request, list_manage_messages(session, page, page_size, status, keyword))
+
+
+@router.patch("/guestbook/{message_id}/status", tags=["guestbook"], response_model=ApiResponse)
+def write_guestbook_status(
+    request: Request,
+    message_id: int,
+    payload: GuestbookStatusUpdate,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse:
+    message = session.get(GuestbookMessage, message_id)
+    if message is None:
+        raise HTTPException(status_code=404, detail="留言不存在")
+    try:
+        result = update_status(session, message, payload.status, payload.reason)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return build_success_response(request, GuestbookManageItem.model_validate(result), message="留言状态已更新")
+
+
+@router.patch("/guestbook/{message_id}/reply", tags=["guestbook"], response_model=ApiResponse)
+def write_guestbook_reply(
+    request: Request,
+    message_id: int,
+    payload: GuestbookReplyUpdate,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse:
+    message = session.get(GuestbookMessage, message_id)
+    if message is None:
+        raise HTTPException(status_code=404, detail="留言不存在")
+    return build_success_response(request, GuestbookManageItem.model_validate(update_reply(session, message, payload.admin_reply)), message="回复已保存")
 
 
 class ImageUploadResult(BaseModel):

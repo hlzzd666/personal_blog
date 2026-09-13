@@ -96,39 +96,25 @@ const commandLinks = [
     icon: "archive" as IconName,
   },
   {
-    label: "标签海图",
-    caption: "沿主题定位相关内容",
-    to: { path: "/articles", query: { view: "tags" } },
+    label: "文章大屏",
+    caption: "查看全站航行数据",
+    to: "/dashboard",
     tone: "tide",
-    icon: "tag" as IconName,
-  },
-  {
-    label: "个人档案",
-    caption: "项目、技术栈与联系方式",
-    to: "/about",
-    tone: "coral",
-    icon: "about" as IconName,
-  },
-  {
-    label: "专题航线",
-    caption: "按顺序连续阅读",
-    to: "/series",
-    tone: "sage",
-    icon: "series" as IconName,
-  },
-  {
-    label: "短动态",
-    caption: "接收最近的简短信号",
-    to: "/notes",
-    tone: "coral",
-    icon: "notes" as IconName,
+    icon: "views" as IconName,
   },
   {
     label: "3D 展厅",
-    caption: "漫游伟大航路人物档案",
+    caption: "漫游人物档案",
     to: "/gallery",
-    tone: "brass",
+    tone: "sage",
     icon: "gallery" as IconName,
+  },
+  {
+    label: "留言板",
+    caption: "留下你的航海信号",
+    to: "/guestbook",
+    tone: "coral",
+    icon: "comment" as IconName,
   },
 ];
 
@@ -157,9 +143,11 @@ const articleTags = computed(() => homeArticleStats.value.tags.slice(0, 12));
 const featuredSeries = computed(() => homeSeries.value.slice(0, 2));
 const latestNotes = computed(() => homeNotes.value.slice(0, 3));
 const visibleCommandLinks = computed(() =>
-  homeGalleryEntryVisible.value
-    ? commandLinks
-    : commandLinks.filter((command) => command.to !== "/gallery"),
+  commandLinks.filter((command) => {
+    if (command.to === "/gallery") return homeGalleryEntryVisible.value;
+    if (command.to === "/dashboard") return settings.value.dashboard_show_entry;
+    return true;
+  }),
 );
 const currentTimeText = computed(() =>
   new Intl.DateTimeFormat("zh-CN", {
@@ -587,8 +575,8 @@ onBeforeUnmount(() => {
             </aside>
           </div>
 
-          <nav class="home-route-nav home-reveal" aria-label="快捷航线">
-            <span class="home-route-label"><strong>快捷航线</strong><small>选择下一站</small></span>
+          <section class="home-next-stops home-reveal" aria-labelledby="home-next-stops-title">
+            <div class="home-next-stops-heading"><p class="panel-kicker">继续航行</p><h3 id="home-next-stops-title">下一站</h3><small>从这里选择你的阅读方式</small></div>
             <RouterLink
               v-for="command in visibleCommandLinks"
               :key="command.label"
@@ -598,12 +586,12 @@ onBeforeUnmount(() => {
               <OceanIcon class="home-route-icon" :name="command.icon" :size="30" />
               <span><strong>{{ command.label }}</strong><small>{{ command.caption }}</small></span>
             </RouterLink>
-          </nav>
+          </section>
 
           <div class="home-reading-layout">
             <section class="home-reading-feed home-reveal" aria-labelledby="home-reading-title">
               <div class="home-section-heading">
-                <h3 id="home-reading-title">最近文章</h3>
+                <div><p class="panel-kicker">航海日志</p><h3 id="home-reading-title">最近记录</h3></div>
                 <RouterLink :to="{ path: '/articles', query: { view: 'archive' } }">全部文章</RouterLink>
               </div>
               <RouterLink
@@ -621,7 +609,7 @@ onBeforeUnmount(() => {
             </section>
 
             <aside class="home-index-panel home-reveal" aria-label="文章索引">
-              <div class="home-section-heading"><h3>文章索引</h3><RouterLink :to="{ path: '/articles', query: { view: 'categories' } }">全部分类</RouterLink></div>
+              <div class="home-section-heading"><div><p class="panel-kicker">航线索引</p><h3>分类与标签</h3></div><RouterLink :to="{ path: '/articles', query: { view: 'categories' } }">全部分类</RouterLink></div>
               <div v-if="articleCategories.length" class="home-category-lines">
                 <RouterLink v-for="category in articleCategories" :key="category.name" :to="{ path: '/articles', query: { view: 'categories', category: category.name } }">
                   <span>{{ category.name }}</span><b>{{ category.count }}</b>
@@ -653,6 +641,11 @@ onBeforeUnmount(() => {
                   </RouterLink>
                 </div>
                 <p v-else class="compact-empty">最近还没有新的动态信号。</p>
+              </section>
+              <section class="home-signal-panel home-guestbook-panel home-reveal">
+                <div class="home-section-heading"><h3>留言航标</h3><RouterLink to="/guestbook">进入留言板</RouterLink></div>
+                <p>把想说的话留在这段航程里，审核通过后会成为日志的一部分。</p>
+                <RouterLink class="home-guestbook-action" to="/guestbook"><OceanIcon name="comment" :size="22" />留下第一枚航标</RouterLink>
               </section>
             </div>
 
@@ -4737,4 +4730,77 @@ onBeforeUnmount(() => {
     filter: none;
   }
 }
+</style>
+
+<style scoped>
+/* 重新组织首屏之后的内容，不改变 hero 区域。 */
+.home-next-stops {
+  display: grid;
+  grid-template-columns: minmax(10rem, .8fr) repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--flow-line);
+  border-radius: 8px;
+  background: var(--flow-glass);
+  box-shadow: 0 1.25rem 3.5rem rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.045);
+  backdrop-filter: blur(15px) saturate(112%);
+}
+.home-next-stops-heading {
+  display: grid;
+  align-content: center;
+  gap: .25rem;
+  min-height: 5.4rem;
+  padding: .9rem 1rem;
+  border-right: 1px solid var(--flow-line);
+}
+.home-next-stops-heading .panel-kicker { margin: 0; color: var(--home-tide); font-size: .63rem; }
+.home-next-stops-heading h3 { margin: 0; color: var(--home-ink); font-family: var(--display-font); font-size: 1.05rem; }
+.home-next-stops-heading small { color: var(--home-soft); font-size: .62rem; }
+.home-next-stops > a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .65rem;
+  align-items: center;
+  min-height: 5.4rem;
+  padding: .7rem .8rem;
+  border-right: 1px solid var(--flow-line);
+  color: var(--home-ink);
+  text-decoration: none;
+  transition: background-color 180ms ease, transform 180ms var(--card-ease);
+}
+.home-next-stops > a:last-child { border-right: 0; }
+.home-next-stops > a > span { display: grid; gap: .2rem; min-width: 0; }
+.home-next-stops strong { font-size: .84rem; }
+.home-next-stops small { color: var(--home-muted); font-size: .62rem; line-height: 1.45; }
+.home-next-stops .home-route-icon { width: 1.6rem; flex: 0 0 auto; }
+.home-next-stops .tone-brass .home-route-icon { color: var(--home-brass); }
+.home-next-stops .tone-tide .home-route-icon { color: var(--home-tide); }
+.home-next-stops .tone-sage .home-route-icon { color: var(--home-sage); }
+.home-next-stops .tone-coral .home-route-icon { color: var(--home-coral); }
+.home-section-heading > div { display: grid; gap: .25rem; }
+.home-section-heading .panel-kicker { margin: 0; color: var(--home-tide); font-size: .6rem; }
+.home-lower-deck { grid-template-columns: minmax(0, 1fr); }
+.home-discovery-layout { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.home-guestbook-panel { border-color: rgba(230,111,82,.28); }
+.home-guestbook-panel > p { max-width: 22rem; margin: .95rem 0 1.15rem; color: var(--home-muted); font-size: .8rem; line-height: 1.7; }
+.home-guestbook-action { display: inline-flex; gap: .4rem; align-items: center; color: var(--home-brass); font-size: .76rem; font-weight: 800; text-decoration: none; }
+.home-guestbook-action:hover, .home-guestbook-action:focus-visible { color: var(--home-coral); }
+@media (hover: hover) and (pointer: fine) {
+  .home-next-stops > a:hover, .home-next-stops > a:focus-visible { background: rgba(131,215,203,.08); transform: translateY(-.12rem); }
+}
+@media (max-width: 960px) { .home-discovery-layout { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 680px) {
+  .home-next-stops { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-next-stops-heading { grid-column: 1 / -1; min-height: 3.7rem; border-right: 0; border-bottom: 1px solid var(--flow-line); }
+  .home-next-stops > a { min-height: 4.35rem; border-bottom: 1px solid var(--flow-line); }
+  .home-next-stops > a:nth-last-child(-n + 2) { border-bottom: 0; }
+  .home-next-stops > a:nth-child(odd) { border-right: 0; }
+  .home-discovery-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 440px) {
+  .home-next-stops { grid-template-columns: minmax(0, 1fr); }
+  .home-next-stops > a, .home-next-stops > a:nth-child(odd) { border-right: 0; border-bottom: 1px solid var(--flow-line); }
+  .home-next-stops > a:last-child { border-bottom: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .home-next-stops > a, .home-guestbook-action { transition: none; } }
 </style>

@@ -7,7 +7,7 @@ import OceanIcon from "./OceanIcon.vue";
 
 const route = useRoute();
 const currentYear = new Date().getFullYear();
-const light = computed(() => route.path === "/about" || route.path === "/privacy");
+const light = computed(() => route.path === "/about" || route.path === "/privacy" || route.path === "/guestbook");
 const systemSurface = computed(() => route.path === "/icons");
 const icpFilingUrl = "https://beian.miit.gov.cn/";
 const policeFilingUrl = "https://www.beian.gov.cn/portal/index";
@@ -44,6 +44,7 @@ onMounted(async () => {
       </div>
       <RouterLink to="/series"><OceanIcon name="series" :size="20" />专题</RouterLink>
       <RouterLink to="/notes"><OceanIcon name="notes" :size="20" />动态</RouterLink>
+      <RouterLink to="/guestbook"><OceanIcon name="comment" :size="20" />留言板</RouterLink>
       <RouterLink to="/icons"><OceanIcon name="toc" :size="20" />图标航海图</RouterLink>
       <RouterLink to="/privacy"><OceanIcon name="about" :size="20" />隐私说明</RouterLink>
     </nav>

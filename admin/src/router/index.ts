@@ -34,6 +34,7 @@ export const router = createRouter({
         },
         { path: "series", name: "series", component: () => import("../pages/SeriesPage.vue"), meta: { title: "专题管理", cache: true } },
         { path: "notes", name: "notes", component: () => import("../pages/NotesPage.vue"), meta: { title: "短动态", cache: true } },
+        { path: "guestbook", name: "guestbook", component: () => import("../pages/GuestbookPage.vue"), meta: { title: "留言板", cache: true } },
         { path: "gallery", name: "gallery", component: () => import("../pages/GalleryPage.vue"), meta: { title: "3D 展厅", cache: true } },
         {
           path: "daily-learning",

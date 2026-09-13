@@ -33,6 +33,7 @@ const router = createRouter({
     { path: "/series/:slug", component: () => import("./pages/SeriesDetailPage.vue"), meta: { title: "专题详情" } },
     { path: "/notes", component: () => import("./pages/NotesPage.vue"), meta: { title: "短动态" } },
     { path: "/notes/:slug", component: () => import("./pages/NoteDetailPage.vue"), meta: { title: "动态详情" } },
+    { path: "/guestbook", component: () => import("./pages/GuestbookPage.vue"), meta: { title: "留言板" } },
     { path: "/gallery", component: () => import("./pages/GalleryPage.vue"), meta: { title: "3D 展厅" } },
     { path: "/icons", component: () => import("./pages/IconGalleryPage.vue"), meta: { title: "图标航海图" } },
     { path: "/privacy", component: () => import("./pages/PrivacyPage.vue"), meta: { title: "隐私说明" } },
