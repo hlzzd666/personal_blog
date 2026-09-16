@@ -63,6 +63,7 @@ const fallbackProfile: AboutProfile = {
 };
 
 const profile = ref<AboutProfile>(fallbackProfile);
+const contactQrUrl = `${import.meta.env.BASE_URL}assets/d75239bce323589ed27f5a4be20c80f7.jpg`;
 const loading = ref(true);
 const errorText = ref("");
 const mastRoot = ref<HTMLElement | null>(null);
@@ -546,13 +547,13 @@ onBeforeUnmount(() => {
         </div>
         <figure class="contact-qr">
           <a
-            href="/assets/d75239bce323589ed27f5a4be20c80f7.jpg"
+            :href="contactQrUrl"
             target="_blank"
             rel="noopener"
             aria-label="在新窗口打开微信二维码原图"
           >
             <img
-              src="/assets/d75239bce323589ed27f5a4be20c80f7.jpg"
+              :src="contactQrUrl"
               alt="4JYL 的微信二维码，扫码添加好友"
               width="888"
               height="1131"
