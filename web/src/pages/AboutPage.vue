@@ -118,7 +118,9 @@ const updatedDate = computed(() =>
 );
 
 const hasResume = computed(() => Boolean(profile.value.resume_url.trim()));
-const resumeFileName = computed(() => profile.value.resume_filename || `${profile.value.display_name}-简历.pdf`);
+const resumeFileName = computed(
+  () => profile.value.resume_filename || `${profile.value.display_name}-简历.pdf`,
+);
 const resumeDownloadUrl = computed(() => {
   if (!hasResume.value) return "";
   try {
@@ -270,7 +272,9 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="about-page" :aria-busy="loading">
-    <p v-if="errorText" class="about-offline-notice" role="status"><OceanIcon name="warning" :size="20" />{{ errorText }}</p>
+    <p v-if="errorText" class="about-offline-notice" role="status">
+      <OceanIcon name="warning" :size="20" />{{ errorText }}
+    </p>
 
     <header
       ref="mastRoot"
@@ -482,7 +486,10 @@ onBeforeUnmount(() => {
         <header class="location-card-heading">
           <div>
             <p class="card-kicker">HOME PORT</p>
-            <h2><OceanIcon name="location" :size="24" /><span>我现在住在</span> {{ profile.location_name }}</h2>
+            <h2>
+              <OceanIcon name="location" :size="24" /><span>我现在住在</span>
+              {{ profile.location_name }}
+            </h2>
           </div>
           <small>{{ coordinateLabel }}</small>
         </header>
@@ -509,45 +516,51 @@ onBeforeUnmount(() => {
         </div>
       </article>
 
-      <article
-        v-if="hasResume"
-        class="bento-card resume-card card-span-3"
-        style="--card-index: 7"
-      >
-        <div class="resume-doc-mark" aria-hidden="true">
-          <span></span>
-          <i></i>
+      <article class="bento-card connect-card card-span-6" style="--card-index: 7">
+        <div class="connect-copy">
+          <div>
+            <p class="card-kicker">KEEP IN TOUCH</p>
+            <h2>联系我</h2>
+            <p class="connect-intro">
+              如果你也在做有意思的产品，或者只是想聊聊技术与生活，欢迎来打个招呼。
+            </p>
+            <p class="connect-status"><i aria-hidden="true"></i>{{ profile.status_text }}</p>
+          </div>
+          <div class="connect-links">
+            <a v-if="profile.email" :href="`mailto:${profile.email}`">邮件</a>
+            <a
+              v-for="link in profile.social_links"
+              :key="link.url"
+              :href="link.url"
+              target="_blank"
+              rel="noreferrer noopener"
+            ><OceanIcon name="external" :size="18" />{{ link.platform }}</a>
+            <a
+              v-if="profile.site_repository_url"
+              :href="profile.site_repository_url"
+              target="_blank"
+              rel="noreferrer noopener"
+            ><OceanIcon name="external" :size="18" />本站源码</a>
+            <RouterLink to="/articles">阅读文章 <OceanIcon name="next" :size="18" /></RouterLink>
+          </div>
         </div>
-        <p class="card-kicker">RESUME</p>
-        <h2>简历</h2>
-        <p>{{ resumeFileName }}</p>
-        <div class="resume-actions">
-          <button type="button" @click="openResumePreview">在线预览</button>
-          <a :href="resumeDownloadUrl" :download="resumeFileName"><OceanIcon name="download" :size="18" />下载 PDF</a>
-        </div>
-      </article>
-
-      <article class="bento-card connect-card card-span-3" style="--card-index: 8">
-        <p class="card-kicker">KEEP IN TOUCH</p>
-        <h2>保持联系</h2>
-        <p>{{ profile.status_text }}</p>
-        <div class="connect-links">
-          <a v-if="profile.email" :href="`mailto:${profile.email}`">邮件</a>
+        <figure class="contact-qr">
           <a
-            v-for="link in profile.social_links"
-            :key="link.url"
-            :href="link.url"
+            href="/assets/d75239bce323589ed27f5a4be20c80f7.jpg"
             target="_blank"
-            rel="noreferrer noopener"
-          ><OceanIcon name="external" :size="18" />{{ link.platform }}</a>
-          <a
-            v-if="profile.site_repository_url"
-            :href="profile.site_repository_url"
-            target="_blank"
-            rel="noreferrer noopener"
-          ><OceanIcon name="external" :size="18" />本站源码</a>
-          <RouterLink to="/articles">阅读文章 <OceanIcon name="next" :size="18" /></RouterLink>
-        </div>
+            rel="noopener"
+            aria-label="在新窗口打开微信二维码原图"
+          >
+            <img
+              src="/assets/d75239bce323589ed27f5a4be20c80f7.jpg"
+              alt="4JYL 的微信二维码，扫码添加好友"
+              width="888"
+              height="1131"
+              loading="lazy"
+            />
+          </a>
+          <figcaption><span>微信</span> 扫码添加好友 · 点击查看大图</figcaption>
+        </figure>
       </article>
     </section>
 
@@ -970,19 +983,11 @@ onBeforeUnmount(() => {
   margin-top: 1.25rem;
 }
 
-.resume-card {
-  --card-rotate: 0.48deg;
-  grid-column: 7 / span 3;
-  grid-row: 4;
-  margin: 2.1rem 0 0 -0.15rem;
-}
-
 .connect-card {
-  --card-rotate: 0.72deg;
-  grid-column: 10 / span 3;
+  --card-rotate: 0.34deg;
+  grid-column: 7 / span 6;
   grid-row: 4;
-  align-self: end;
-  margin: 0 0 1.2rem -0.35rem;
+  margin: 0.45rem 0 0 0.35rem;
 }
 
 .card-kicker {
@@ -1336,7 +1341,10 @@ onBeforeUnmount(() => {
   font:
     600 0.62rem "IBM Plex Mono",
     monospace;
-  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
 }
 
 .work-timeline-body {
@@ -1549,6 +1557,7 @@ onBeforeUnmount(() => {
   grid-template-columns: 72px minmax(0, 1fr) minmax(160px, 0.55fr);
   gap: 1.2rem;
   align-items: center;
+  min-height: 330px;
   background: #dcece8;
   border-color: #cadfd9;
 }
@@ -1605,88 +1614,6 @@ onBeforeUnmount(() => {
   background: var(--sea);
 }
 
-.resume-card {
-  min-height: 250px;
-  color: #f9fbfb;
-  background:
-    linear-gradient(150deg, rgba(239, 115, 91, 0.14), transparent 46%),
-    #176b73;
-  border-color: #176b73;
-}
-
-.resume-card .card-kicker {
-  color: #f1c66e;
-}
-
-.resume-doc-mark {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 72px;
-  border: 1px solid rgba(249, 251, 251, 0.36);
-  border-radius: 6px 6px 12px;
-  background: rgba(249, 251, 251, 0.12);
-  transform: rotate(5deg);
-  transition:
-    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    background-color 220ms ease;
-}
-
-.resume-doc-mark::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  right: -1px;
-  border-top: 18px solid rgba(249, 251, 251, 0.76);
-  border-left: 18px solid transparent;
-  border-radius: 0 6px 0 0;
-}
-
-.resume-doc-mark span,
-.resume-doc-mark i {
-  display: block;
-  width: 26px;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(249, 251, 251, 0.72);
-}
-
-.resume-doc-mark i {
-  width: 18px;
-  margin-top: -0.9rem;
-}
-
-.resume-card:hover .resume-doc-mark {
-  background: rgba(249, 251, 251, 0.18);
-  transform: rotate(-4deg) translateY(-3px);
-}
-
-.resume-card h2 {
-  margin-top: 2.1rem;
-}
-
-.resume-card > p:not(.card-kicker) {
-  max-width: 11rem;
-  margin: 0.55rem 0 0;
-  overflow: hidden;
-  color: rgba(249, 251, 251, 0.72);
-  font-size: 0.72rem;
-  line-height: 1.6;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.resume-actions {
-  display: grid;
-  gap: 0.55rem;
-  margin-top: 1.35rem;
-}
-
-.resume-actions a,
-.resume-actions button,
 .resume-preview-dialog footer a,
 .resume-preview-dialog header button {
   border: 0;
@@ -1696,8 +1623,6 @@ onBeforeUnmount(() => {
   text-decoration: none;
 }
 
-.resume-actions a,
-.resume-actions button,
 .resume-preview-dialog footer a {
   display: inline-flex;
   align-items: center;
@@ -1710,23 +1635,6 @@ onBeforeUnmount(() => {
     color 160ms ease,
     background-color 160ms ease,
     transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.resume-actions button {
-  color: var(--ink);
-  background: var(--brass);
-}
-
-.resume-actions a {
-  color: #f9fbfb;
-  background: rgba(249, 251, 251, 0.14);
-}
-
-.resume-actions a:hover,
-.resume-actions button:hover,
-.resume-actions a:focus-visible,
-.resume-actions button:focus-visible {
-  transform: translateY(-2px);
 }
 
 .resume-preview-layer {
@@ -1815,10 +1723,15 @@ onBeforeUnmount(() => {
 }
 
 .connect-card {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.72fr);
+  gap: 1.4rem;
+  align-items: center;
+  min-height: 330px;
   color: #f8fbfc;
-  background: var(--ink);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(114, 208, 203, 0.13), transparent 34%),
+    var(--ink);
   border-color: var(--ink);
 }
 
@@ -1826,15 +1739,43 @@ onBeforeUnmount(() => {
   color: #72d0cb;
 }
 
-.connect-card > p:not(.card-kicker) {
-  margin: 0.65rem 0 0;
+.connect-copy {
+  display: flex;
+  align-self: stretch;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.connect-intro {
+  max-width: 32rem;
+  margin: 0.8rem 0 0;
   color: rgba(248, 251, 252, 0.62);
-  font-size: 0.75rem;
+  font:
+    400 0.78rem/1.75 "Noto Sans SC",
+    sans-serif;
+}
+
+.connect-status {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 1rem 0 0;
+  color: #87d2c7;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.connect-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #87d2c7;
+  box-shadow: 0 0 0 5px rgba(135, 210, 199, 0.1);
 }
 
 .connect-links {
   margin-top: auto;
-  padding-top: 1rem;
+  padding-top: 1.35rem;
 }
 
 .connect-links a {
@@ -1856,6 +1797,51 @@ onBeforeUnmount(() => {
 .connect-links a:focus-visible {
   color: var(--ink);
   background: var(--brass);
+}
+
+.contact-qr {
+  width: min(100%, 224px);
+  margin: 0;
+  justify-self: end;
+}
+
+.contact-qr a {
+  display: block;
+  padding: 0.45rem;
+  border: 1px solid rgba(241, 185, 78, 0.42);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
+  transition:
+    border-color 180ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 220ms ease;
+}
+
+.contact-qr a:hover,
+.contact-qr a:focus-visible {
+  border-color: var(--brass);
+  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.3);
+  transform: translateY(-3px) rotate(0.5deg);
+}
+
+.contact-qr img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.contact-qr figcaption {
+  margin-top: 0.55rem;
+  color: rgba(248, 251, 252, 0.6);
+  font-size: 0.62rem;
+  text-align: center;
+}
+
+.contact-qr figcaption span {
+  color: var(--brass);
+  font-weight: 800;
 }
 
 .compact-empty {
@@ -1947,7 +1933,6 @@ onBeforeUnmount(() => {
   .project-card,
   .location-card,
   .site-card,
-  .resume-card,
   .connect-card {
     grid-row: auto;
     align-self: auto;
@@ -2034,7 +2019,6 @@ onBeforeUnmount(() => {
   .project-card,
   .location-card,
   .site-card,
-  .resume-card,
   .connect-card {
     --card-rotate: 0deg;
     margin: 0;
@@ -2043,7 +2027,6 @@ onBeforeUnmount(() => {
   .intro-card,
   .headline-card,
   .site-card,
-  .resume-card,
   .connect-card {
     min-height: 220px;
   }
@@ -2078,6 +2061,17 @@ onBeforeUnmount(() => {
 
   .site-stack {
     grid-column: 1 / -1;
+  }
+
+  .connect-card {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    min-height: 0;
+  }
+
+  .contact-qr {
+    width: min(100%, 260px);
+    justify-self: center;
   }
 
   .resume-preview-layer {
@@ -2122,10 +2116,6 @@ onBeforeUnmount(() => {
     background: transparent;
     transform: rotate(-7deg);
   }
-
-  .resume-card:hover .resume-doc-mark {
-    transform: rotate(5deg);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2151,11 +2141,9 @@ onBeforeUnmount(() => {
   .skill-tag-stage,
   .skill-pill,
   .site-stamp,
-  .resume-doc-mark,
   .mast-resume-actions a,
   .mast-resume-actions button,
-  .resume-actions a,
-  .resume-actions button,
+  .contact-qr a,
   .work-timeline-item,
   .work-timeline-body,
   .work-timeline-marker,
@@ -2172,6 +2160,11 @@ onBeforeUnmount(() => {
 
   .bento-card::after {
     display: none;
+  }
+
+  .contact-qr a:hover,
+  .contact-qr a:focus-visible {
+    transform: none;
   }
 
   .skill-marquee-track {
