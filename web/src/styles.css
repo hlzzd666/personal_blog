@@ -1,12 +1,13 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700;800&family=ZCOOL+KuaiLe&display=swap");
 @import "tailwindcss";
 
+/* 在线链接服务仅供平台体验和调试使用，平台不承诺服务的稳定性，企业客户需下载字体包自行发布使用并做好备份。 */
 @font-face {
-  font-family: "iconfont";
+  font-family: "iconfont"; /* Project id 5224957 */
   src:
-    url("//at.alicdn.com/t/c/font_5224957_42jne3qoyz6.woff2?t=1787175529428") format("woff2"),
-    url("//at.alicdn.com/t/c/font_5224957_42jne3qoyz6.woff?t=1787175529428") format("woff"),
-    url("//at.alicdn.com/t/c/font_5224957_42jne3qoyz6.ttf?t=1787175529428") format("truetype");
+    url("//at.alicdn.com/t/c/font_5224957_d094neqf0p.woff2?t=1789907130263") format("woff2"),
+    url("//at.alicdn.com/t/c/font_5224957_d094neqf0p.woff?t=1789907130263") format("woff"),
+    url("//at.alicdn.com/t/c/font_5224957_d094neqf0p.ttf?t=1789907130263") format("truetype");
 }
 
 :root {
