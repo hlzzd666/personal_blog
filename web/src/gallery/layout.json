@@ -5,7 +5,7 @@
   "maximumCharacters": 40,
   "bowLength": 9,
   "sternLength": 7,
-  "frameX": 3.2,
+  "frameX": 4.35,
   "cameraHeight": 1.7,
   "playerRadius": 0.35
 }

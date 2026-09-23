@@ -1,0 +1,32 @@
+{
+  "id": "gum-gum",
+  "sourceFile": "gomu_gomu_no_mi.glb",
+  "sourceSha256": "8c139be953680015d03082732d6dfc21aab4087161bd2c8b5c500d687dc7b6e2",
+  "sourceBytes": 219040,
+  "bytes": 164132,
+  "triangles": 5904,
+  "drawCalls": 1,
+  "blenderBounds": [
+    [
+      -0.37853625416755676,
+      -0.3632594347000122,
+      7.450580596923828e-09
+    ],
+    [
+      0.37853625416755676,
+      0.3632594048976898,
+      1.0
+    ]
+  ],
+  "source": {
+    "author": "Kris (https://sketchfab.com/popit228fm)",
+    "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+    "source": "https://sketchfab.com/3d-models/gomu-gomu-no-mi-2d08af4cad6b4748b48de2fcb1aa0200",
+    "title": "Gomu Gomu No Mi"
+  },
+  "changes": [
+    "统一单位、中心与落地位置",
+    "按材质合批",
+    "保留原始外形、颜色及贴图"
+  ]
+}

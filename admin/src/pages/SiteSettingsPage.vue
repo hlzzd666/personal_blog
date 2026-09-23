@@ -29,7 +29,7 @@ const form = ref<SiteSettings>({
   icp_filing_number: null,
   police_filing_number: null,
   site_launched_on: "2026-01-01",
-  owner_avatar_url: "/owner-avatar.jpg",
+  owner_avatar_url: "",
   owner_location_name: "未设置站长地址",
   owner_latitude: null,
   owner_longitude: null,
@@ -295,7 +295,7 @@ onMounted(() => {
 
           <el-form-item label="站长头像">
             <div class="image-picker image-picker-avatar">
-              <img :src="form.owner_avatar_url" alt="站长头像" />
+              <img v-if="form.owner_avatar_url" :src="form.owner_avatar_url" alt="站长头像" />
               <div class="image-picker-content">
                 <strong>{{ form.owner_avatar_url ? "已选择头像" : "暂未选择头像" }}</strong>
                 <span>支持 JPG、PNG、WEBP，单张不超过 10 MB</span>
@@ -466,7 +466,7 @@ onMounted(() => {
         <div class="preview-hero" :style="{ backgroundImage: `url(${form.hero_image_url})` }">
           <div class="preview-mask">
             <p>{{ form.site_subtitle }}</p>
-            <img class="preview-avatar" :src="form.owner_avatar_url" alt="站长头像预览" />
+            <img v-if="form.owner_avatar_url" class="preview-avatar" :src="form.owner_avatar_url" alt="站长头像预览" />
             <small>站长地址：{{ form.owner_location_name }}</small>
             <ul>
               <li v-for="line in previewQuotes" :key="line">{{ line }}</li>

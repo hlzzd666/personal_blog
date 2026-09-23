@@ -11,7 +11,7 @@ const fallbackProfile: AboutProfile = {
   role: "全栈开发者 / 独立创作者",
   headline: "把复杂问题拆成清晰产品，也把沿途的思考写成航海日志。",
   bio: "我关注产品体验、前后端工程与长期可维护的软件设计。工作之外，我会记录技术实践、项目复盘和生活观察，希望这里不仅是一份履历，也是一张持续更新的个人航海图。",
-  avatar_url: "/owner-avatar.jpg",
+  avatar_url: `${import.meta.env.BASE_URL}owner-avatar.jpg`,
   resume_url: "",
   resume_filename: "",
   status_text: "正在航行，欢迎交流",
@@ -912,14 +912,6 @@ onBeforeUnmount(() => {
   opacity: 0.22;
 }
 
-.card-span-4 {
-  grid-column: span 4;
-}
-
-.card-span-3 {
-  grid-column: span 3;
-}
-
 .card-span-5 {
   grid-column: span 5;
 }
@@ -930,10 +922,6 @@ onBeforeUnmount(() => {
 
 .card-span-7 {
   grid-column: span 7;
-}
-
-.card-span-8 {
-  grid-column: span 8;
 }
 
 .intro-card {
@@ -1884,13 +1872,6 @@ onBeforeUnmount(() => {
   }
 }
 
-@keyframes detail-in {
-  from {
-    opacity: 0;
-    transform: translateY(-5px) scaleY(0.96);
-  }
-}
-
 @keyframes status-pulse {
   50% {
     box-shadow: 0 0 0 8px rgba(45, 149, 100, 0.05);
@@ -1940,12 +1921,10 @@ onBeforeUnmount(() => {
     margin: 0.7rem 0 0;
   }
 
-  .card-span-4,
-  .card-span-3,
+
   .card-span-5,
   .card-span-6,
-  .card-span-7,
-  .card-span-8 {
+  .card-span-7 {
     grid-column: span 6;
   }
 
@@ -2004,12 +1983,10 @@ onBeforeUnmount(() => {
     padding: 0;
   }
 
-  .card-span-4,
-  .card-span-3,
+
   .card-span-5,
   .card-span-6,
-  .card-span-7,
-  .card-span-8 {
+  .card-span-7 {
     grid-column: auto;
   }
 

@@ -308,8 +308,7 @@ body {
 .status-panel,
 .form-card,
 .preview-card,
-.dashboard-panel,
-.empty-module-card {
+.dashboard-panel {
   border: 1px solid rgba(255, 255, 255, 0.72) !important;
   border-radius: 8px !important;
   box-shadow: var(--admin-shadow) !important;
@@ -622,8 +621,7 @@ body {
 
 .preview-card .el-card__body,
 .form-card .el-card__body,
-.dashboard-panel .el-card__body,
-.empty-module-card .el-card__body {
+.dashboard-panel .el-card__body {
   padding: 1.4rem;
 }
 
@@ -666,29 +664,6 @@ body {
   color: var(--admin-accent);
 }
 
-.dashboard-module-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-.dashboard-module-item {
-  padding: 1.2rem;
-  border: 1px solid var(--admin-border);
-  border-radius: 8px;
-  background: linear-gradient(180deg, #fffdfa 0%, #ffffff 100%);
-}
-
-.dashboard-module-item h3 {
-  margin: 0 0 0.6rem;
-}
-
-.dashboard-module-item p {
-  margin: 0;
-  color: var(--admin-muted);
-  line-height: 1.75;
-}
-
 .preview-card {
   padding: 1.2rem;
 }
@@ -707,12 +682,6 @@ body {
   padding: 2rem;
   background: linear-gradient(180deg, rgba(9, 20, 33, 0.3), rgba(9, 20, 33, 0.78));
   color: #fff6eb;
-}
-
-.preview-badge {
-  color: #ffd36f;
-  letter-spacing: 0.22em;
-  font-size: 0.8rem;
 }
 
 .preview-card h3 {
@@ -958,10 +927,6 @@ body {
   margin-top: 0.5rem;
   min-height: 44px;
   font-weight: 700;
-}
-
-.empty-module-card {
-  min-height: 360px;
 }
 
 .media-admin-page {
@@ -1652,7 +1617,6 @@ body {
   }
 
   .settings-grid,
-  .dashboard-module-grid,
   .media-stat-grid,
   .about-form-grid,
   .about-form-grid-profile,

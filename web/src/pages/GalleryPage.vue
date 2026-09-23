@@ -1,78 +1,79 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import { ArrowLeft, ArrowRight, Search, X, Maximize, Minimize, BookOpen, MoveUpRight } from "lucide-vue-next";
 import { fetchGallery, type GalleryCharacter, type GalleryResponse } from "../api/gallery";
-import { GalleryScene, localPosterUrl, type NavigationState } from "../gallery/GalleryScene";
-import OceanIcon from "../components/OceanIcon.vue";
+import type { GalleryScene, NavigationState } from "../gallery/GalleryScene";
+import { chapters, chapterCharacters, museumAsset } from "../gallery/curation";
+import { artifacts, logoCredit, type MuseumArtifact } from "../gallery/artifacts";
+import GalleryPortrait from "../components/GalleryPortrait.vue";
+import GalleryCompass from "../components/GalleryCompass.vue";
 
+type View = "entry" | "archive" | "story" | "moments" | "tour";
+const view = ref<View>("entry");
+const chapter = ref(0);
+const currentChapter = computed(() => chapters[chapter.value]!);
 const sceneRoot = ref<HTMLElement | null>(null);
 const detailDialog = ref<HTMLDialogElement | null>(null);
+const artifactDialog = ref<HTMLDialogElement | null>(null);
 const gallery = shallowRef<GalleryResponse | null>(null);
 const navigation = shallowRef<NavigationState | null>(null);
 const loading = ref(true);
 const sceneLoading = ref(false);
 const error = ref("");
 const notice = ref("");
+const query = ref("");
+const searchInput = ref<HTMLInputElement | null>(null);
 const desktopSupported = ref(false);
-const entered = ref(false);
 const locked = ref(false);
+const fullscreen = ref(false);
 const activeCharacter = shallowRef<GalleryCharacter | null>(null);
 const activeSlot = ref<number | null>(null);
+const activeArtifact = shallowRef<MuseumArtifact | null>(null);
 const selectedCharacter = shallowRef<GalleryCharacter | null>(null);
-const selectedSlot = ref<number | null>(null);
+const selectedArtifact = shallowRef<MuseumArtifact | null>(null);
 let scene: GalleryScene | null = null;
 let generation = 0;
 let resumeAfterDialog = false;
 const characters = computed(() => gallery.value?.characters ?? []);
-const mapY = (z: number) =>
-  navigation.value
-    ? 18 +
-      ((z - navigation.value.hall.minZ) /
-        (navigation.value.hall.maxZ - navigation.value.hall.minZ)) *
-        224
-    : 0;
-const mapX = (x: number) => 90 + x * 11;
-const markers = computed(() => {
-  const result: NonNullable<NavigationState["markers"]> = [];
-  for (const marker of [...(navigation.value?.markers ?? [])].sort(
-    (a, b) => a.distance - b.distance,
-  )) {
-    if (marker.screenY < 15 || marker.screenY > 82 || marker.screenX > 79) continue;
-    if (
-      result.some(
-        (other) =>
-          Math.abs(other.screenX - marker.screenX) < 8 &&
-          Math.abs(other.screenY - marker.screenY) < 7,
-      )
-    )
-      continue;
-    result.push(marker);
-    if (result.length === 4) break;
-  }
-  return result;
+const title = computed(() => chapter.value === 0 ? (gallery.value?.settings.hall_name || currentChapter.value.heading).replace("伟大航路人物档案馆", "伟大航路\n人物档案馆") : currentChapter.value.heading);
+const filteredCharacters = computed(() => {
+  const term = query.value.trim().toLocaleLowerCase();
+  return chapterCharacters(characters.value, chapter.value).filter((c) =>
+    [c.name, c.epithet, c.faction, c.description, c.ability].join(" ").toLocaleLowerCase().includes(term),
+  );
 });
+const featuredCharacter = computed(() => characters.value.find((c) => c.name.includes("路飞")) ?? characters.value[0]);
+const assetSourcesUrl = `${import.meta.env.BASE_URL}gallery/artifacts/ASSET_SOURCES.md`;
+const selectedSlot = computed(() => selectedCharacter.value ? characters.value.findIndex((c) => c.id === selectedCharacter.value!.id) + 1 : 0);
+const selectedArtifactSlot = computed(() => {
+  const index = artifacts.findIndex((item) => item.id === selectedArtifact.value?.id);
+  return index >= 0 ? index + 1 : 0;
+});
+const ordinal = (n: number) => String(n).padStart(2, "0");
+const slotOf = (character: GalleryCharacter) => characters.value.findIndex((c) => c.id === character.id) + 1;
+const mapY = (z: number) => navigation.value ? 18 + (z - navigation.value.hall.minZ) / (navigation.value.hall.maxZ - navigation.value.hall.minZ) * 224 : 0;
+const mapX = (x: number) => 90 + x * 11;
+const markers = computed(() => (navigation.value?.markers ?? []).filter((m) => m.screenY > 18 && m.screenY < 80 && m.screenX < 80).slice(0, 4));
 
 function supportsGallery() {
-  if (
-    innerWidth < 1024 ||
-    !matchMedia("(hover: hover) and (pointer: fine)").matches ||
-    !("pointerLockElement" in document)
-  )
-    return false;
+  if (innerWidth < 1024 || !matchMedia("(hover: hover) and (pointer: fine)").matches || !("pointerLockElement" in document)) return false;
   const canvas = document.createElement("canvas");
   const gl = canvas.getContext("webgl2");
   if (!gl) return false;
   gl.getExtension("WEBGL_lose_context")?.loseContext();
   return true;
 }
-
 function fallback(reason = "") {
   notice.value = reason;
   desktopSupported.value = false;
-  entered.value = locked.value = sceneLoading.value = false;
+  locked.value = sceneLoading.value = false;
+  activeArtifact.value = null;
+  activeCharacter.value = null;
+  resumeAfterDialog = false;
   scene?.dispose();
   scene = null;
+  if (view.value === "tour") view.value = "archive";
 }
-
 async function loadGallery() {
   const run = ++generation;
   scene?.dispose();
@@ -80,24 +81,19 @@ async function loadGallery() {
   loading.value = true;
   error.value = "";
   notice.value = "";
-  entered.value = locked.value = false;
+  locked.value = false;
   activeCharacter.value = null;
+  activeSlot.value = null;
+  activeArtifact.value = null;
+  selectedCharacter.value = null;
+  selectedArtifact.value = null;
   navigation.value = null;
   try {
     const data = await fetchGallery();
     if (run !== generation) return;
-    gallery.value = {
-      ...data,
-      characters: data.characters
-        .filter((item) => item.is_visible)
-        .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
-        .slice(0, 40),
-    };
+    gallery.value = { ...data, characters: data.characters.filter((c) => c.is_visible).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).slice(0, 40) };
   } catch {
-    if (run === generation) {
-      loading.value = false;
-      error.value = "人物档案读取失败，请稍后重试。";
-    }
+    if (run === generation) { loading.value = false; error.value = "人物档案暂时无法读取，请重试。"; }
     return;
   }
   loading.value = false;
@@ -107,844 +103,246 @@ async function loadGallery() {
   await nextTick();
   if (run !== generation || !sceneRoot.value) return;
   try {
-    const current = new GalleryScene(
-      sceneRoot.value,
-      characters.value,
-      matchMedia("(prefers-reduced-motion: reduce)").matches,
-      {
-        onActiveCharacter(character, slot) {
-          activeCharacter.value = character;
-          activeSlot.value = slot;
-        },
-        onLockChange(value) {
-          locked.value = value;
-        },
-        onOpenCharacter: openCharacter,
-        onNavigation(state) {
-          navigation.value = state;
-        },
-        onUnavailable: fallback,
-      },
-    );
+    const { GalleryScene: Scene } = await import("../gallery/GalleryScene");
+    if (run !== generation || !sceneRoot.value) return;
+    const current = new Scene(sceneRoot.value, characters.value, matchMedia("(prefers-reduced-motion: reduce)").matches, {
+      onActiveCharacter(character, slot) { activeCharacter.value = character; activeSlot.value = slot; },
+      onActiveArtifact(artifact) { activeArtifact.value = artifact; },
+      onLockChange(value) { locked.value = value; },
+      onOpenCharacter: openCharacter,
+      onOpenArtifact: openArtifact,
+      onNavigation(state) { navigation.value = state; },
+      onUnavailable: fallback,
+    });
     scene = current;
+    current.setRunning(false);
     await current.ready;
-    if (run !== generation) {
-      current.dispose();
-      return;
-    }
+    if (run !== generation) { current.dispose(); return; }
     sceneLoading.value = false;
   } catch {
-    if (run === generation) fallback("船舱暂时无法载入，人物档案仍可查阅。");
+    if (run === generation) fallback("实时展舱暂时无法开启，仍可阅读图志和人物档案。");
   }
 }
-
+function navigate(next: View) {
+  if (next !== "tour") { scene?.unlock(); scene?.setRunning(false); }
+  view.value = next;
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+function showArchive() {
+  chapter.value = 0;
+  query.value = "";
+  navigate("archive");
+}
+function searchArchive() {
+  showArchive();
+  void nextTick(() => searchInput.value?.focus());
+}
+function selectChapter(index: number) {
+  chapter.value = index;
+  query.value = "";
+}
 function startTour() {
-  entered.value = true;
-  scene?.lock();
+  if (!desktopSupported.value || !scene) { showArchive(); return; }
+  if (sceneLoading.value) return;
+  view.value = "tour";
+  scene.setRunning(true);
+  scene.lock();
 }
-function toggleTour() {
-  if (locked.value) scene?.unlock();
-  else scene?.lock();
-}
-function openCharacter(character: GalleryCharacter, slot: number | null = activeSlot.value) {
+function toggleTour() { if (locked.value) scene?.unlock(); else scene?.lock(); }
+function openCharacter(character: GalleryCharacter) {
   resumeAfterDialog = locked.value;
+  artifactDialog.value?.close();
+  selectedArtifact.value = null;
   selectedCharacter.value = character;
-  selectedSlot.value = slot;
   scene?.unlock();
   void nextTick(() => detailDialog.value?.showModal());
 }
 function closeCharacter() {
   detailDialog.value?.close();
   selectedCharacter.value = null;
-  selectedSlot.value = null;
-  if (resumeAfterDialog) scene?.lock();
+  if (resumeAfterDialog && view.value === "tour") scene?.lock();
+  resumeAfterDialog = false;
 }
-function imageError(event: Event) {
-  (event.currentTarget as HTMLImageElement).hidden = true;
+function openArtifact(artifact: MuseumArtifact) {
+  resumeAfterDialog = locked.value;
+  detailDialog.value?.close();
+  selectedCharacter.value = null;
+  selectedArtifact.value = artifact;
+  scene?.unlock();
+  void nextTick(() => artifactDialog.value?.showModal());
 }
-function resizeDevice() {
-  if (innerWidth < 1024 && scene) fallback();
+function closeArtifact() {
+  artifactDialog.value?.close();
+  selectedArtifact.value = null;
+  if (resumeAfterDialog && view.value === "tour") scene?.lock();
+  resumeAfterDialog = false;
 }
+function openActiveDisplay() {
+  if (activeArtifact.value) openArtifact(activeArtifact.value);
+  else if (activeCharacter.value) openCharacter(activeCharacter.value);
+}
+function adjacentCharacter(delta: number) {
+  const index = characters.value.findIndex((c) => c.id === selectedCharacter.value?.id);
+  const character = characters.value[(index + delta + characters.value.length) % characters.value.length];
+  if (character) { selectedCharacter.value = character; detailDialog.value?.scrollTo({ top: 0 }); }
+}
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch { notice.value = "当前浏览器未允许全屏，可继续窗口参观。"; }
+}
+const updateFullscreen = () => { fullscreen.value = !!document.fullscreenElement; };
+function resizeDevice() { if (innerWidth < 1024 && scene) fallback(); }
 onMounted(() => {
   void loadGallery();
   window.addEventListener("resize", resizeDevice);
+  document.addEventListener("fullscreenchange", updateFullscreen);
 });
 onBeforeUnmount(() => {
   generation++;
   scene?.dispose();
-  scene = null;
   window.removeEventListener("resize", resizeDevice);
+  document.removeEventListener("fullscreenchange", updateFullscreen);
 });
 </script>
 
 <template>
-  <main class="gallery-page">
-    <section v-if="loading || error" class="gallery-status" :role="error ? 'alert' : 'status'">
-      <OceanIcon :name="error ? 'warning' : 'gallery'" :size="48" />
-      <h1>{{ error ? "展馆暂未开启" : "正在开启展馆" }}</h1>
-      <p v-if="error">{{ error }}</p>
-      <div class="gallery-actions">
-        <button v-if="error" class="primary" @click="loadGallery">重新读取</button>
-        <RouterLink class="secondary" to="/"
-          ><OceanIcon name="home" :size="18" />返回博客</RouterLink
-        >
+  <main class="gallery-page" :class="'view-' + view">
+    <div v-if="desktopSupported" ref="sceneRoot" class="gallery-scene-root" :class="{ 'scene-visible': view === 'tour' }" :aria-hidden="view !== 'tour'"></div>
+
+    <header class="gallery-topbar">
+      <nav class="museum-navigation" aria-label="展馆导航">
+        <button :class="{ active: view === 'entry' }" :aria-current="view === 'entry' ? 'page' : undefined" @click="navigate('entry')">首页</button>
+        <button :class="{ active: view === 'archive' }" :aria-current="view === 'archive' ? 'page' : undefined" @click="showArchive">人物档案</button>
+        <button :class="{ active: view === 'story' }" :aria-current="view === 'story' ? 'page' : undefined" @click="navigate('story')">航海图志</button>
+        <button :class="{ active: view === 'moments' }" :aria-current="view === 'moments' ? 'page' : undefined" @click="navigate('moments')">经典时刻</button>
+        <RouterLink to="/about">关于本站</RouterLink>
+      </nav>
+      <button class="header-search" aria-label="搜索人物档案" @click="searchArchive"><Search :size="18" /><span>搜索角色、篇章或关键词…</span></button>
+      <p class="header-motto">为每一个热爱的灵魂，留下一段航海的证明。</p>
+      <RouterLink class="header-exit" to="/" aria-label="返回航海日志"><ArrowLeft :size="17" /></RouterLink>
+    </header>
+
+    <section v-show="view === 'entry'" class="museum-entry" aria-label="展馆序厅">
+      <div class="entry-stage">
+        <div :key="chapter" class="entry-copy">
+          <h1>{{ title }}</h1>
+          <p class="entry-intro">{{ currentChapter.description }}</p>
+          <p class="entry-note">{{ currentChapter.note }}</p>
+          <button class="brass-button" :disabled="loading || (chapter === 0 && desktopSupported && sceneLoading)" @click="chapter === 0 ? startTour() : navigate('story')">
+            <i aria-hidden="true"></i>{{ loading ? '正在开馆' : chapter > 0 ? '阅读本章' : sceneLoading ? '展舱准备中' : '开始参观' }}<ArrowRight :size="22" /><i aria-hidden="true"></i>
+          </button>
+          <button class="entry-archive-link" @click="showArchive">浏览全部人物档案 <MoveUpRight :size="13" /></button>
+          <p v-if="error" class="entry-message" role="alert">{{ error }} <button @click="loadGallery">重新读取</button></p>
+          <p v-else-if="notice" class="entry-message" role="status">{{ notice }}</p>
+        </div>
+        <div class="entry-visual">
+          <div class="entry-image">
+            <img v-show="chapter === 0" class="cabin-backdrop" :src="museumAsset('collection-interior.webp')" alt="深海色典藏舱中，草帽、和道一文字、橡胶果实与梅利号围绕 ONE PIECE 徽标陈列" fetchpriority="high" />
+            <div v-if="chapter > 0" class="chapter-backdrop chapter-art" :class="'chapter-art-' + chapter" role="img" :aria-label="currentChapter.title + '航路插画'"></div>
+          </div>
+          <div class="entry-visual-caption">
+            <button v-if="chapter === 0 && featuredCharacter" class="featured-label" @click="openCharacter(featuredCharacter)">
+              <strong>{{ featuredCharacter.name }}</strong><span>{{ featuredCharacter.quote || '走进人物的故事，重访大海上的梦想。' }}</span><ArrowRight :size="16" />
+            </button>
+            <span v-else class="entry-chapter-caption">{{ currentChapter.subtitle }}</span>
+            <div class="entry-tools">
+              <span>{{ chapter === 0 ? '常设展 · 人物典藏' : currentChapter.title }}</span>
+              <button :aria-label="fullscreen ? '退出全屏' : '全屏欣赏'" @click="toggleFullscreen"><Minimize v-if="fullscreen" :size="17" /><Maximize v-else :size="17" /></button>
+            </div>
+          </div>
+        </div>
       </div>
+      <footer class="exhibition-dock">
+        <ol class="archive-rail" aria-label="展馆章节">
+          <li v-for="(item, index) in chapters" :key="item.title">
+            <button :class="{ active: chapter === index }" :aria-pressed="chapter === index" @click="selectChapter(index)">
+              <span class="chapter-art" :class="'chapter-art-' + index"></span>
+              <span class="chapter-number">{{ ordinal(index + 1) }}</span>
+              <span class="chapter-heading"><strong>{{ item.title }}</strong><small>{{ ['馆藏序章', '梦想起点', '伙伴与远方', '时代回声'][index] }}</small></span>
+              <span class="chapter-caption">{{ item.subtitle }}</span>
+            </button>
+          </li>
+        </ol>
+        <div class="dock-compass">
+          <GalleryCompass :heading="chapter * 45" />
+          <div><small>当前方位</small><strong>{{ currentChapter.title }}</strong><i></i><span>第 {{ ordinal(chapter + 1) }} 章 / 共 04 章</span><p>伟大的航路，永不止步。</p></div>
+        </div>
+      </footer>
     </section>
 
-    <template v-else-if="gallery">
-      <section v-if="desktopSupported" class="gallery-experience" aria-label="旗舰船舱展馆">
-        <div ref="sceneRoot" class="gallery-scene-root"></div>
-        <header class="gallery-topbar">
-          <RouterLink to="/" class="exit-link"
-            ><OceanIcon name="previous" :size="22" />返回博客</RouterLink
-          >
-          <span class="hall-name">{{ gallery.settings.hall_name }}</span>
-          <button v-if="entered" class="secondary compact" @click="toggleTour">
-            {{ locked ? "暂停漫游" : "继续漫游" }}
-          </button>
-          <span v-else class="gallery-count">{{ characters.length }} / 40</span>
-        </header>
-
-        <div
-          v-if="!entered || (!locked && !selectedCharacter)"
-          class="entry-layer"
-          :class="{ paused: entered }"
-        >
-          <div class="entry-copy">
-            <img
-              v-if="gallery.settings.show_logo && gallery.settings.logo_url && !entered"
-              class="entry-logo"
-              :src="localPosterUrl(gallery.settings.logo_url)"
-              alt="展馆 Logo"
-              width="72"
-              height="72"
-              @error="imageError"
-            />
-            <h1>{{ entered ? "漫游已暂停" : gallery.settings.hall_name }}</h1>
-            <p>{{ entered ? navigation?.zone : gallery.settings.entry_title }}</p>
-            <div class="gallery-actions">
-              <button class="primary" :disabled="sceneLoading" @click="startTour">
-                <OceanIcon name="next" :size="22" />{{
-                  sceneLoading ? "船舱载入中" : entered ? "继续漫游" : "进入展馆"
-                }}
-              </button>
-              <button class="secondary" @click="fallback()">
-                <OceanIcon name="archive" :size="20" />人物档案
-              </button>
-            </div>
-            <p v-if="!characters.length" class="empty-note">展馆正在布展</p>
-          </div>
-        </div>
-
-        <template v-if="entered && navigation && !selectedCharacter">
-          <aside class="gallery-minimap" aria-label="船舱航图">
-            <div class="map-title">
-              <OceanIcon name="location" :size="20" /><strong>{{ navigation.zone }}</strong
-              ><span>{{ characters.length }} 位</span>
-            </div>
-            <svg viewBox="0 0 180 260" role="img" aria-label="船舱、当前所在位置与视野内展位">
-              <path
-                :d="`M 90 18 L 145 ${mapY(navigation.hall.cabinFront - 3)} L 145 228 Q 145 242 130 242 L 50 242 Q 35 242 35 228 L 35 ${mapY(navigation.hall.cabinFront - 3)} Z`"
-                fill="#d9e5de"
-                fill-opacity=".12"
-                stroke="#92bfb2"
-                stroke-width="1.2"
-              />
-              <path
-                :d="`M 35 ${mapY(navigation.hall.cabinFront)} H 145 M 35 ${mapY(navigation.hall.cabinBack)} H 145`"
-                stroke="#92bfb2"
-                stroke-dasharray="3 4"
-              />
-              <path
-                d="M 90 30 V 232"
-                stroke="#d9e5de"
-                stroke-opacity=".25"
-                stroke-dasharray="2 5"
-              />
-              <circle
-                v-for="marker in navigation.markers"
-                :key="marker.slot"
-                :cx="mapX(marker.x)"
-                :cy="mapY(marker.z)"
-                r="3"
-                :fill="marker.near ? '#ffd593' : '#a1cbbb'"
-              >
-                <title>{{ marker.slot }} · {{ marker.name }}</title>
-              </circle>
-              <g
-                :transform="`translate(${mapX(navigation.x)}, ${mapY(navigation.z)}) rotate(${(navigation.heading * 180) / Math.PI})`"
-              >
-                <path
-                  d="M 0 -8 L 5 5 L 0 2 L -5 5 Z"
-                  fill="#ff8f79"
-                  stroke="#fff3df"
-                  stroke-width="1"
-                />
-              </g>
-              <text x="90" y="10" fill="#d4e5dd" text-anchor="middle" font-size="8">船首</text>
-              <text x="90" y="255" fill="#d4e5dd" text-anchor="middle" font-size="8">船尾</text>
-            </svg>
-          </aside>
-          <template v-if="locked">
-            <div
-              class="gallery-crosshair"
-              :class="{ active: activeCharacter }"
-              aria-hidden="true"
-            ></div>
-            <div
-              v-for="marker in markers"
-              :key="marker.slot"
-              class="gallery-nav-marker"
-              :class="{ near: marker.near }"
-              :style="{ left: `${marker.screenX}%`, top: `${marker.screenY}%` }"
-              aria-hidden="true"
-            >
-              <b>{{ String(marker.slot).padStart(2, "0") }}</b
-              ><span>{{ marker.distance }} m</span>
-            </div>
-            <button
-              v-if="activeCharacter"
-              class="gallery-active-prompt"
-              @click="openCharacter(activeCharacter)"
-            >
-              <span>{{ String(activeSlot).padStart(2, "0") }}</span
-              ><strong>{{ activeCharacter.name }}</strong
-              ><span>查看档案</span><OceanIcon name="next" :size="20" />
-            </button>
-          </template>
-        </template>
-      </section>
-
-      <section v-else class="gallery-fallback">
-        <header class="fallback-header">
-          <div>
-            <h1>{{ gallery.settings.hall_name }}</h1>
-            <p>{{ gallery.settings.entry_title }}</p>
-          </div>
-          <RouterLink class="secondary" to="/"
-            ><OceanIcon name="home" :size="18" />返回博客</RouterLink
-          >
-        </header>
-        <p v-if="notice" class="gallery-notice" role="status">
-          {{ notice }} <button class="text-button" @click="loadGallery">重试</button>
-        </p>
-        <div v-if="characters.length" class="fallback-grid">
-          <article
-            v-for="(character, index) in characters"
-            :key="character.id"
-            class="fallback-item"
-          >
-            <button
-              class="poster-button"
-              :aria-label="`查看${character.name}档案`"
-              @click="openCharacter(character, index + 1)"
-            >
-              <span class="poster-placeholder"
-                ><small>{{ String(index + 1).padStart(2, "0") }}</small
-                ><strong>{{ character.name }}</strong
-                ><span>{{ character.bounty }}</span></span
-              >
-              <img
-                v-if="character.poster_url"
-                :src="localPosterUrl(character.poster_url)"
-                :alt="`${character.name}海报`"
-                width="512"
-                height="768"
-                loading="lazy"
-                decoding="async"
-                @error="imageError"
-              />
-            </button>
-            <div class="fallback-copy">
-              <h2>{{ character.name }}</h2>
-              <p>{{ character.epithet }} · {{ character.faction }}</p>
-              <button class="text-button" @click="openCharacter(character, index + 1)">
-                查看档案<OceanIcon name="next" :size="18" />
-              </button>
-            </div>
-          </article>
-        </div>
-        <p v-else class="fallback-empty">展馆正在布展</p>
-      </section>
-
-      <dialog
-        ref="detailDialog"
-        class="gallery-character-dialog"
-        aria-labelledby="character-title"
-        @cancel.prevent="closeCharacter"
-      >
-        <article v-if="selectedCharacter" class="character-record">
-          <button class="dialog-close secondary" autofocus @click="closeCharacter">关闭</button>
-          <div class="dialog-poster">
-            <div class="poster-placeholder">
-              <small>{{ String(selectedSlot).padStart(2, "0") }}</small
-              ><strong>{{ selectedCharacter.name }}</strong
-              ><span>{{ selectedCharacter.bounty }}</span>
-            </div>
-            <img
-              v-if="selectedCharacter.poster_url"
-              :src="localPosterUrl(selectedCharacter.poster_url)"
-              :alt="`${selectedCharacter.name}海报`"
-              width="512"
-              height="768"
-              decoding="async"
-              @error="imageError"
-            />
-          </div>
-          <div class="dialog-copy">
-            <h2 id="character-title">{{ selectedCharacter.name }}</h2>
-            <p class="character-meta">
-              {{ selectedCharacter.epithet }} · {{ selectedCharacter.faction }}
-            </p>
-            <dl>
-              <div>
-                <dt>悬赏</dt>
-                <dd>{{ selectedCharacter.bounty }}</dd>
-              </div>
-              <div>
-                <dt>能力</dt>
-                <dd>{{ selectedCharacter.ability }}</dd>
-              </div>
-            </dl>
-            <p class="character-description">{{ selectedCharacter.description }}</p>
-            <blockquote>{{ selectedCharacter.quote }}</blockquote>
-          </div>
+    <section v-if="view === 'archive'" class="gallery-fallback">
+      <div class="collection-heading"><button class="quiet-button" @click="navigate('entry')"><ArrowLeft :size="16" />返回序厅</button><span>THE COLLECTION · {{ ordinal(characters.length) }} RECORDS</span></div>
+      <header class="fallback-header"><div><h1>人物档案</h1><p>他们的名字，构成了一个时代的航海史。</p></div><div class="collection-count"><strong>{{ ordinal(characters.length) }}</strong><span>人物档案 / 现正展出</span></div></header>
+      <div class="archive-controls">
+        <nav aria-label="档案章节筛选"><button v-for="(item, index) in chapters" :key="item.title" :class="{ active: chapter === index }" :aria-pressed="chapter === index" @click="selectChapter(index)">{{ index === 0 ? '全部馆藏' : item.title }}</button></nav>
+        <label class="archive-search"><Search :size="17" /><input ref="searchInput" v-model="query" type="search" placeholder="姓名、称号、能力…" aria-label="检索馆藏" /><span>{{ filteredCharacters.length }} 件</span></label>
+      </div>
+      <p v-if="loading" role="status" class="empty-state">正在读取馆藏…</p>
+      <div v-else-if="error" class="empty-state" role="alert"><p>{{ error }}</p><button class="quiet-button" @click="loadGallery">重新读取</button></div>
+      <p v-if="notice" class="gallery-notice" role="status">{{ notice }}</p>
+      <div v-if="filteredCharacters.length" class="fallback-grid">
+        <article v-for="character in filteredCharacters" :key="character.id" class="fallback-item">
+          <button class="poster-button" :aria-label="'查看' + character.name + '档案'" @click="openCharacter(character)"><GalleryPortrait :record-number="slotOf(character)" :character="character" /></button>
+          <div class="fallback-copy"><small>GL · {{ String(slotOf(character)).padStart(3, '0') }}</small><h2>{{ character.name }}</h2><p>{{ character.epithet }} · {{ character.faction }}</p><button class="text-button" @click="openCharacter(character)">查看档案<ArrowRight :size="16" /></button></div>
         </article>
-      </dialog>
-    </template>
+      </div>
+      <div v-else-if="!loading && !error" class="empty-state"><BookOpen :size="32" /><h2>{{ query ? '没有找到这份档案' : '这一章正在布展' }}</h2><p>{{ query ? '试试人物姓名、称号或能力关键词。' : '可以先在全部馆藏中继续参观。' }}</p><button class="quiet-button" @click="showArchive">查看全部馆藏</button></div>
+      <p class="collection-footnote">馆藏资料由本站整理维护 · 默认人物插画为 AI 生成同人作品</p>
+      <section class="artifact-catalog" aria-labelledby="artifact-catalog-title">
+        <h2 id="artifact-catalog-title">道具典藏</h2>
+        <p>从一顶草帽到一艘船，重访航程中的信物。</p>
+        <ul><li v-for="artifact in artifacts" :key="artifact.id"><button @click="openArtifact(artifact)"><span><strong>{{ artifact.title }}</strong><small>{{ artifact.subtitle }}</small></span><ArrowRight :size="18" /></button></li></ul>
+      </section>
+      <aside class="gallery-asset-credits" aria-label="展馆素材来源">
+        <p>展馆标识：<a :href="logoCredit.modelUrl" target="_blank" rel="noreferrer">{{ logoCredit.title }}</a>，作者 <a :href="logoCredit.authorUrl" target="_blank" rel="noreferrer">{{ logoCredit.author }}</a> · <a :href="logoCredit.licenseUrl" target="_blank" rel="noreferrer">{{ logoCredit.license }}</a>。{{ logoCredit.changes }}</p>
+        <p>道具模型作者与许可见各展签。<a :href="assetSourcesUrl" target="_blank" rel="noreferrer">完整素材来源与处理记录</a></p>
+      </aside>
+    </section>
+
+    <section v-if="view === 'story' || view === 'moments'" class="editorial-page">
+      <div class="collection-heading"><button class="quiet-button" @click="navigate('entry')"><ArrowLeft :size="16" />返回序厅</button><span>{{ view === 'story' ? 'THE VOYAGE' : 'VOICES OF THE SEA' }}</span></div>
+      <header class="editorial-heading"><h1>{{ view === 'story' ? '航海图志' : '经典时刻' }}</h1><p>{{ view === 'story' ? '把相遇写进航线，把梦想留给大海。' : '一句话，记住一个人；一个约定，驶过整片海。' }}</p></header>
+      <template v-if="view === 'story'">
+        <nav class="story-tabs" aria-label="阅读章节"><button v-for="(item, index) in chapters" :key="item.title" :aria-pressed="chapter === index" :class="{ active: chapter === index }" @click="selectChapter(index)">{{ ordinal(index + 1) }} <span>{{ item.title }}</span></button></nav>
+        <article :key="chapter" class="chapter-spread"><div class="chapter-landscape chapter-art" :class="'chapter-art-' + chapter" role="img" :aria-label="currentChapter.title + '航路插画'"></div><div class="chapter-essay"><h2>{{ currentChapter.title }}</h2><p>{{ currentChapter.story }}</p><button class="text-button" @click="navigate('archive')">查阅本章人物<ArrowRight :size="17" /></button></div></article>
+      </template>
+      <div v-else class="moments-list"><article v-for="character in characters.filter(c => c.quote.trim())" :key="character.id"><button class="moment-portrait" :aria-label="'查看' + character.name + '档案'" @click="openCharacter(character)"><GalleryPortrait :record-number="slotOf(character)" :character="character" /></button><div><span>GL · {{ String(slotOf(character)).padStart(3, '0') }}</span><blockquote>“{{ character.quote }}”</blockquote><button @click="openCharacter(character)">{{ character.name }}<ArrowRight :size="18" /></button></div></article><p v-if="!characters.some(c => c.quote.trim())" class="empty-state">馆藏语录正在整理，稍后再来看看。</p></div>
+    </section>
+
+    <section v-if="view === 'tour'" class="tour-interface" aria-label="实时船长舱漫游">
+      <div v-if="!locked && !selectedCharacter && !selectedArtifact" class="pause-layer"><div><span>THE CAPTAIN'S CABIN</span><h1>在这里，继续航行。</h1><p>WASD / 方向键移动 · 鼠标观察<br />靠近画像或展品后，按 E 或点击查看展签 / 档案 · Esc 暂停</p><div class="gallery-actions"><button class="brass-button" @click="toggleTour">继续漫游<ArrowRight :size="20" /></button><button class="quiet-button" @click="navigate('entry')">返回序厅</button></div></div></div>
+      <div class="tour-readout"><span>实时漫游 · {{ navigation?.zone || '船长舱' }}</span><strong>{{ activeArtifact?.title || activeCharacter?.name || '循着光，走进他们的故事。' }}</strong><small>WASD 移动 · E 查看展签 / 档案 · Esc 暂停</small></div>
+      <aside v-if="navigation" class="gallery-minimap" aria-label="船舱航图"><div class="map-title"><strong>船舱航图</strong><span>{{ ordinal(characters.length) }} 位</span></div><svg viewBox="0 0 180 260" role="img" aria-label="当前所在位置与展位"><path d="M35 18H145V242H35Z" fill="#c9a55c0a" stroke="#b99a60" stroke-width="1" /><path d="M90 24V235" stroke="#b99a6050" stroke-dasharray="2 5" /><rect v-for="artifact in artifacts" :key="artifact.id" :x="mapX(artifact.x) - 2.5" :y="mapY(artifact.z) - 2.5" width="5" height="5" :fill="activeArtifact?.id === artifact.id ? '#f3d392' : '#bfa16e'" /><circle v-for="marker in navigation.markers" :key="marker.slot" :cx="mapX(marker.x)" :cy="mapY(marker.z)" r="3" :fill="marker.near ? '#f3d392' : '#948165'" /><g :transform="'translate(' + mapX(navigation.x) + ',' + mapY(navigation.z) + ') rotate(' + navigation.heading * 180 / Math.PI + ')'"><path d="M0 -8L5 5L0 2L-5 5Z" fill="#f5dca1" /></g><text x="90" y="11" fill="#c4ae88" text-anchor="middle" font-size="8">道具典藏舱</text><text x="90" y="255" fill="#c4ae88" text-anchor="middle" font-size="8">人物长廊</text></svg></aside>
+      <template v-if="locked"><div class="gallery-crosshair" :class="{ active: activeCharacter || activeArtifact }" aria-hidden="true"></div><div v-for="marker in markers" :key="marker.slot" class="gallery-nav-marker" :style="{ left: marker.screenX + '%', top: marker.screenY + '%' }" aria-hidden="true"><b>{{ ordinal(marker.slot) }}</b><span>{{ marker.distance }} m</span></div><button v-if="activeCharacter || activeArtifact" class="gallery-active-prompt" @click="openActiveDisplay"><span>{{ activeArtifact ? 'EX' : ordinal(activeSlot || 0) }}</span><strong>{{ activeArtifact?.title || activeCharacter?.name }}</strong><span>E 查看{{ activeArtifact ? '展签' : '档案' }}</span><ArrowRight :size="18" /></button></template>
+    </section>
+
+    <dialog ref="detailDialog" class="gallery-character-dialog" aria-labelledby="character-title" @cancel.prevent="closeCharacter" @click="event => event.target === event.currentTarget && closeCharacter()">
+      <article v-if="selectedCharacter" class="character-record">
+        <button class="dialog-close" aria-label="关闭" autofocus @click="closeCharacter"><X :size="20" /></button>
+        <div class="dialog-poster"><GalleryPortrait :record-number="selectedSlot" :character="selectedCharacter" /><span>GRAND LINE · COLLECTION</span></div>
+        <div class="dialog-copy"><span class="record-code">人物档案 / GL · {{ String(selectedSlot).padStart(3, '0') }}</span><h2 id="character-title">{{ selectedCharacter.name }}</h2><p class="character-meta">{{ selectedCharacter.epithet }} · {{ selectedCharacter.faction }}</p><dl><div><dt>悬赏记录</dt><dd>{{ selectedCharacter.bounty || '暂无记录' }}</dd></div><div><dt>能力档案</dt><dd>{{ selectedCharacter.ability || '暂无记录' }}</dd></div></dl><p class="character-description">{{ selectedCharacter.description || '人物履历正在整理。' }}</p><blockquote v-if="selectedCharacter.quote">“{{ selectedCharacter.quote }}”</blockquote><nav v-if="characters.length > 1" class="record-pagination" aria-label="前后人物"><button @click="adjacentCharacter(-1)"><ArrowLeft :size="16" />上一份</button><span>{{ ordinal(selectedSlot) }} / {{ ordinal(characters.length) }}</span><button @click="adjacentCharacter(1)">下一份<ArrowRight :size="16" /></button></nav></div>
+      </article>
+    </dialog>
+
+    <dialog ref="artifactDialog" class="gallery-character-dialog gallery-artifact-dialog" aria-labelledby="artifact-title" @cancel.prevent="closeArtifact" @click="event => event.target === event.currentTarget && closeArtifact()">
+      <article v-if="selectedArtifact" class="artifact-record">
+        <button class="dialog-close" aria-label="关闭" autofocus @click="closeArtifact"><X :size="20" /></button>
+        <div class="dialog-copy artifact-copy">
+          <h2 id="artifact-title">{{ selectedArtifact.title }}</h2><p class="artifact-subtitle">{{ selectedArtifact.subtitle }}</p><p class="character-description">{{ selectedArtifact.description }}</p>
+          <dl class="artifact-features">
+            <div><dt>展品看点</dt><dd><ul><li v-for="feature in selectedArtifact.features" :key="feature">{{ feature }}</li></ul></dd></div>
+            <div v-if="selectedArtifact.modelCredit" class="artifact-model-credit">
+              <dt>模型作者与许可</dt>
+              <dd><a :href="selectedArtifact.modelCredit.modelUrl" target="_blank" rel="noreferrer">{{ selectedArtifact.modelCredit.title }}</a> · <a :href="selectedArtifact.modelCredit.authorUrl" target="_blank" rel="noreferrer">{{ selectedArtifact.modelCredit.author }}</a><br /><a :href="selectedArtifact.modelCredit.licenseUrl" target="_blank" rel="noreferrer">{{ selectedArtifact.modelCredit.license }}</a><small>{{ selectedArtifact.modelCredit.changes }}</small></dd>
+            </div>
+          </dl>
+          <footer class="artifact-footer"><span class="record-code">典藏展签 · {{ ordinal(selectedArtifactSlot) }} / {{ ordinal(artifacts.length) }}</span><a class="artifact-source" :href="selectedArtifact.source" target="_blank" rel="noreferrer">设定参考 · ONE PIECE.com<MoveUpRight :size="14" /></a></footer>
+        </div>
+      </article>
+    </dialog>
   </main>
 </template>
 
-<style scoped>
-.gallery-page {
-  min-height: 100dvh;
-  background: #edf3ee;
-  color: #193e37;
-  font-family: "Noto Sans SC", sans-serif;
-  letter-spacing: 0;
-}
-.gallery-page :is(button, a) {
-  -webkit-tap-highlight-color: transparent;
-}
-.gallery-page button {
-  font: inherit;
-  cursor: pointer;
-}
-.gallery-page :is(button, a):focus-visible {
-  outline: 3px solid #e76b51;
-  outline-offset: 4px;
-}
-.gallery-page ::selection {
-  background: #ffbaa3;
-  color: #173e35;
-}
-.gallery-page h1,
-.gallery-page h2 {
-  font-family: var(--display-font);
-  overflow-wrap: anywhere;
-  letter-spacing: 0;
-}
-.gallery-experience,
-.gallery-scene-root {
-  position: fixed;
-  inset: 0;
-}
-.gallery-scene-root :deep(canvas) {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.gallery-status {
-  min-height: 100dvh;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  padding: 24px;
-  text-align: center;
-}
-.gallery-status h1 {
-  font-size: 30px;
-}
-.gallery-status p {
-  line-height: 1.7;
-}
-.gallery-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.primary,
-.secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 46px;
-  padding: 10px 18px;
-  border-radius: 4px;
-  text-decoration: none;
-  box-sizing: border-box;
-  font-size: 14px;
-  font-weight: 700;
-}
-.primary {
-  background: #174e43;
-  border: 1px solid #a4cabb;
-  color: #fffaf0;
-}
-.primary:hover {
-  background: #276b5c;
-}
-.primary:disabled {
-  opacity: 0.65;
-  cursor: progress;
-}
-.secondary {
-  border: 1px solid #8ba69b;
-  color: #24473c;
-  background: #edf3eeef;
-}
-.secondary:hover {
-  background: #d8e9df;
-}
-.compact {
-  min-height: 36px;
-  padding: 6px 12px;
-}
-.gallery-topbar {
-  position: absolute;
-  z-index: 15;
-  inset: 0 0 auto;
-  display: grid;
-  grid-template-columns: 1fr minmax(0, 2fr) 1fr;
-  gap: 16px;
-  align-items: center;
-  min-height: 62px;
-  padding: 8px 26px;
-  background: #f0f5eeef;
-  border-bottom: 1px solid #69877980;
-  box-sizing: border-box;
-}
-.gallery-topbar > :last-child {
-  justify-self: end;
-}
-.exit-link {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  color: #24473c;
-  text-decoration: none;
-  font-size: 13px;
-}
-.hall-name {
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
-  font-weight: 700;
-}
-.gallery-count {
-  font:
-    12px "IBM Plex Mono",
-    monospace;
-}
-.entry-layer {
-  position: absolute;
-  inset: 62px 0 0;
-  z-index: 8;
-  display: flex;
-  align-items: flex-end;
-  padding: 5% 5% 48px;
-  box-sizing: border-box;
-  pointer-events: none;
-  background: #071e1215;
-}
-.entry-copy {
-  max-width: 580px;
-  color: #123a30;
-  text-shadow: 0 1px 2px #fffbee;
-  pointer-events: auto;
-}
-.entry-copy h1 {
-  -webkit-text-stroke: 1.5px #fffbee;
-  paint-order: stroke fill;
-  font-size: 42px;
-  line-height: 1.2;
-  margin: 12px 0;
-  max-width: 13ch;
-  text-wrap: balance;
-}
-.entry-copy p {
-  font-size: 15px;
-  line-height: 1.8;
-  max-width: 48ch;
-}
-.entry-copy .gallery-actions {
-  text-shadow: none;
-  margin-top: 22px;
-}
-.entry-logo {
-  width: 64px;
-  height: 64px;
-  object-fit: contain;
-}
-.entry-copy .empty-note {
-  font-size: 13px;
-}
-.paused .entry-copy h1 {
-  font-size: 34px;
-}
-.gallery-minimap {
-  position: absolute;
-  right: 22px;
-  top: 84px;
-  width: 190px;
-  height: 312px;
-  padding: 12px;
-  border: 1px solid #a8c5ae80;
-  border-radius: 4px;
-  box-sizing: border-box;
-  background: #143a32df;
-  color: #e0eee3;
-  pointer-events: none;
-  z-index: 9;
-}
-.map-title {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  font-size: 12px;
-}
-.map-title > span {
-  margin-left: auto;
-  font-size: 10px;
-  white-space: nowrap;
-}
-.gallery-minimap svg {
-  display: block;
-  width: 100%;
-  height: 266px;
-  margin-top: 4px;
-}
-.gallery-crosshair {
-  position: absolute;
-  z-index: 7;
-  top: 50%;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  border: 1px solid #244c3b;
-  border-radius: 50%;
-  background: #fffef1;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-.gallery-crosshair.active {
-  background: #ff9b76;
-  border-color: #fff6d5;
-}
-.gallery-nav-marker {
-  position: absolute;
-  z-index: 6;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  transform: translate(-50%, -50%);
-  padding: 4px 7px;
-  border-bottom: 1px solid #bfd7c2;
-  color: #fffbee;
-  background: #173e34cb;
-  font:
-    11px "IBM Plex Mono",
-    monospace;
-  pointer-events: none;
-  white-space: nowrap;
-}
-.gallery-nav-marker.near {
-  color: #ffdb9a;
-  border-color: #ffdb9a;
-}
-.gallery-active-prompt {
-  position: absolute;
-  z-index: 10;
-  left: 50%;
-  bottom: 28px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: min(480px, calc(100% - 48px));
-  min-height: 54px;
-  padding: 12px 18px;
-  transform: translateX(-50%);
-  color: #fff7df;
-  background: #17483eee;
-  border: 1px solid #c6b27f;
-  border-radius: 4px;
-}
-.gallery-active-prompt strong {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  text-align: left;
-}
-.gallery-active-prompt span {
-  font-size: 12px;
-  flex-shrink: 0;
-}
-.gallery-fallback {
-  max-width: 1200px;
-  margin: auto;
-  padding: 32px 24px 64px;
-}
-.fallback-header {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 26px;
-  border-bottom: 1px solid #adc6b9;
-}
-.fallback-header h1 {
-  margin: 0 0 12px;
-  font-size: 34px;
-}
-.fallback-header p {
-  margin: 0;
-  color: #527266;
-  line-height: 1.7;
-}
-.fallback-header .secondary {
-  flex-shrink: 0;
-}
-.fallback-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 32px 26px;
-  padding-top: 28px;
-}
-.fallback-item {
-  min-width: 0;
-}
-.poster-button,
-.dialog-poster {
-  position: relative;
-  display: block;
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  background: #cbdcd1;
-  overflow: hidden;
-  border: 0;
-  padding: 0;
-  color: #355c52;
-}
-.poster-placeholder {
-  display: flex;
-  position: absolute;
-  inset: 0;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  text-align: center;
-  padding: 24px;
-  box-sizing: border-box;
-  overflow-wrap: anywhere;
-}
-.poster-placeholder small {
-  font:
-    56px "IBM Plex Mono",
-    monospace;
-  color: #5b8070;
-}
-.poster-placeholder strong {
-  font-family: var(--display-font);
-  font-size: 28px;
-  line-height: 1.4;
-}
-.poster-placeholder span {
-  font-size: 13px;
-}
-.poster-button img,
-.dialog-poster img {
-  display: block;
-  position: relative;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.fallback-copy {
-  padding: 16px 0;
-  border-bottom: 1px solid #adc6b9;
-}
-.fallback-copy h2 {
-  font-size: 24px;
-  margin: 0;
-}
-.fallback-copy p {
-  font-size: 13px;
-  line-height: 1.7;
-  color: #527266;
-}
-.text-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: none;
-  padding: 7px 0;
-  background: transparent;
-  color: #215647;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
-.gallery-notice {
-  padding: 14px 0;
-  font-size: 14px;
-  line-height: 1.7;
-}
-.fallback-empty {
-  text-align: center;
-  padding: 70px 12px;
-}
-.gallery-character-dialog {
-  position: fixed;
-  inset: 0;
-  width: min(960px, calc(100% - 32px));
-  max-height: calc(100dvh - 32px);
-  margin: auto;
-  padding: 0;
-  border: 1px solid #789688;
-  border-radius: 6px;
-  background: #f1f5ee;
-  color: #234737;
-  overflow: auto;
-  scrollbar-color: #7b9e8b #e5eee5;
-}
-.gallery-character-dialog::backdrop {
-  background: #071d18a6;
-}
-.character-record {
-  display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  align-items: start;
-}
-.dialog-close {
-  position: absolute;
-  z-index: 2;
-  top: 14px;
-  right: 14px;
-  min-height: 38px;
-}
-.dialog-copy {
-  padding: 60px 34px 32px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.dialog-copy h2 {
-  font-size: 32px;
-  line-height: 1.25;
-  margin: 0 0 12px;
-}
-.character-meta {
-  font-size: 14px;
-  line-height: 1.7;
-  color: #5b725d;
-}
-.dialog-copy dl {
-  display: grid;
-  gap: 16px;
-  border-top: 1px solid #b6c9b9;
-  border-bottom: 1px solid #b6c9b9;
-  padding: 20px 0;
-  margin: 24px 0;
-}
-.dialog-copy dt {
-  color: #647966;
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-.dialog-copy dd {
-  font-size: 15px;
-  margin: 0;
-  line-height: 1.7;
-}
-.character-description {
-  line-height: 1.9;
-  font-size: 15px;
-  white-space: pre-wrap;
-}
-.dialog-copy blockquote {
-  margin: 24px 0 0;
-  padding-top: 18px;
-  border-top: 1px solid #b6c9b9;
-  color: #387862;
-  line-height: 1.8;
-}
-@media (max-height: 680px) {
-  .gallery-minimap {
-    height: 250px;
-    width: 155px;
-  }
-  .gallery-minimap svg {
-    height: 204px;
-  }
-  .entry-layer {
-    padding-bottom: 24px;
-  }
-  .entry-logo {
-    display: none;
-  }
-  .entry-copy h1 {
-    font-size: 32px;
-  }
-}
-@media (max-width: 720px) {
-  .gallery-fallback {
-    padding: 24px 18px 40px;
-  }
-  .fallback-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 18px;
-  }
-  .fallback-header h1 {
-    font-size: 28px;
-  }
-  .fallback-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px 14px;
-  }
-  .fallback-copy h2 {
-    font-size: 19px;
-  }
-  .poster-placeholder {
-    padding: 12px;
-    gap: 10px;
-  }
-  .poster-placeholder strong {
-    font-size: 20px;
-  }
-  .poster-placeholder small {
-    font-size: 34px;
-  }
-  .character-record {
-    grid-template-columns: 1fr;
-  }
-  .dialog-poster {
-    max-width: 290px;
-    justify-self: center;
-  }
-  .dialog-copy {
-    padding: 28px 22px;
-  }
-  .dialog-copy h2 {
-    font-size: 28px;
-  }
-}
-@media (max-width: 380px) {
-  .fallback-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+<style scoped src="../gallery/gallery-page.css"></style>

@@ -1,0 +1,32 @@
+{
+  "id": "straw-hat",
+  "sourceFile": "luffys_straw_hat.glb",
+  "sourceSha256": "35faf7c8394d5b75593e54ed466e3f6308508cb7fa9fcf815db272a627aa6cac",
+  "sourceBytes": 78184,
+  "bytes": 69352,
+  "triangles": 1408,
+  "drawCalls": 1,
+  "blenderBounds": [
+    [
+      -0.5,
+      -0.4999999403953552,
+      1.862645149230957e-09
+    ],
+    [
+      0.5,
+      0.4999999403953552,
+      0.296379417181015
+    ]
+  ],
+  "source": {
+    "author": "Rayn_Snow (https://sketchfab.com/Rayn_Snow)",
+    "license": "CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)",
+    "source": "https://sketchfab.com/3d-models/luffys-straw-hat-ca7a5a97ec934b2984bd0ce28a392cae",
+    "title": "Luffy's Straw hat"
+  },
+  "changes": [
+    "统一单位、中心与落地位置",
+    "按材质合批",
+    "保留原始外形、颜色及贴图"
+  ]
+}

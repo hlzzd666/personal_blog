@@ -1,20 +1,23 @@
 # 展馆资源来源
 
-## 旗舰船舱
+## 当前实时船长舱
+
+建筑由 `web/src/gallery/MuseumRoom.ts` 创建，不再加载旧版整船 GLB。地板纹理由 Canvas 生成，运行时只加载以下三张建筑贴图：
 
 | 资源 | 用途 | 来源 |
 | --- | --- | --- |
-| `flagship/flagship.glb` | 船舱、前后甲板、相框 | 本地 Blender 4.2 建模；可复现脚本 `scripts/gallery/build_flagship.py` |
-| `flagship/materials/teak-*` | 地板柚木 | Image2 API 基于主视角图提取颜色纹理，再派生粗糙度与法线 |
-| `flagship/materials/walnut-*` | 拱肋、墙板胡桃木 | Image2 API 基于主视角图提取颜色纹理，再派生粗糙度与法线 |
-| `flagship/materials/brass-*` | 黄铜相框与连接件 | 确定性程序纹理，PBR 金属度 0.86 |
-| `flagship/materials/canvas-*` | 帆布顶 | 确定性程序织物纹理 |
-| `generated/calm-ocean-color-tile.png` | 海面 | 既有本地生成资源 |
+| `flagship/materials/walnut-color.jpg` | 胡桃木颜色 | Image2 API 从批准的主视角图提取 |
+| `flagship/materials/walnut-normal.png` | 胡桃木微表面 | 由颜色图估算法线，非实物扫描 |
+| `flagship/materials/brass-color.jpg` | 黄铜颜色 | 程序纹理，随机种子 61 |
 
-GLB 内嵌 12 张 PBR 图片。上述材质文件供重新建模使用，前台只请求 GLB 和海面纹理。天空使用 Three.js Sky，不使用远程图片。
+重建脚本为 `scripts/gallery/prepare_materials.py`，只输出上述三张图片及来源记录。主视角与胡桃木参考、提示词、生成记录保留在 `artifacts/gallery/reference/perspective/` 和 `walnut/`。
 
-主视角、俯视布局图、材质参考和生成记录保存在 `artifacts/gallery/reference/`；模型源文件、离线预览与验证报告保存在 `artifacts/gallery/model/`。接口模型为 `gpt-image-2`，元数据不包含密钥。完整提示词、实际输出尺寸和 SHA256 以相应生成目录为准。
+## 展品与人物
 
-## 资源清理
+独立展品模型见 [展品来源](artifacts/ASSET_SOURCES.md)，梅利号来源见 [模型来源](../models/ASSET_SOURCES.md)。第三方原始下载、导入后的 Blender 文件与许可均保留。
 
-`generated/` 仅保留当前旗舰船舱实际加载的海面纹理；此前海上步道/玻璃展馆使用的石材、旧相框、罗盘、玻璃、帆膜和日出全景资源已移除，避免进入前台静态资源包。
+`museum/` 中的章节与人物油画为非官方同人插画；`collection-interior.webp` 是当前实时场景截图，其第三方模型许可见展品来源。各图片的同名 JSON 记录素材来源。
+
+## 已退役资源
+
+已移除旧整船 GLB、旧海面图片、帆布/柚木贴图、未使用的粗糙度和黄铜法线、旧序厅背景，以及被第三方展品替代的自建草帽、果实、和道制作链。现有动态路径图标、字体子集、模型加载失败时的备用几何继续保留。

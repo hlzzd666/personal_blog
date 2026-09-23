@@ -1,0 +1,63 @@
+{
+  "operation": "edit",
+  "config": {
+    "api_key_configured": true,
+    "base_url": "https://suoxie.codes/v1",
+    "model": "gpt-image-2",
+    "model_family": "gpt-image-2",
+    "generation_endpoint": "https://suoxie.codes/v1/images/generations",
+    "edit_endpoint": "https://suoxie.codes/v1/images/edits",
+    "timeout": 600.0,
+    "max_retries": 0,
+    "verify_ssl": true,
+    "extra_header_names": []
+  },
+  "batch_mode": "single",
+  "input_images": [
+    "D:\\codex-test\\personal_blog\\web\\public\\gallery\\museum\\portraits.webp"
+  ],
+  "mask": null,
+  "requests": [
+    {
+      "model": "gpt-image-2",
+      "prompt": "Use case: stylized-concept / illustration-story.\nDeliverable: one standalone vertical 2:3 oil-painted portrait of Brook from One Piece, for the same virtual museum collection as the supplied reference atlas.\nImage 1 is a STYLE REFERENCE ONLY: preserve its warm old-master oil-paint texture, restrained amber illumination, deep umber background, confident visible brushwork, aged canvas grain, and recognizable anime character shapes. Do not reproduce the nine-panel grid or any of its characters.\nSubject: Brook, the elegant skeleton musician of the Straw Hat Pirates. A large rounded black afro surrounding an ivory skull, hollow dark eye sockets, narrow triangular nasal cavity, unmistakable broad toothy smile, tall weathered black top hat with a muted burgundy band. He is a friendly, distinguished pirate musician, not horror. Dark formal tailcoat, cream shirt and muted blue cravat, subtle antique-gold details. A violin and a single anatomically coherent skeletal hand appear discreetly at the lower edge to suggest his musical identity.\nComposition: exactly one character in a centered chest-up museum portrait, slight three-quarter turn while looking toward the viewer. Keep the entire top hat and afro inside the image, with generous breathing room above and on both sides. The face is the focal point, readable at thumbnail size. Similar portrait scale and visual weight to each individual panel in the reference; no inset images.\nLighting and palette: softly directional warm amber light on ivory bone, brown-black shadows, subdued gold and burgundy accents, simple mottled dark umber painted background. Maintain clear separation between black hair, hat, and background. Refined hand-painted finish, with visible canvas and impasto, not glossy 3D or photoreal human anatomy.\nText: none. No names, lettering, wanted-poster text, borders, frames, watermarks, logos, signatures, extra characters, extra arms or fingers, modern concert stage, neon lighting or collage. Output one finished portrait that visually belongs beside the existing nine oil paintings.",
+      "n": 1,
+      "size": "1024x1536",
+      "quality": "high",
+      "background": "auto",
+      "output_format": "png",
+      "moderation": "auto"
+    }
+  ],
+  "prompt_review": {
+    "profile": "illustration",
+    "operation": "edit",
+    "status": "warn",
+    "issues": [
+      {
+        "code": "edit-scope-not-surgical",
+        "severity": "warning",
+        "message": "The edit scope is not bounded with a 'change only X' instruction.",
+        "suggestion": "State the exact change, then add 'keep everything else the same.'"
+      }
+    ],
+    "features": {
+      "characters": 2068,
+      "has_labeled_sections": false,
+      "requests_text": false,
+      "mentions_text": true,
+      "has_exact_copy": false,
+      "declares_no_text": false,
+      "image_count": 1,
+      "has_mask": false,
+      "quality": "high",
+      "size": "1024x1536",
+      "background": "auto",
+      "model": "gpt-image-2",
+      "model_family": "gpt-image-2"
+    }
+  },
+  "warnings": [
+    "Prompt [edit-scope-not-surgical]: The edit scope is not bounded with a 'change only X' instruction."
+  ]
+}

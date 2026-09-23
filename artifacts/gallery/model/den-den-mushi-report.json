@@ -1,0 +1,22 @@
+{
+  "asset": "den-den-mushi",
+  "triangles": 67300,
+  "materials": 8,
+  "mesh_draw_calls": 8,
+  "dimensions_m": [
+    0.736,
+    1.2217,
+    0.9878
+  ],
+  "bytes": 1839532,
+  "embedded_textures": 2,
+  "front": "Blender -Y / glTF +Z",
+  "grounded": true,
+  "source": "Original Blender modelling; anime-inspired fan reconstruction",
+  "glass": null,
+  "glb_container_valid": true,
+  "glb_reimport_verified": true,
+  "imported_triangles": 67300,
+  "imported_mesh_count": 8,
+  "imported_floor_z": 0.0
+}

@@ -34,3 +34,7 @@ backend/uploads/
 /web.tar.gz
 /admin.tar.gz
 /backend.tar.gz
+
+# Local development diagnostics
+/.codex-screenshots/
+/.resume_work/

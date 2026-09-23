@@ -1,0 +1,32 @@
+{
+  "id": "one-piece-logo",
+  "sourceFile": "one_piece_logo.glb",
+  "sourceSha256": "059142bd7d99ba7a529892cc393429ba41d55233cdbdf218400575f4c11bde01",
+  "sourceBytes": 5159684,
+  "bytes": 5006204,
+  "triangles": 87266,
+  "drawCalls": 6,
+  "blenderBounds": [
+    [
+      -0.5,
+      -0.041324350982904434,
+      1.8735590856522322e-10
+    ],
+    [
+      0.49999988079071045,
+      0.04132436215877533,
+      0.3413117825984955
+    ]
+  ],
+  "source": {
+    "author": "eriklys (https://sketchfab.com/eriklys)",
+    "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+    "source": "https://sketchfab.com/3d-models/one-piece-logo-dd8815b7dba6496daac409b036c9e980",
+    "title": "One Piece logo"
+  },
+  "changes": [
+    "统一单位、中心与落地位置",
+    "按材质合批",
+    "保留原始外形、颜色及贴图"
+  ]
+}

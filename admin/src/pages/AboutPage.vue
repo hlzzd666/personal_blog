@@ -20,7 +20,7 @@ const emptyForm: AboutProfilePayload = {
   role: "",
   headline: "",
   bio: "",
-  avatar_url: "/owner-avatar.jpg",
+  avatar_url: "",
   resume_url: "",
   resume_filename: "",
   status_text: "",
@@ -371,7 +371,7 @@ onMounted(() => {
                   <p>建议使用清晰正方形图片。</p>
                 </div>
               </div>
-              <img :src="form.avatar_url" alt="关于我头像预览" />
+              <img v-if="form.avatar_url" :src="form.avatar_url" alt="关于我头像预览" />
               <input
                 ref="avatarInput"
                 class="image-picker-input"

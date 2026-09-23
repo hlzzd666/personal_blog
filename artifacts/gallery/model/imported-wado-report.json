@@ -1,0 +1,98 @@
+{
+  "asset": "wado",
+  "blender": "4.2.23 LTS",
+  "source": {
+    "file": "C:\\Users\\Administrator\\Downloads\\katana_-_wado_ichimonji.glb",
+    "sha256": "4d093eecb8b6512d9828f644de136a024d8a41fe10d01091ca1dbfbfe3a360e8",
+    "bytes": 7879496,
+    "triangles": 13014,
+    "dimensions_xyz_glb": [
+      1.32713,
+      0.261324,
+      0.093108
+    ],
+    "author": "NRiza (https://sketchfab.com/NRiza21)",
+    "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+    "source": "https://sketchfab.com/3d-models/katana-wado-ichimonji-6199b50ce733431fbedb7a5bf2fa9c1b",
+    "title": "Katana - Wado Ichimonji"
+  },
+  "result": {
+    "file": "web\\public\\gallery\\artifacts\\wado.glb",
+    "sha256": "d063b8d9ccf66df5df0b7066f8e36d55e83c0bf5593fd99d6fb881705a7fa4f3",
+    "bytes": 7630420,
+    "triangles": 16022,
+    "materials": 3,
+    "draw_calls": 3,
+    "embedded_images": 3,
+    "dimensions_xyz_glb": [
+      1.29213,
+      0.470519,
+      0.22
+    ],
+    "min_y_glb": 0.0,
+    "max_y_glb": 0.470519,
+    "fit_scale": 1.617484,
+    "runtime_dimensions_xyz": [
+      2.09,
+      0.761058,
+      0.355847
+    ]
+  },
+  "texture_policy": "保留原始三张 2048 × 2048 PBR 图集；不降采样、不替换材质，导出前后贴图字节哈希完全一致。",
+  "textures": [
+    {
+      "name": "Image_0",
+      "width": 2048,
+      "height": 2048
+    },
+    {
+      "name": "Image_1",
+      "width": 2048,
+      "height": 2048
+    },
+    {
+      "name": "Image_2",
+      "width": 2048,
+      "height": 2048
+    }
+  ],
+  "texture_sha256": [
+    "3a68f06696349e0999716920f9f164c6d6df33f264455dcb1f6f1a2241e4d437",
+    "68c7ac4be18c80d9571f5a06508c571a8f79dfede124d0f5a536c38dea3f5667",
+    "b6aded6adca7d591d1a31c0fc80429ef976c7070b9fa4cbfc0b8cf78cc20c9d3"
+  ],
+  "changes": [
+    "保留原始刀、鞘网格、法线及所有可见纹理细节。",
+    "刀在上、鞘在下，刀柄朝左，正面朝 GLB +Z。",
+    "新增深色木质双层支架及四处毡垫，按网格截面计算接触高度。",
+    "删除两个未使用 UV 通道并按材质合并为三个绘制调用。",
+    "底面落在 GLB Y=0，X/Z 居中；所有贴图内嵌。"
+  ],
+  "support_contacts_before_centering": [
+    {
+      "part": "blade",
+      "x": -0.22,
+      "surface_z_blender": 0.392109,
+      "pad_overlap_m": 0.0002
+    },
+    {
+      "part": "saya",
+      "x": -0.22,
+      "surface_z_blender": 0.176174,
+      "pad_overlap_m": 0.0002
+    },
+    {
+      "part": "blade",
+      "x": 0.43,
+      "surface_z_blender": 0.389705,
+      "pad_overlap_m": 0.0002
+    },
+    {
+      "part": "saya",
+      "x": 0.43,
+      "surface_z_blender": 0.168378,
+      "pad_overlap_m": 0.0002
+    }
+  ],
+  "limitations": "用户提供的第三方同人模型；并非官方影视制作资产。保留作者原有刀身纹理和金属外观。"
+}

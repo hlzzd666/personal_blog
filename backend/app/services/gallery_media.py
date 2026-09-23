@@ -8,6 +8,7 @@ from uuid import uuid4
 from PIL import Image, UnidentifiedImageError
 
 from backend.app.core.config import settings
+from backend.app.services.object_storage import put_object, storage_enabled
 
 MAX_GALLERY_IMAGE_PIXELS = 48_000_000
 SUPPORTED_FORMATS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
@@ -46,6 +47,15 @@ def _validate_image(content: bytes) -> str:
 def _write_image(content: bytes, asset_id: str, kind: str, extension: str) -> GalleryImageVariants:
     if kind not in {"poster", "logo"}:
         raise GalleryImageError("不支持的展厅图片类型")
+    if storage_enabled():
+        prefix = settings.oss_object_prefix.strip("/")
+        key = f"{prefix + '/' if prefix else ''}gallery/{kind}/{asset_id}{extension}"
+        try:
+            return GalleryImageVariants(
+                url=put_object(key, content, _content_type(extension))
+            )
+        except Exception as error:
+            raise GalleryImageError("展厅图片无法上传到对象存储") from error
     image_path = settings.upload_path / "gallery" / f"{asset_id}{extension}"
     image_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = image_path.with_name(f".{image_path.name}.tmp")
@@ -61,3 +71,7 @@ def _write_image(content: bytes, asset_id: str, kind: str, extension: str) -> Ga
 def _public_url(path: Path) -> str:
     relative_path = path.resolve().relative_to(settings.upload_path.resolve()).as_posix()
     return f"{settings.public_base_url.rstrip('/')}/uploads/{relative_path}"
+
+
+def _content_type(extension: str) -> str:
+    return {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}[extension]

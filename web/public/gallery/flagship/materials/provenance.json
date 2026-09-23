@@ -1,5 +1,5 @@
 {
   "wood_albedo": "image2-api reference edit from approved perspective",
-  "normal_and_roughness": "Estimated microstructure from albedo, not measured scan data",
-  "brass_and_canvas": "Deterministic procedural bitmap microstructure, seed 61"
+  "walnut_normal": "Estimated microstructure from albedo, not measured scan data",
+  "brass_color": "Deterministic procedural bitmap microstructure, seed 61"
 }

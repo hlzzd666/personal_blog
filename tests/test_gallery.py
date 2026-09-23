@@ -2,6 +2,7 @@ import unittest
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -54,6 +55,10 @@ class GalleryTest(unittest.TestCase):
         cls.SessionLocal = sessionmaker(bind=cls.engine, expire_on_commit=False)
 
     def setUp(self) -> None:
+        # 本地配置可能已启用真实 OSS；常规测试必须使用临时目录，避免外部写入。
+        storage = patch.object(settings, "media_storage_driver", "local")
+        storage.start()
+        self.addCleanup(storage.stop)
         Base.metadata.drop_all(self.engine)
         Base.metadata.create_all(self.engine)
         self.session: Session = self.SessionLocal()
@@ -148,6 +153,28 @@ class GalleryTest(unittest.TestCase):
             create_gallery_image_variants(b"not an image", "poster")
         with self.assertRaises(GalleryImageError):
             create_gallery_image_variants(image_bytes("GIF", (30, 30)), "poster")
+
+    def test_oss_upload_and_failure_do_not_write_local_files(self) -> None:
+        content = image_bytes("WEBP", (30, 45))
+        bucket = Mock()
+        bucket.put_object.return_value.status = 200
+        with patch.object(settings, "media_storage_driver", "oss"), patch.object(
+            settings, "oss_public_base_url", "https://images.example.com"
+        ), patch.object(settings, "oss_object_prefix", "personal-blog"), patch(
+            "backend.app.services.object_storage._bucket", return_value=bucket
+        ):
+            url = create_gallery_image_variants(content, "poster").url
+            self.assertTrue(url.startswith("https://images.example.com/personal-blog/gallery/poster/"))
+            args, kwargs = bucket.put_object.call_args
+            self.assertEqual(args[1], content)
+            self.assertEqual(kwargs["headers"]["Content-Type"], "image/webp")
+            with self.assertRaises(GalleryImageError):
+                create_gallery_image_variants(b"invalid", "poster")
+            self.assertEqual(bucket.put_object.call_count, 1)
+            bucket.put_object.side_effect = RuntimeError("provider error")
+            with self.assertRaises(GalleryImageError):
+                create_gallery_image_variants(content, "poster")
+        self.assertEqual(list(Path(self.upload_directory.name).rglob("*")), [])
 
     def test_limit_reorder_and_delete_normalization(self) -> None:
         created = [create_gallery_character(self.session, character_payload(index)) for index in range(40)]
