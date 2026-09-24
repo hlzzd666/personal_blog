@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { load } from "@amap/amap-jsapi-loader";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { MapPin } from "lucide-vue-next";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = defineProps<{
   name: string;
@@ -10,25 +11,31 @@ const props = defineProps<{
 
 type MapInstance = {
   add: (overlay: unknown) => void;
-  addControl: (control: unknown) => void;
   destroy: () => void;
 };
 
+const mapShell = ref<HTMLElement | null>(null);
 const mapRoot = ref<HTMLElement | null>(null);
 const mapStatus = ref<"idle" | "loading" | "ready" | "unavailable">("idle");
 let mapInstance: MapInstance | undefined;
+let visibilityObserver: IntersectionObserver | undefined;
+let enteredViewport = false;
+let disposed = false;
 let renderVersion = 0;
 
+const cityName = computed(() => props.name.trim() || "所在城市");
 const hasCoordinates = computed(() => props.longitude !== null && props.latitude !== null);
 const statusText = computed(() => {
-  if (!hasCoordinates.value) return "城市坐标等待维护";
+  if (!hasCoordinates.value) return "暂未标记城市坐标";
   if (!import.meta.env.VITE_AMAP_WEB_KEY) return "地图服务暂未连接";
   if (mapStatus.value === "loading") return "正在展开城市地图";
   if (mapStatus.value === "unavailable") return "地图暂时无法加载";
+  if (mapStatus.value === "idle") return "靠近后展开城市地图";
   return "";
 });
 
 async function renderMap() {
+  if (disposed || !enteredViewport) return;
   const version = ++renderVersion;
   mapInstance?.destroy();
   mapInstance = undefined;
@@ -57,58 +64,77 @@ async function renderMap() {
       key: import.meta.env.VITE_AMAP_WEB_KEY,
       version: "2.0",
     });
-    if (version !== renderVersion || !mapRoot.value) return;
+    if (disposed || version !== renderVersion || !mapRoot.value) return;
 
     const center = [longitude, latitude];
     mapInstance = new AMap.Map(mapRoot.value, {
       viewMode: "2D",
       zoom: 11,
       center,
-      mapStyle: "amap://styles/whitesmoke",
+      mapStyle: "amap://styles/darkblue",
       showLabel: true,
     }) as MapInstance;
     const marker = new AMap.Marker({
       position: center,
       anchor: "center",
-      title: props.name,
+      title: cityName.value,
       content: '<div class="about-map-marker" aria-hidden="true"><span></span></div>',
     });
     mapInstance.add(marker);
     mapStatus.value = "ready";
   } catch {
-    if (version === renderVersion) mapStatus.value = "unavailable";
+    if (!disposed && version === renderVersion) mapStatus.value = "unavailable";
   }
 }
 
 watch(
   () => [props.longitude, props.latitude, props.name],
-  async () => {
-    await nextTick();
-    void renderMap();
+  () => {
+    if (enteredViewport) void renderMap();
   },
 );
 
 onMounted(() => {
-  void renderMap();
+  if (!mapShell.value) return;
+  if (typeof IntersectionObserver === "undefined") {
+    enteredViewport = true;
+    void renderMap();
+    return;
+  }
+  visibilityObserver = new IntersectionObserver(
+    (entries) => {
+      if (disposed || !entries.some((entry) => entry.isIntersecting)) return;
+      enteredViewport = true;
+      visibilityObserver?.disconnect();
+      visibilityObserver = undefined;
+      void renderMap();
+    },
+    { rootMargin: "300px" },
+  );
+  visibilityObserver.observe(mapShell.value);
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
   renderVersion += 1;
+  visibilityObserver?.disconnect();
+  visibilityObserver = undefined;
   mapInstance?.destroy();
+  mapInstance = undefined;
 });
 </script>
 
 <template>
-  <div class="about-map-shell" :class="{ 'map-ready': mapStatus === 'ready' }">
-    <div ref="mapRoot" class="about-map-canvas" :aria-label="`${name}高德地图`"></div>
+  <div ref="mapShell" class="about-map-shell" :class="{ 'map-ready': mapStatus === 'ready' }">
+    <div ref="mapRoot" class="about-map-canvas" :aria-label="`${cityName}高德地图`"></div>
     <div v-if="mapStatus !== 'ready'" class="about-map-fallback" role="status">
-      <div class="fallback-radar" aria-hidden="true"><i></i><span></span></div>
-      <strong>{{ name }}</strong>
+      <MapPin class="fallback-location" :size="32" :stroke-width="1.3" aria-hidden="true" />
+      <strong>{{ cityName }}</strong>
       <p>{{ statusText }}</p>
     </div>
-    <div class="about-map-caption">
-      <span>AMAP / CITY VIEW</span>
-      <strong>{{ name }}</strong>
+    <div v-if="mapStatus === 'ready'" class="about-map-caption">
+      <span>所在城市</span>
+      <strong>{{ cityName }}</strong>
     </div>
   </div>
 </template>
@@ -117,10 +143,10 @@ onBeforeUnmount(() => {
 .about-map-shell {
   position: relative;
   overflow: hidden;
-  min-height: 224px;
-  border-radius: 8px;
-  background: #d7e1dd;
-  box-shadow: 0 1.5rem 4rem rgba(7, 24, 35, 0.14);
+  min-height: 300px;
+  border: 1px solid rgba(169, 187, 192, 0.18);
+  border-radius: 4px;
+  background: #061a22;
 }
 
 .about-map-canvas {
@@ -140,91 +166,55 @@ onBeforeUnmount(() => {
   display: grid;
   place-content: center;
   justify-items: center;
-  color: #0d2a38;
+  padding: 2rem;
+  color: #f3edda;
+  text-align: center;
   background:
-    linear-gradient(35deg, transparent 48%, rgba(13, 42, 56, 0.08) 49% 51%, transparent 52%) 0 0 /
-      54px 54px,
-    linear-gradient(-35deg, transparent 48%, rgba(13, 42, 56, 0.06) 49% 51%, transparent 52%) 0 0 /
-      54px 54px,
-    #d7e1dd;
+    radial-gradient(ellipse at center, rgba(38, 78, 88, 0.3), transparent 70%),
+    #061a22;
 }
 
 .about-map-fallback strong {
-  margin-top: 0.65rem;
+  margin-top: 1rem;
   font-size: 1rem;
+  overflow-wrap: anywhere;
 }
 
 .about-map-fallback p {
   margin: 0.45rem 0 0;
-  color: rgba(13, 42, 56, 0.58);
-  font-size: 0.78rem;
+  color: #a9bbc0;
+  font-size: 0.82rem;
+  line-height: 1.6;
 }
 
-.fallback-radar {
-  position: relative;
-  width: 5.5rem;
-  aspect-ratio: 1;
-  border: 1px solid rgba(13, 42, 56, 0.32);
-  border-radius: 50%;
-}
-
-.fallback-radar::before,
-.fallback-radar::after {
-  content: "";
-  position: absolute;
-  border: 1px solid rgba(13, 42, 56, 0.18);
-  border-radius: 50%;
-}
-
-.fallback-radar::before {
-  inset: 22%;
-}
-.fallback-radar::after {
-  inset: 42%;
-  background: #e7674c;
-  border-color: #e7674c;
-}
-.fallback-radar i {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 44%;
-  height: 1px;
-  background: #e7674c;
-  transform-origin: left;
-  animation: radar-scan 4s linear infinite;
-}
-.fallback-radar span {
-  position: absolute;
-  inset: 50% 0 auto;
-  height: 1px;
-  background: rgba(13, 42, 56, 0.16);
+.fallback-location {
+  color: #e2bc74;
 }
 
 .about-map-caption {
   position: absolute;
+  top: 0.65rem;
   right: 0.65rem;
-  bottom: 0.65rem;
   z-index: 2;
   display: grid;
   gap: 0.2rem;
-  min-width: 142px;
+  max-width: calc(100% - 1.3rem);
   padding: 0.55rem 0.7rem;
-  border-radius: 5px;
-  color: #fff8e9;
-  background: rgba(7, 24, 35, 0.9);
-  box-shadow: 0 0.7rem 2rem rgba(7, 24, 35, 0.2);
+  border: 1px solid rgba(169, 187, 192, 0.18);
+  border-radius: 3px;
+  color: #f3edda;
+  background: rgba(6, 26, 34, 0.92);
   backdrop-filter: blur(10px);
+  pointer-events: none;
 }
 
 .about-map-caption span {
-  color: #f2bc5a;
-  font:
-    600 0.62rem "IBM Plex Mono",
-    monospace;
+  color: #a9bbc0;
+  font-size: 0.7rem;
 }
 .about-map-caption strong {
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 :deep(.about-map-marker) {
@@ -232,45 +222,23 @@ onBeforeUnmount(() => {
   place-items: center;
   width: 48px;
   height: 48px;
-  border: 1px solid rgba(231, 103, 76, 0.56);
+  border: 1px solid rgba(226, 188, 116, 0.56);
   border-radius: 50%;
-  background: rgba(231, 103, 76, 0.12);
-  animation: map-marker-pulse 2.4s ease-in-out infinite;
+  background: rgba(226, 188, 116, 0.12);
 }
 
 :deep(.about-map-marker span) {
   width: 14px;
   height: 14px;
-  border: 4px solid #fff8e9;
+  border: 4px solid #f3edda;
   border-radius: 50%;
-  background: #e7674c;
-  box-shadow: 0 0 0 3px #e7674c;
-}
-
-@keyframes radar-scan {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes map-marker-pulse {
-  50% {
-    box-shadow: 0 0 0 16px rgba(231, 103, 76, 0.06);
-  }
-}
-
-@media (max-width: 760px) {
-  .about-map-shell {
-    min-height: 210px;
-  }
+  background: #e2bc74;
+  box-shadow: 0 0 0 3px #e2bc74;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .about-map-canvas {
     transition: none;
-  }
-  .fallback-radar i,
-  :deep(.about-map-marker) {
-    animation: none;
   }
 }
 </style>

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "straw-hat",
+    "bytes": 69352,
+    "triangles": 1408,
+    "drawCalls": 1,
+    "embeddedImages": 1,
+    "sha256": "0cbb911e5cc46c9c7810974ec7291fc72c0f16b9865f8a61cc4db4a1db99dc67"
+  },
+  {
+    "id": "den-den-mushi",
+    "bytes": 1839532,
+    "triangles": 67300,
+    "drawCalls": 8,
+    "embeddedImages": 2,
+    "sha256": "fb1c0972ad6a105d937605c5aad6d2640571671619fb7fb787cc9d91faa58955"
+  },
+  {
+    "id": "log-pose",
+    "bytes": 799092,
+    "triangles": 23520,
+    "drawCalls": 9,
+    "embeddedImages": 2,
+    "sha256": "8adfcb31f3d5a88d01f5f1e56a214c67129e250b766c03c32271fada26649ee4"
+  },
+  {
+    "id": "gum-gum",
+    "bytes": 164132,
+    "triangles": 5904,
+    "drawCalls": 1,
+    "embeddedImages": 1,
+    "sha256": "67680a120ebcd06c69b5384596aa87f87876d1899b144626dc834992af361bd1"
+  },
+  {
+    "id": "wado",
+    "bytes": 7630420,
+    "triangles": 16022,
+    "drawCalls": 3,
+    "embeddedImages": 3,
+    "sha256": "d063b8d9ccf66df5df0b7066f8e36d55e83c0bf5593fd99d6fb881705a7fa4f3"
+  },
+  {
+    "id": "one-piece-logo",
+    "bytes": 5006204,
+    "triangles": 87266,
+    "drawCalls": 6,
+    "embeddedImages": 0,
+    "sha256": "b8f384b53020b2de3367634f6c39a191a8789921de6f57b1065ed5f9e95e72f5"
+  }
+]

@@ -1,8 +1,16 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { Sky } from "three/examples/jsm/objects/Sky.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { SSAOPass } from "three/examples/jsm/postprocessing/SSAOPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { buildMuseumRoom, buildExhibitFrame } from "./MuseumRoom";
+import { museumAsset, portraitIndex, portraitRegion } from "./curation";
 import type { GalleryCharacter } from "../api/gallery";
+import { artifacts, posterStartZ, type MuseumArtifact } from "./artifacts";
 import { createLayout, dimensions, exhibitPosition, isWalkable, type HallLayout } from "./layout";
 
 export type NavigationMarker = {
@@ -24,6 +32,8 @@ export type NavigationState = {
   zone: string;
 };
 type Callbacks = {
+  onActiveArtifact?: (artifact: MuseumArtifact | null) => void;
+  onOpenArtifact?: (artifact: MuseumArtifact) => void;
   onActiveCharacter: (character: GalleryCharacter | null, slot: number | null) => void;
   onLockChange: (locked: boolean) => void;
   onOpenCharacter: (character: GalleryCharacter, slot: number) => void;
@@ -39,15 +49,23 @@ type Exhibit = {
   trim: THREE.MeshStandardMaterial;
   url: string | null;
 };
-const asset = (path: string) => `${import.meta.env.BASE_URL}gallery/${path}`;
 const INTERACTION_DISTANCE = 4.5;
 const MAX_POSTER_TEXTURES = 12;
+
+// 接触阴影半分辨率采样，最终画面仍按画布分辨率输出。
+class MuseumAmbientOcclusion extends SSAOPass {
+  override setSize(width: number, height: number) {
+    super.setSize(Math.max(1, Math.ceil(width / 2)), Math.max(1, Math.ceil(height / 2)));
+  }
+}
 
 export class GalleryScene {
   readonly ready: Promise<void>;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(65, 1, 0.1, 250);
+  private readonly camera = new THREE.PerspectiveCamera(58, 1, 0.08, 180);
   private readonly renderer: THREE.WebGLRenderer;
+  private readonly composer: EffectComposer;
+  private readonly ambientOcclusion: SSAOPass;
   private readonly controls: PointerLockControls;
   private readonly resizeObserver: ResizeObserver;
   private readonly keys = new Set<string>();
@@ -63,13 +81,23 @@ export class GalleryScene {
   private readonly velocity = new THREE.Vector3();
   private readonly raycaster = new THREE.Raycaster();
   private readonly occlusionRay = new THREE.Raycaster();
-  private readonly occluders: THREE.Object3D[] = [];
+  private readonly occlusionBoxes: THREE.Box3[] = [];
+  private readonly occlusionHit = new THREE.Vector3();
   private readonly toExhibit = new THREE.Vector3();
   private readonly forward = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
   private readonly projected = new THREE.Vector3();
+  private readonly rotatingDisplays = new Map<string, { pivot: THREE.Group; sphere: THREE.Sphere }>();
+  private readonly displayFrustum = new THREE.Frustum();
+  private readonly viewProjection = new THREE.Matrix4();
+  private rotationShadowTime = 0;
   private active: Exhibit | null = null;
-  private water: THREE.Texture | null = null;
+  private activeArtifact: MuseumArtifact | null = null;
+  private readonly artifactBoxes = artifacts.map(item => new THREE.Box3(
+    new THREE.Vector3(item.x - item.width / 2, .15, item.z - item.depth / 2),
+    new THREE.Vector3(item.x + item.width / 2, item.height, item.z + item.depth / 2),
+  ));
+  private running = true;
   private environment: THREE.WebGLRenderTarget | null = null;
   private frame = 0;
   private disposed = false;
@@ -77,6 +105,8 @@ export class GalleryScene {
   private lastTime = performance.now();
   private lastNavigation = 0;
   private lastPosterRow = -1;
+  private needsRender = true;
+  private lockPending = false;
 
   constructor(
     private readonly container: HTMLElement,
@@ -93,39 +123,55 @@ export class GalleryScene {
       antialias: true,
       powerPreference: "high-performance",
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.domElement.className = "gallery-canvas";
     this.renderer.domElement.setAttribute("aria-label", "旗舰船舱人物展馆");
     container.append(this.renderer.domElement);
     this.controls = new PointerLockControls(this.camera, this.renderer.domElement);
     this.controls.minPolarAngle = 0.25;
     this.controls.maxPolarAngle = Math.PI - 0.25;
-    this.camera.position.set(0, dimensions.cameraHeight, 5.8);
-    this.camera.lookAt(0, dimensions.cameraHeight, -10);
-    this.scene.background = new THREE.Color(0x9acee2);
-    this.scene.fog = new THREE.Fog(0xa5d4e0, 100, 230);
-    this.scene.add(new THREE.HemisphereLight(0xe3f5ff, 0x736047, 1.15));
-    const sun = new THREE.DirectionalLight(0xffedcd, 4.4);
-    sun.position.set(-10, 20, 8);
+    this.camera.position.set(-.35, dimensions.cameraHeight, 2.8);
+    this.camera.lookAt(0, 2.05, -5);
+    this.scene.background = new THREE.Color(0x151a1c);
+    this.scene.fog = new THREE.Fog(0x151a1c, 35, 110);
+    this.scene.add(new THREE.HemisphereLight(0xdde8ef, 0x716c5e, 1.3));
+    const sun = new THREE.DirectionalLight(0xffebd2, 1.3);
+    sun.position.set(-3, 7, -14);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -18;
-    sun.shadow.camera.right = 18;
-    sun.shadow.camera.top = 20;
-    sun.shadow.camera.bottom = -20;
+    sun.shadow.camera.left = -12;
+    sun.shadow.camera.right = 12;
+    sun.shadow.camera.top = 12;
+    sun.shadow.camera.bottom = -12;
     sun.shadow.camera.far = 70;
     sun.shadow.normalBias = 0.012;
     sun.shadow.bias = -0.0002;
     sun.shadow.radius = 1.5;
-    sun.target.position.set(0, 0, -8);
+    sun.target.position.set(1.5, 0, 3);
     this.scene.add(sun.target);
     this.scene.add(sun);
-    this.buildOcean();
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.ambientOcclusion = new MuseumAmbientOcclusion(this.scene, this.camera, 1, 1, 12);
+    this.ambientOcclusion.kernelRadius = .4;
+    this.ambientOcclusion.minDistance = .001;
+    this.ambientOcclusion.maxDistance = .12;
+    this.composer.addPass(this.ambientOcclusion);
+    this.composer.addPass(new OutputPass());
+    const environmentScene = new RoomEnvironment();
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.environment = pmrem.fromScene(environmentScene, .04);
+    this.scene.environment = this.environment.texture;
+    this.scene.environmentIntensity = .65;
+    environmentScene.dispose();
+    pmrem.dispose();
     this.buildExhibits(ordered);
     this.controls.addEventListener("lock", this.handleLock);
     this.controls.addEventListener("unlock", this.handleUnlock);
@@ -142,67 +188,138 @@ export class GalleryScene {
     this.ready = this.loadShip().then(() => {
       if (this.disposed) return;
       this.loaded = true;
+      this.renderer.shadowMap.needsUpdate = true;
+      this.needsRender = true;
       this.updatePosters();
     });
     this.animate();
   }
 
   lock() {
-    if (this.loaded && !this.disposed) this.controls.lock();
+    if (!this.loaded || this.disposed) return;
+    this.lockPending = true;
+    // 部分浏览器仅拒绝 Promise，未同步发出 pointerlockerror。
+    try {
+      const request = this.renderer.domElement.requestPointerLock();
+      void Promise.resolve(request).catch(this.lockError);
+    } catch { this.lockError(); }
   }
   unlock() {
+    this.lockPending = false;
     if (this.controls.isLocked) this.controls.unlock();
   }
 
+  setRunning(value: boolean) {
+    this.running = value;
+    this.needsRender = true;
+    this.lastTime = performance.now();
+    if (!value) this.unlock();
+  }
+
   private async loadShip() {
-    const gltf = await new GLTFLoader().loadAsync(asset("flagship/flagship.glb"));
-    this.track(gltf.scene);
-    if (this.disposed) {
-      this.releaseResources();
-      return;
+    const manager = new THREE.LoadingManager();
+    const complete = new Promise<void>((resolve) => { manager.onLoad = resolve; });
+    const loader = new THREE.TextureLoader(manager);
+    const room = buildMuseumRoom(this.hall, loader);
+    this.track(room);
+    this.scene.add(room);
+    for (const id of ['gum-gum', 'going-merry']) {
+      const fallback = room.getObjectByName(id === 'going-merry' ? 'DisplayShipFallback' : `artifact-fallback-${id}`);
+      if (fallback) this.addRotatingDisplay(fallback, artifacts.find(item => item.id === id)!);
     }
-    const bay = gltf.scene.getObjectByName("CabinBay");
-    const bow = gltf.scene.getObjectByName("BowDeck");
-    const stern = gltf.scene.getObjectByName("SternDeck");
-    const frame = gltf.scene.getObjectByName("ExhibitFrame");
-    if (!bay || !bow || !stern || !frame) throw new Error("船舱模型缺少结构单元");
-    for (let i = 0; i < this.hall.bays; i++) {
-      const segment = bay.clone(true);
-      segment.position.z = -i * dimensions.bayLength;
-      this.scene.add(segment);
-      this.occluders.push(segment);
+    // 单层船舱仅家具和侧墙立柱会遮挡展签，避免对整舱三角面反复求交。
+    const block = (x1: number, y1: number, z1: number, x2: number, y2: number, z2: number) =>
+      this.occlusionBoxes.push(new THREE.Box3(new THREE.Vector3(x1, y1, z1), new THREE.Vector3(x2, y2, z2)));
+    for (const item of artifacts) block(item.x - item.width / 2, 0, item.z - item.depth / 2,
+      item.x + item.width / 2, item.height, item.z + item.depth / 2);
+    for (let z = -2; z < this.hall.cabinBack; z += 3.4) {
+      block(-4.8, 0, z - .2, -4.33, 5, z + .2);
+      block(4.33, 0, z - .2, 4.8, 5, z + .2);
     }
-    bow.position.z = this.hall.cabinFront;
-    stern.position.z = this.hall.cabinBack;
-    this.scene.add(bow, stern);
-    this.occluders.push(bow, stern);
-    for (const exhibit of this.exhibits) {
-      const shell = frame.clone(true);
-      shell.traverse((object) => {
-        if (!(object instanceof THREE.Mesh)) return;
-        if (
-          object.material instanceof THREE.MeshStandardMaterial &&
-          object.material.name === "Aged brass"
-        ) {
-          exhibit.trim.dispose();
-          this.materials.delete(exhibit.trim);
-          exhibit.trim = object.material.clone();
-          exhibit.trim.emissive.set(0xd9953d);
-          exhibit.trim.emissiveIntensity = 0;
-          object.material = exhibit.trim;
-          this.materials.add(exhibit.trim);
-        }
+    const atlas = loader.load(museumAsset("portraits.webp"), (texture) => {
+      if (this.disposed) { texture.dispose(); return; }
+      texture.colorSpace = THREE.SRGBColorSpace;
+      for (const exhibit of this.exhibits) {
+        const index = portraitIndex(exhibit.character.name);
+        if (index < 0) continue;
+        const portrait = texture.clone();
+        const region = portraitRegion(index);
+        portrait.repeat.set(region.width, region.height);
+        portrait.offset.set(region.x, 1 - region.y - region.height);
+        portrait.needsUpdate = true;
+        this.textures.add(portrait);
+        if (exhibit.poster.map === exhibit.fallback) exhibit.poster.map = portrait;
+        this.textures.delete(exhibit.fallback);
+        exhibit.fallback.dispose();
+        exhibit.fallback = portrait;
+        exhibit.poster.needsUpdate = true;
+      }
+    });
+    this.textures.add(atlas);
+    await complete;
+    if (this.disposed) return;
+    await Promise.all([this.loadArtifacts(), this.loadMuseumLogo()]);
+    if (this.disposed) return;
+    // 船模沿用站内已署名资产；独立加载，失败时保留柜内程序化模型。
+    void new GLTFLoader().loadAsync(import.meta.env.BASE_URL + "models/one_piece_-going_merry.glb").then((gltf) => {
+      if (this.disposed) {
+        const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
+        gltf.scene.traverse(object => {
+          if (!(object instanceof THREE.Mesh)) return;
+          geometries.add(object.geometry);
+          for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+            materials.add(material);
+            Object.values(material).forEach(value => { if (value instanceof THREE.Texture) textures.add(value); });
+          }
+        });
+        geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose());
+        return;
+      }
+      const bounds = new THREE.Box3().setFromObject(gltf.scene), size = bounds.getSize(new THREE.Vector3());
+      const scale = Math.min(1.5 / size.x, 1.45 / size.y, 1.85 / size.z);
+      gltf.scene.scale.setScalar(scale);
+      const center = bounds.getCenter(new THREE.Vector3()).multiplyScalar(scale);
+      const stand = artifacts.find(item => item.id === 'going-merry')!;
+      gltf.scene.position.set(stand.x - center.x, 1.1 - bounds.min.y * scale, stand.z - center.z);
+      gltf.scene.updateMatrixWorld(true);
+      // 原船模由大量重复节点组成；先按材质合批，再整体绕展台中心旋转。
+      const batches = new Map<THREE.Material, THREE.Mesh[]>();
+      gltf.scene.traverse(object => {
+        if (!(object instanceof THREE.Mesh) || Array.isArray(object.material)) return;
+        const meshes = batches.get(object.material) ?? [];
+        meshes.push(object); batches.set(object.material, meshes);
       });
-      exhibit.group.add(shell);
-    }
+      this.track(gltf.scene);
+      const model = new THREE.Group();
+      model.name = "DisplayShip";
+      for (const [material, meshes] of batches) {
+        const parts = meshes.map(mesh => {
+          const geometry = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+          return geometry.applyMatrix4(mesh.matrixWorld);
+        });
+        const geometry = mergeGeometries(parts);
+        parts.forEach(part => part.dispose());
+        if (geometry) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.castShadow = mesh.receiveShadow = true;
+          model.add(mesh);
+        } else {
+          for (const original of meshes) { original.removeFromParent(); original.matrix.copy(original.matrixWorld); original.matrixAutoUpdate = false; model.add(original); }
+        }
+      }
+      this.scene.getObjectByName("DisplayShipFallback")?.removeFromParent();
+      this.track(model);
+      this.scene.add(model);
+      this.addRotatingDisplay(model, stand);
+      this.renderer.shadowMap.needsUpdate = true;
+      this.needsRender = true;
+    }).catch(() => { /* 柜内原有船模仍然可见，不阻断漫游。 */ });
     this.scene.updateMatrixWorld(true);
   }
 
   private track(root: THREE.Object3D) {
     root.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      object.castShadow = true;
-      object.receiveShadow = true;
       this.geometries.add(object.geometry);
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       for (const mat of materials) {
@@ -213,56 +330,123 @@ export class GalleryScene {
     });
   }
 
-  private buildOcean() {
-    const water = new THREE.TextureLoader().load(asset("generated/calm-ocean-color-tile.png"));
-    water.colorSpace = THREE.SRGBColorSpace;
-    water.wrapS = water.wrapT = THREE.RepeatWrapping;
-    water.repeat.set(55, 55);
-    this.water = water;
-    this.textures.add(water);
-    const ocean = new THREE.Mesh(
-      new THREE.PlaneGeometry(500, 500),
-      new THREE.MeshStandardMaterial({
-        map: water,
-        color: 0x4da6b0,
-        roughness: 0.4,
-        metalness: 0.15,
-      }),
-    );
-    ocean.rotation.x = -Math.PI / 2;
-    ocean.position.y = -1.55;
-    this.track(ocean);
-    this.scene.add(ocean);
-    const sky = new Sky();
-    sky.scale.setScalar(240);
-    sky.material.uniforms.turbidity!.value = 2;
-    sky.material.uniforms.rayleigh!.value = 1.4;
-    sky.material.uniforms.sunPosition!.value.set(-10, 20, 8).normalize();
-    this.track(sky);
-    this.scene.add(sky);
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.environment = pmrem.fromScene(this.scene, 0.04, 0.1, 250);
-    this.scene.environment = this.environment.texture;
-    this.scene.environmentIntensity = 0.2;
-    pmrem.dispose();
+  private addRotatingDisplay(model: THREE.Object3D, stand: MuseumArtifact) {
+    this.rotatingDisplays.get(stand.id)?.pivot.removeFromParent();
+    const pivot = new THREE.Group();
+    pivot.name = `rotating-display-${stand.id}`;
+    pivot.position.set(stand.x, stand.plinthHeight ?? 1.05, stand.z);
+    this.scene.add(pivot);
+    pivot.attach(model);
+    // 按真实顶点计算水平旋转半径，整圈都留在展台内，避免长船模扫入通道。
+    let radius = 0;
+    const point = new THREE.Vector3();
+    model.updateWorldMatrix(true, true);
+    model.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const positions = object.geometry.getAttribute('position');
+      for (let i = 0; i < positions.count; i++) {
+        point.fromBufferAttribute(positions, i).applyMatrix4(object.matrixWorld);
+        radius = Math.max(radius, Math.hypot(point.x - stand.x, point.z - stand.z));
+      }
+    });
+    if (radius > 0) pivot.scale.setScalar(Math.min(1, (Math.min(stand.width, stand.depth) - .15) / (2 * radius)));
+    const sphere = new THREE.Box3().setFromObject(pivot).getBoundingSphere(new THREE.Sphere());
+    this.rotatingDisplays.set(stand.id, { pivot, sphere });
+  }
+
+  private rotateDisplays(delta: number) {
+    if (this.reducedMotion || !this.controls.isLocked) return;
+    this.displayFrustum.setFromProjectionMatrix(this.viewProjection.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse));
+    let changed = false;
+    for (const { pivot, sphere } of this.rotatingDisplays.values()) {
+      if (!this.displayFrustum.intersectsSphere(sphere)) continue;
+      pivot.rotation.y = (pivot.rotation.y + delta * Math.PI / 24) % (Math.PI * 2);
+      changed = true;
+    }
+    // 48 秒转一圈；慢速展示的阴影限频更新，保留舱室静态阴影的性能收益。
+    if (changed) {
+      this.rotationShadowTime += delta;
+      if (this.rotationShadowTime >= 1 / 15) {
+        this.renderer.shadowMap.needsUpdate = true;
+        this.rotationShadowTime = 0;
+      }
+    }
+  }
+
+  private async loadMuseumLogo() {
+    try {
+      const { scene: model } = await new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'gallery/artifacts/one-piece-logo.glb');
+      this.track(model);
+      if (this.disposed) { this.releaseResources(); return; }
+      const bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3());
+      const scale = Math.min(3.5 / size.x, 1.22 / size.y);
+      const center = bounds.getCenter(new THREE.Vector3());
+      model.scale.setScalar(scale);
+      model.position.set(-center.x * scale, 3.53 - center.y * scale, this.hall.cabinFront + .36 - bounds.min.z * scale);
+      model.name = 'MuseumLogo';
+      model.traverse(object => {
+        if (object instanceof THREE.Mesh) object.receiveShadow = true;
+      });
+      this.scene.getObjectByName('MuseumLogoFallback')?.removeFromParent();
+      this.scene.add(model);
+    } catch {
+      // 装饰素材失败时仍显示文字铭牌，参观和展品交互保持可用。
+    }
+  }
+
+  private async loadArtifacts() {
+    const loader = new GLTFLoader();
+    await Promise.all(artifacts.filter(item => item.id !== 'going-merry').map(async item => {
+      try {
+        const { scene: model } = await loader.loadAsync(import.meta.env.BASE_URL + `gallery/artifacts/${item.id}.glb`);
+        if (this.disposed) {
+          // 路由离开后才完成的资源不能重新进入场景，也需要释放 GPU 资源。
+          this.track(model);
+          this.releaseResources();
+          return;
+        }
+        if (item.sideDisplay) model.rotation.y = item.displayYaw ?? Math.PI / 2;
+        const bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3());
+        const plinthHeight = item.plinthHeight ?? 1.05;
+        const scale = Math.min((item.width - .15) / size.x, (item.height - plinthHeight - .05) / size.y, (item.depth - .15) / size.z);
+        const center = bounds.getCenter(new THREE.Vector3());
+        model.scale.setScalar(scale);
+        model.position.set(item.x - center.x * scale, plinthHeight + .035 - bounds.min.y * scale, item.z - center.z * scale);
+        model.name = `artifact-model-${item.id}`;
+        model.traverse(object => {
+          if (!(object instanceof THREE.Mesh)) return;
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          object.castShadow = materials.every(material => !material.transparent);
+          object.receiveShadow = true;
+          for (const material of materials) {
+            if (material.transparent) material.depthWrite = false;
+            for (const value of Object.values(material)) {
+              if (value instanceof THREE.Texture) value.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy());
+            }
+          }
+        });
+        this.track(model);
+        this.scene.getObjectByName(`artifact-fallback-${item.id}`)?.removeFromParent();
+        this.scene.add(model);
+        if (item.id === 'gum-gum') this.addRotatingDisplay(model, item);
+      } catch {
+        // 单件文件失效不阻断展馆；保留该物件的备用造型和展签。
+      }
+    }));
   }
 
   private buildExhibits(characters: GalleryCharacter[]) {
-    const backing = new THREE.BoxGeometry(1.82, 2.7, 0.1);
     const portrait = new THREE.PlaneGeometry(1.6, 2.4);
-    const horizontal = new THREE.BoxGeometry(1.86, 0.085, 0.12);
-    const vertical = new THREE.BoxGeometry(0.085, 2.62, 0.12);
     const plaque = new THREE.PlaneGeometry(1.8, 0.25);
-    const backingMat = new THREE.MeshStandardMaterial({ color: 0x123f3b, roughness: 0.8 });
     for (const [index, character] of characters.entries()) {
       const group = new THREE.Group();
       group.name = `exhibit-${character.id}`;
       const { x, z, side } = exhibitPosition(index);
-      group.position.set(x, 2.05, z);
+      group.position.set(x, 2.7, z);
       group.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
       const fallback = this.posterPlaceholder(character, index + 1);
       this.textures.add(fallback);
-      const poster = new THREE.MeshStandardMaterial({ map: fallback, roughness: 0.84 });
+      const poster = new THREE.MeshStandardMaterial({ map: fallback, roughness: .82, emissive: 0xa8874f, emissiveIntensity: .08 });
       const trim = new THREE.MeshStandardMaterial({
         color: 0xbd9654,
         roughness: 0.38,
@@ -273,22 +457,23 @@ export class GalleryScene {
       const image = new THREE.Mesh(portrait, poster);
       image.position.z = 0.085;
       group.add(image);
+      buildExhibitFrame(group, trim);
       this.materials.add(trim);
       const canvas = document.createElement("canvas");
       canvas.width = 512;
       canvas.height = 72;
       const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#113d39";
+      ctx.fillStyle = "#cbbb97";
       ctx.fillRect(0, 0, 512, 72);
-      ctx.fillStyle = "#f3d292";
+      ctx.fillStyle = "#30281e";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = '24px "Noto Sans SC", sans-serif';
+      ctx.font = '24px "Museum Sans", sans-serif';
       ctx.fillText(`${String(index + 1).padStart(2, "0")}  ${character.name}`, 256, 36, 480);
       const labelTexture = new THREE.CanvasTexture(canvas);
       labelTexture.colorSpace = THREE.SRGBColorSpace;
       const label = new THREE.Mesh(plaque, new THREE.MeshBasicMaterial({ map: labelTexture }));
-      label.position.set(0, -1.53, 0.08);
+      label.position.set(0, -1.6, 0.08);
       group.add(label);
       const numberCanvas = document.createElement("canvas");
       numberCanvas.width = numberCanvas.height = 96;
@@ -319,8 +504,7 @@ export class GalleryScene {
       });
     }
     // 空展馆没有对象引用这些几何体，仍统一登记以确保释放。
-    [backing, portrait, horizontal, vertical, plaque].forEach((g) => this.geometries.add(g));
-    this.materials.add(backingMat);
+    [portrait, plaque].forEach((g) => this.geometries.add(g));
   }
 
   private posterPlaceholder(character: GalleryCharacter, slot: number) {
@@ -328,18 +512,18 @@ export class GalleryScene {
     canvas.width = 256;
     canvas.height = 384;
     const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "#d6e3db";
+    ctx.fillStyle = "#382a1c";
     ctx.fillRect(0, 0, 256, 384);
-    ctx.strokeStyle = "#799a8b";
+    ctx.strokeStyle = "#ad8b52";
     ctx.lineWidth = 2;
     ctx.strokeRect(12, 12, 232, 360);
     ctx.textAlign = "center";
-    ctx.fillStyle = "#355c52";
+    ctx.fillStyle = "#d6be8a";
     ctx.font = "16px sans-serif";
     ctx.fillText("GRAND LINE", 128, 52);
     ctx.font = "64px serif";
     ctx.fillText(String(slot).padStart(2, "0"), 128, 150);
-    ctx.font = 'bold 23px "Noto Sans SC", sans-serif';
+    ctx.font = 'bold 23px "Museum Sans", sans-serif';
     const letters = Array.from(character.name);
     for (let i = 0; i < letters.length; i += 8)
       ctx.fillText(letters.slice(i, i + 8).join(""), 128, 212 + (i / 8) * 29, 216);
@@ -352,7 +536,7 @@ export class GalleryScene {
   }
 
   private updatePosters() {
-    const row = Math.max(0, Math.round(-this.camera.position.z / dimensions.bayLength));
+    const row = Math.max(0, Math.round(this.camera.position.z / dimensions.bayLength));
     if (row === this.lastPosterRow) return;
     this.lastPosterRow = row;
     const nearby = [...this.exhibits]
@@ -393,7 +577,7 @@ export class GalleryScene {
           canvas.width = 512;
           canvas.height = 768;
           const ctx = canvas.getContext("2d")!;
-          ctx.fillStyle = "#d6e3db";
+          ctx.fillStyle = "#382a1c";
           ctx.fillRect(0, 0, 512, 768);
           const scale = Math.min(512 / image.width, 768 / image.height);
           ctx.drawImage(
@@ -419,6 +603,7 @@ export class GalleryScene {
     }
   }
   private applyPoster(url: string, texture: THREE.Texture) {
+    this.needsRender = true;
     for (const exhibit of this.exhibits)
       if (exhibit.url === url) {
         exhibit.poster.map = texture;
@@ -426,8 +611,13 @@ export class GalleryScene {
       }
   }
 
-  private readonly handleLock = () => this.callbacks.onLockChange(true);
+  private readonly handleLock = () => {
+    this.lockPending = false;
+    this.callbacks.onLockChange(true);
+  };
   private readonly handleUnlock = () => {
+    this.lockPending = false;
+    this.needsRender = true;
     this.keys.clear();
     this.velocity.set(0, 0, 0);
     this.callbacks.onLockChange(false);
@@ -440,8 +630,13 @@ export class GalleryScene {
   private readonly visibilityChange = () => {
     if (document.hidden) this.pause();
   };
-  private readonly lockError = () =>
-    this.callbacks.onUnavailable("浏览器未能开启视角控制，已切换至人物档案。");
+  private readonly lockError = () => {
+    // 成功锁定后立即按 Esc，迟到的 Promise 拒绝不应把正常暂停当作设备故障。
+    if (!this.lockPending) return;
+    this.lockPending = false;
+    // 浏览器已产生错误事件时，先退出当前回调栈再销毁控制器。
+    queueMicrotask(() => { if (!this.disposed) this.callbacks.onUnavailable("浏览器未能开启视角控制，已切换至人物档案。"); });
+  };
   private readonly contextLost = (event: Event) => {
     event.preventDefault();
     this.callbacks.onUnavailable("图形连接已中断，已切换至人物档案。");
@@ -476,7 +671,8 @@ export class GalleryScene {
     if (this.controls.isLocked) this.openActive();
   };
   private openActive() {
-    if (this.active) this.callbacks.onOpenCharacter(this.active.character, this.active.slot);
+    if (this.activeArtifact) this.callbacks.onOpenArtifact?.(this.activeArtifact);
+    else if (this.active) this.callbacks.onOpenCharacter(this.active.character, this.active.slot);
   }
 
   private move(delta: number) {
@@ -493,7 +689,7 @@ export class GalleryScene {
       Number(this.keys.has("KeyA") || this.keys.has("ArrowLeft"));
     this.forward.multiplyScalar(f).addScaledVector(this.right, s);
     if (this.forward.lengthSq() > 1) this.forward.normalize();
-    this.velocity.lerp(this.forward.multiplyScalar(4.8), 1 - Math.exp(-12 * delta));
+    this.velocity.lerp(this.forward.multiplyScalar(3.2), this.reducedMotion ? 1 : 1 - Math.exp(-12 * delta));
     const x = this.camera.position.x + this.velocity.x * delta;
     if (isWalkable(x, this.camera.position.z, this.hall)) this.camera.position.x = x;
     else this.velocity.x = 0;
@@ -504,12 +700,22 @@ export class GalleryScene {
 
   private interaction() {
     let active: Exhibit | null = null;
+    let activeArtifact: MuseumArtifact | null = null;
+    let artifactDistance = INTERACTION_DISTANCE;
     if (this.controls.isLocked) {
       this.raycaster.setFromCamera(new THREE.Vector2(), this.camera);
+      this.raycaster.far = INTERACTION_DISTANCE;
       const hit = this.raycaster.intersectObjects(
-        this.exhibits.map((e) => e.group),
+        this.exhibits.filter(e => e.group.position.distanceTo(this.camera.position) < INTERACTION_DISTANCE + 2).map((e) => e.group),
         true,
       )[0];
+      for (const [index, box] of this.artifactBoxes.entries()) {
+        if (!this.raycaster.ray.intersectBox(box, this.occlusionHit)) continue;
+        const distance = this.occlusionHit.distanceTo(this.camera.position);
+        if (distance < artifactDistance && (!hit || distance < hit.distance)) {
+          artifactDistance = distance; activeArtifact = artifacts[index]!;
+        }
+      }
       if (hit && hit.distance <= INTERACTION_DISTANCE) {
         let object: THREE.Object3D | null = hit.object;
         while (object && !active) {
@@ -517,6 +723,11 @@ export class GalleryScene {
           object = object.parent;
         }
       }
+    }
+    if (activeArtifact) active = null;
+    if (this.activeArtifact !== activeArtifact) {
+      this.activeArtifact = activeArtifact;
+      this.callbacks.onActiveArtifact?.(activeArtifact);
     }
     for (const exhibit of this.exhibits) {
       const near =
@@ -537,7 +748,8 @@ export class GalleryScene {
       const distance = exhibit.group.position.distanceTo(this.camera.position);
       if (distance > 18) continue;
       this.projected.copy(exhibit.group.position);
-      this.projected.y = 3.65;
+      // 导航数字放在画框上沿之外，避免覆盖人物面部与海报文字。
+      this.projected.y = 4.35;
       this.projected.project(this.camera);
       if (
         this.projected.z < -1 ||
@@ -549,7 +761,8 @@ export class GalleryScene {
       this.toExhibit.copy(exhibit.group.position).sub(this.camera.position).normalize();
       this.occlusionRay.set(this.camera.position, this.toExhibit);
       this.occlusionRay.far = distance - 0.15;
-      if (this.occlusionRay.intersectObjects(this.occluders, true).length) continue;
+      if (this.occlusionBoxes.some(box => this.occlusionRay.ray.intersectBox(box, this.occlusionHit) &&
+        this.occlusionHit.distanceTo(this.camera.position) < distance - .15)) continue;
       markers.push({
         slot: exhibit.slot,
         name: exhibit.character.name,
@@ -567,12 +780,7 @@ export class GalleryScene {
       heading: Math.atan2(this.forward.x, -this.forward.z),
       hall: this.hall,
       markers,
-      zone:
-        this.camera.position.z > this.hall.cabinBack
-          ? "艉甲板"
-          : this.camera.position.z < this.hall.cabinFront
-            ? "艏甲板"
-            : "人物展舱",
+      zone: this.camera.position.z < posterStartZ ? "道具典藏舱" : "人物长廊",
     });
   }
 
@@ -581,27 +789,38 @@ export class GalleryScene {
     this.frame = requestAnimationFrame(this.animate);
     const delta = Math.min((now - this.lastTime) / 1000, 0.05);
     this.lastTime = now;
-    if (document.hidden) return;
+    if (document.hidden || !this.running) return;
+    if (!this.controls.isLocked && !this.needsRender) return;
+    this.needsRender = false;
     this.move(delta);
     this.camera.updateMatrixWorld();
+    this.rotateDisplays(delta);
     if (this.loaded) {
       this.updatePosters();
       this.interaction();
     }
-    if (!this.reducedMotion && this.water)
-      this.water.offset.x = (this.water.offset.x + delta * 0.009) % 1;
     if (now - this.lastNavigation > 100) {
       this.navigation();
       this.lastNavigation = now;
     }
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   };
   private readonly resize = () => {
     const width = Math.max(this.container.clientWidth, 1),
       height = Math.max(this.container.clientHeight, 1);
-    this.camera.aspect = width / height;
+    const aspect = width / height;
+    // 窄桌面仍要同时容纳左舷刀架与右舷船模；用平滑的视场补偿横向视锥收窄。
+    const aspectDeficit = Math.max(0, 1.9 - aspect);
+    this.camera.fov = Math.min(78, 58 + aspectDeficit * 25 + aspectDeficit * aspectDeficit * 20);
+    this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
+    // 高 DPI/超宽窗口限制实际像素总量，文字与 HUD 保持原生分辨率。
+    const ratio = Math.min(devicePixelRatio, 1.25, Math.sqrt(2_100_000 / (width * height)));
+    this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(width, height, false);
+    this.composer.setPixelRatio(ratio);
+    this.composer.setSize(width, height);
+    this.needsRender = true;
   };
   private releaseResources() {
     this.geometries.forEach((g) => g.dispose());
@@ -632,7 +851,16 @@ export class GalleryScene {
     this.renderer.domElement.removeEventListener("click", this.click);
     this.renderer.domElement.removeEventListener("webglcontextlost", this.contextLost);
     this.releaseResources();
+    this.scene.traverse(object => {
+      if (object instanceof THREE.Light && 'shadow' in object) {
+        (object as THREE.DirectionalLight).shadow?.dispose();
+      }
+    });
     this.scene.clear();
+    this.rotatingDisplays.clear();
+    this.ambientOcclusion.dispose();
+    for (const pass of this.composer.passes) if (pass !== this.ambientOcclusion) pass.dispose();
+    this.composer.dispose();
     this.environment?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();

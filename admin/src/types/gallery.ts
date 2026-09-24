@@ -24,6 +24,7 @@ export type GalleryCharacter = {
   description: string;
   quote: string;
   poster_url: string | null;
+  chapter_id: number | null;
   is_visible: boolean;
   sort_order: number;
   created_at: string;
@@ -40,10 +41,30 @@ export type GalleryCharacterPayload = Pick<
   | "description"
   | "quote"
   | "poster_url"
+  | "chapter_id"
   | "is_visible"
 >;
 
+export type GalleryChapter = {
+  id: number;
+  title: string;
+  subtitle: string;
+  heading: string;
+  description: string;
+  note: string;
+  label: string;
+  story: string;
+  artwork_index: number;
+  is_visible: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GalleryChapterPayload = Omit<GalleryChapter, "id" | "sort_order" | "created_at" | "updated_at">;
+
 export type GalleryManageResponse = {
   settings: GallerySettings;
+  chapters: GalleryChapter[];
   characters: GalleryCharacter[];
 };

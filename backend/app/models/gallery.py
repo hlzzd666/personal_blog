@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -24,6 +24,24 @@ class GallerySettings(Base):
     )
 
 
+class GalleryChapter(Base):
+    __tablename__ = "gallery_chapters"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(80), unique=True)
+    subtitle: Mapped[str] = mapped_column(String(200))
+    heading: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(String(500))
+    note: Mapped[str] = mapped_column(String(300))
+    label: Mapped[str] = mapped_column(String(120))
+    story: Mapped[str] = mapped_column(Text)
+    artwork_index: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now(), server_default=func.now())
+
+
 class GalleryCharacter(Base):
     __tablename__ = "gallery_characters"
 
@@ -36,6 +54,7 @@ class GalleryCharacter(Base):
     description: Mapped[str] = mapped_column(Text)
     quote: Mapped[str] = mapped_column(String(500))
     poster_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    chapter_id: Mapped[int | None] = mapped_column(ForeignKey("gallery_chapters.id"), nullable=True)
     is_visible: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -1,4 +1,5 @@
 import dimensions from "./layout.json";
+import { artifacts, posterStartZ } from "./artifacts";
 
 export { dimensions };
 export function createLayout(count: number) {
@@ -6,33 +7,30 @@ export function createLayout(count: number) {
     dimensions.minimumBays,
     Math.ceil(Math.min(count, dimensions.maximumCharacters) / 2),
   );
-  const cabinBack = dimensions.bayLength / 2;
-  const cabinFront = -(bays - 1) * dimensions.bayLength - dimensions.bayLength / 2;
+  const cabinBack = posterStartZ + (bays - 1) * dimensions.bayLength + 2;
+  const cabinFront = -8;
   return {
     bays,
     cabinBack,
     cabinFront,
-    minZ: cabinFront - dimensions.bowLength,
-    maxZ: cabinBack + dimensions.sternLength,
+    minZ: cabinFront,
+    maxZ: cabinBack,
   };
 }
 export type HallLayout = ReturnType<typeof createLayout>;
 
 export function exhibitPosition(index: number) {
   const side = index % 2 === 0 ? -1 : 1;
-  return { x: side * dimensions.frameX, z: -Math.floor(index / 2) * dimensions.bayLength, side };
+  return { x: side * dimensions.frameX, z: posterStartZ + Math.floor(index / 2) * dimensions.bayLength, side };
 }
 
 export function isWalkable(x: number, z: number, hall: HallLayout) {
   const radius = dimensions.playerRadius;
   if (z < hall.minZ + 0.6 || z > hall.maxZ - 0.6) return false;
-  let halfWidth = 4.4;
-  if (z >= hall.cabinFront && z <= hall.cabinBack) halfWidth = 3.1;
-  if (z < hall.cabinFront - 3) halfWidth = 4.4 - (hall.cabinFront - z - 3) * 0.65;
-  if (Math.abs(x) > halfWidth - radius) return false;
-  // 船首舵台和船尾桅杆使用保守包围圆，墙面展位留在主通道边界外。
-  if (Math.hypot(x, z - (hall.cabinFront - 5.8)) < 0.95) return false;
-  if ([-4.1, 4.1].some((mastX) => Math.hypot(x - mastX, z - (hall.cabinBack + 4.6)) < 0.55))
-    return false;
+  if (Math.abs(x) > 4.25 - radius) return false;
+  // 与展台共用尺寸，画像长廊内不设置家具碰撞体。
+  if (artifacts.some(item =>
+    Math.abs(x - item.x) < item.width / 2 + radius && Math.abs(z - item.z) < item.depth / 2 + radius,
+  )) return false;
   return true;
 }

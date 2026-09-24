@@ -1,0 +1,148 @@
+{
+  "layouts": [
+    {
+      "viewport": [
+        1920,
+        912
+      ],
+      "gap": 32,
+      "visible": true,
+      "overflow": false
+    },
+    {
+      "viewport": [
+        1672,
+        941
+      ],
+      "gap": 32,
+      "visible": true,
+      "overflow": false
+    },
+    {
+      "viewport": [
+        1440,
+        900
+      ],
+      "gap": 32,
+      "visible": true,
+      "overflow": false
+    },
+    {
+      "viewport": [
+        1280,
+        720
+      ],
+      "gap": 22,
+      "visible": true,
+      "overflow": false
+    },
+    {
+      "viewport": [
+        1024,
+        768
+      ],
+      "gap": 22,
+      "visible": true,
+      "overflow": false
+    },
+    {
+      "viewport": [
+        390,
+        844
+      ],
+      "gap": 76,
+      "visible": true,
+      "overflow": false
+    }
+  ],
+  "cases": [
+    {
+      "count": 0,
+      "exhibits": 0,
+      "colors": 1040,
+      "posters": 0,
+      "boundaries": true,
+      "artifactNodes": 6,
+      "loadedModels": 5,
+      "fallbackReplaced": true,
+      "modelBoundsSafe": true,
+      "shipFallback": true,
+      "artifacts": true,
+      "aisles": true,
+      "postersClear": true,
+      "separated": true,
+      "entry": true
+    },
+    {
+      "count": 1,
+      "exhibits": 1,
+      "colors": 1040,
+      "posters": 1,
+      "boundaries": true,
+      "artifactNodes": 6,
+      "loadedModels": 5,
+      "fallbackReplaced": true,
+      "modelBoundsSafe": true,
+      "shipFallback": false,
+      "artifacts": true,
+      "aisles": true,
+      "postersClear": true,
+      "separated": true,
+      "entry": true
+    },
+    {
+      "count": 12,
+      "exhibits": 12,
+      "colors": 1044,
+      "posters": 12,
+      "boundaries": true,
+      "artifactNodes": 6,
+      "loadedModels": 5,
+      "fallbackReplaced": true,
+      "modelBoundsSafe": true,
+      "shipFallback": false,
+      "artifacts": true,
+      "aisles": true,
+      "postersClear": true,
+      "separated": true,
+      "entry": true
+    },
+    {
+      "count": 40,
+      "exhibits": 40,
+      "colors": 1044,
+      "posters": 12,
+      "boundaries": true,
+      "artifactNodes": 6,
+      "loadedModels": 5,
+      "fallbackReplaced": true,
+      "modelBoundsSafe": true,
+      "shipFallback": true,
+      "artifacts": true,
+      "aisles": true,
+      "postersClear": true,
+      "separated": true,
+      "entry": true,
+      "cache": {
+        "size": 3,
+        "evicted": true
+      }
+    }
+  ],
+  "fallbacks": [
+    "webgl",
+    "pointer",
+    "model",
+    "api",
+    "empty",
+    "broken-poster"
+  ],
+  "errors": [],
+  "mobile": true,
+  "search": true,
+  "chapters": true,
+  "details": true,
+  "artifacts": true,
+  "modelRecovery": true,
+  "pointerLock": true
+}

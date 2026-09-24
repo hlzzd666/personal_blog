@@ -22,12 +22,6 @@ export type Article = {
   created_at: string;
 };
 
-export type ArticlePayload = Omit<Article, "id" | "created_at" | "updated_at" | "views" | "likes" | "liked_by_current_visitor"> & {
-  updated_at?: string | null;
-  views?: number;
-  likes?: number;
-};
-
 export type ArticleCountItem = {
   name: string;
   count: number;

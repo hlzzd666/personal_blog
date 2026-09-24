@@ -1,12 +1,17 @@
 import unittest
+import importlib
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
 from pydantic import ValidationError
 from sqlalchemy import create_engine
+from sqlalchemy import text
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -15,13 +20,18 @@ from backend.app.core.config import settings
 from backend.app.main import app
 from backend.app.models.base import Base
 from backend.app.models.gallery import GalleryCharacter
-from backend.app.schemas.gallery import GalleryCharacterPayload, GallerySettingsPayload
+from backend.app.schemas.gallery import GalleryCharacterPayload, GalleryChapterPayload, GallerySettingsPayload
 from backend.app.services.auth import require_admin_session
 from backend.app.services.gallery import (
     create_gallery_character,
+    create_gallery_chapter,
+    delete_gallery_chapter,
     delete_gallery_character,
     get_gallery,
+    get_gallery_chapter,
     reorder_gallery_characters,
+    reorder_gallery_chapters,
+    update_gallery_chapter,
     update_gallery_character,
     update_gallery_settings,
 )
@@ -54,6 +64,10 @@ class GalleryTest(unittest.TestCase):
         cls.SessionLocal = sessionmaker(bind=cls.engine, expire_on_commit=False)
 
     def setUp(self) -> None:
+        # 本地配置可能已启用真实 OSS；常规测试必须使用临时目录，避免外部写入。
+        storage = patch.object(settings, "media_storage_driver", "local")
+        storage.start()
+        self.addCleanup(storage.stop)
         Base.metadata.drop_all(self.engine)
         Base.metadata.create_all(self.engine)
         self.session: Session = self.SessionLocal()
@@ -98,6 +112,104 @@ class GalleryTest(unittest.TestCase):
         self.assertEqual([item.name for item in public_gallery.characters], ["人物 1"])
         self.assertEqual(len(manage_gallery.characters), 2)
         self.assertEqual(updated.name, "人物 3")
+
+    def test_gallery_chapters_are_configurable_and_guarded(self) -> None:
+        self.assertEqual(get_gallery(self.session).chapters, [])
+        chapter = create_gallery_chapter(
+            self.session,
+            GalleryChapterPayload(
+                title="测试航线", subtitle="副标题", heading="测试标题", description="说明", note="提示", label="TEST", story="故事"
+            ),
+        )
+        other = create_gallery_chapter(self.session, GalleryChapterPayload(title="另一分类"))
+        character_payload_with_chapter = character_payload(2)
+        character_payload_with_chapter.chapter_id = chapter.id
+        assigned = create_gallery_character(self.session, character_payload_with_chapter)
+        self.assertEqual(assigned.chapter_id, chapter.id)
+        updated = update_gallery_chapter(
+            self.session,
+            get_gallery_chapter(self.session, chapter.id),
+            GalleryChapterPayload(
+                title="已更新", subtitle="副标题", heading="测试标题", description="说明", note="提示", label="TEST", story="故事"
+            ),
+        )
+        self.assertEqual(updated.title, "已更新")
+        with self.assertRaisesRegex(ValueError, "仍有人物使用"):
+            delete_gallery_chapter(self.session, get_gallery_chapter(self.session, chapter.id))
+        reordered = reorder_gallery_chapters(self.session, [item.id for item in reversed(get_gallery(self.session, include_hidden=True).chapters)])
+        self.assertEqual([item.id for item in reordered], [other.id, chapter.id])
+        with self.assertRaisesRegex(ValueError, "全部分类"):
+            reorder_gallery_chapters(self.session, [chapter.id, chapter.id])
+        with self.assertRaisesRegex(ValueError, "名称已存在"):
+            create_gallery_chapter(self.session, GalleryChapterPayload(title="已更新"))
+        hidden_payload = GalleryChapterPayload(title="已更新", is_visible=False)
+        update_gallery_chapter(self.session, get_gallery_chapter(self.session, chapter.id), hidden_payload)
+        self.assertEqual([item.id for item in get_gallery(self.session).chapters], [other.id])
+        self.assertEqual(len(get_gallery(self.session).characters), 1)
+        record = self.session.get(GalleryCharacter, assigned.id)
+        old_client_payload = character_payload(2)
+        self.assertEqual(update_gallery_character(self.session, record, old_client_payload).chapter_id, chapter.id)
+        invalid = character_payload(2)
+        invalid.chapter_id = 9999
+        with self.assertRaisesRegex(ValueError, "分类不存在"):
+            update_gallery_character(self.session, record, invalid)
+        old_client_payload.chapter_id = None
+        self.assertIsNone(update_gallery_character(self.session, record, old_client_payload).chapter_id)
+        delete_gallery_chapter(self.session, get_gallery_chapter(self.session, chapter.id))
+        delete_gallery_chapter(self.session, get_gallery_chapter(self.session, other.id))
+        self.assertEqual(get_gallery(self.session).chapters, [])
+        self.assertEqual(reorder_gallery_chapters(self.session, []), [])
+
+    def test_chapter_migration_preserves_characters_and_seeds_membership(self) -> None:
+        migration = importlib.import_module("backend.migrations.versions.20260924_01_add_gallery_chapters")
+        engine = create_engine("sqlite+pysqlite://")
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE gallery_characters (id INTEGER PRIMARY KEY, name VARCHAR(80), poster_url VARCHAR(2048))"))
+            names = ["蒙奇·D·路飞", "索隆", "娜美", "乌索普", "山治", "乔巴", "妮可·罗宾", "弗兰奇", "布鲁克", "甚平", "未分类人物"]
+            connection.execute(text("INSERT INTO gallery_characters (id, name, poster_url) VALUES (:id, :name, :url)"), [
+                {"id": index + 1, "name": name, "url": f"/poster/{index}.webp"} for index, name in enumerate(names)
+            ])
+            before = connection.execute(text("SELECT id,name,poster_url FROM gallery_characters ORDER BY id")).all()
+            with patch.object(migration, "op", Operations(MigrationContext.configure(connection))):
+                migration.upgrade()
+                self.assertEqual(connection.execute(text("SELECT chapter_id FROM gallery_characters ORDER BY id")).scalars().all(), [1]*5 + [2]*4 + [3, None])
+                self.assertEqual(connection.execute(text("SELECT title FROM gallery_chapters ORDER BY sort_order")).scalars().all(), ["东海群像", "伟大航路", "新世界"])
+                self.assertEqual(connection.execute(text("SELECT id,name,poster_url FROM gallery_characters ORDER BY id")).all(), before)
+                migration.downgrade()
+                self.assertEqual(connection.execute(text("SELECT id,name,poster_url FROM gallery_characters ORDER BY id")).all(), before)
+        engine.dispose()
+
+    def test_chapter_api_auth_validation_and_persistence(self) -> None:
+        client = TestClient(app)
+        for method, path, payload in [
+            ("post", "/gallery/chapters", {"title": "测试"}),
+            ("put", "/gallery/chapters/1", {"title": "测试"}),
+            ("put", "/gallery/chapters/order", {"chapter_ids": []}),
+            ("delete", "/gallery/chapters/1", None),
+        ]:
+            response = client.request(method, "/api/v1" + path, json=payload)
+            self.assertEqual(response.status_code, 401)
+        app.dependency_overrides[require_admin_session] = lambda: "admin"
+        self.assertEqual(client.post("/api/v1/gallery/chapters", json={"title": " "}).status_code, 422)
+        self.assertEqual(client.post("/api/v1/gallery/chapters", json={"title": "测试", "artwork_index": 9}).status_code, 422)
+        response = client.post("/api/v1/gallery/chapters", json={"title": "可配置分类"})
+        self.assertEqual(response.status_code, 200)
+        chapter_id = response.json()["data"]["id"]
+        self.assertEqual(client.post("/api/v1/gallery/chapters", json={"title": "可配置分类"}).status_code, 409)
+        payload = character_payload(1).model_dump() | {"chapter_id": chapter_id}
+        response = client.post("/api/v1/gallery/characters", json=payload)
+        self.assertEqual(response.status_code, 200)
+        character_id = response.json()["data"]["id"]
+        self.assertEqual(client.put(f"/api/v1/gallery/characters/{character_id}", json=payload | {"chapter_id": 9999}).status_code, 409)
+        self.assertEqual(client.delete(f"/api/v1/gallery/chapters/{chapter_id}").status_code, 409)
+        self.assertEqual(client.put("/api/v1/gallery/chapters/order", json={"chapter_ids": [chapter_id, chapter_id]}).status_code, 422)
+        self.assertEqual(client.put("/api/v1/gallery/chapters/order", json={"chapter_ids": [chapter_id]}).status_code, 200)
+        client.put(f"/api/v1/gallery/chapters/{chapter_id}", json={"title": "新名称", "is_visible": False})
+        self.assertEqual(client.get("/api/v1/gallery").json()["data"]["chapters"], [])
+        self.assertEqual(client.get("/api/v1/gallery/manage").json()["data"]["chapters"][0]["title"], "新名称")
+        client.put(f"/api/v1/gallery/characters/{character_id}", json=payload | {"chapter_id": None})
+        self.assertEqual(client.delete(f"/api/v1/gallery/chapters/{chapter_id}").status_code, 200)
+        self.assertEqual(client.get("/api/v1/gallery/manage").json()["data"]["chapters"], [])
 
     def test_validation_and_media_references(self) -> None:
         invalid_payload = character_payload(1).model_dump()
@@ -148,6 +260,28 @@ class GalleryTest(unittest.TestCase):
             create_gallery_image_variants(b"not an image", "poster")
         with self.assertRaises(GalleryImageError):
             create_gallery_image_variants(image_bytes("GIF", (30, 30)), "poster")
+
+    def test_oss_upload_and_failure_do_not_write_local_files(self) -> None:
+        content = image_bytes("WEBP", (30, 45))
+        bucket = Mock()
+        bucket.put_object.return_value.status = 200
+        with patch.object(settings, "media_storage_driver", "oss"), patch.object(
+            settings, "oss_public_base_url", "https://images.example.com"
+        ), patch.object(settings, "oss_object_prefix", "personal-blog"), patch(
+            "backend.app.services.object_storage._bucket", return_value=bucket
+        ):
+            url = create_gallery_image_variants(content, "poster").url
+            self.assertTrue(url.startswith("https://images.example.com/personal-blog/gallery/poster/"))
+            args, kwargs = bucket.put_object.call_args
+            self.assertEqual(args[1], content)
+            self.assertEqual(kwargs["headers"]["Content-Type"], "image/webp")
+            with self.assertRaises(GalleryImageError):
+                create_gallery_image_variants(b"invalid", "poster")
+            self.assertEqual(bucket.put_object.call_count, 1)
+            bucket.put_object.side_effect = RuntimeError("provider error")
+            with self.assertRaises(GalleryImageError):
+                create_gallery_image_variants(content, "poster")
+        self.assertEqual(list(Path(self.upload_directory.name).rglob("*")), [])
 
     def test_limit_reorder_and_delete_normalization(self) -> None:
         created = [create_gallery_character(self.session, character_payload(index)) for index in range(40)]

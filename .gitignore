@@ -34,3 +34,14 @@ backend/uploads/
 /web.tar.gz
 /admin.tar.gz
 /backend.tar.gz
+
+# Local development diagnostics
+/.codex-screenshots/
+/.resume_work/
+
+# 本机资料截图与图片接口运行记录
+/artifacts/about-design/**/references/
+/artifacts/about-design/**/request.json
+/artifacts/about-design/**/response_summary.json
+/artifacts/about-design/**/metadata.json
+/artifacts/about-design/**/prompt_review.json

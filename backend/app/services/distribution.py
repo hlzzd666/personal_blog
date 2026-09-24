@@ -3,7 +3,6 @@ import json
 import re
 from datetime import UTC, datetime
 from email.utils import format_datetime
-from pathlib import Path
 from urllib.parse import urljoin
 from xml.etree.ElementTree import Element, SubElement, tostring
 

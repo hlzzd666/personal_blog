@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     web_base_path: str = "/web"
     web_dist_dir: str = "web/dist"
     upload_dir: str = "backend/uploads"
+    media_storage_driver: str = "local"
+    oss_endpoint: str = ""
+    oss_bucket: str = ""
+    oss_access_key_id: str = ""
+    oss_access_key_secret: str = ""
+    oss_public_base_url: str = ""
+    oss_object_prefix: str = "personal-blog"
     redis_url: str = "redis://127.0.0.1:6379/0"
     article_list_cache_ttl: int = 300
     article_visitor_identity_secret: str = "change-this-development-visitor-identity-secret"

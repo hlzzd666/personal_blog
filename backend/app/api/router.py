@@ -59,6 +59,9 @@ from backend.app.schemas.gallery import (
     GalleryCharacterOrderPayload,
     GalleryCharacterPayload,
     GalleryCharacterResponse,
+    GalleryChapterPayload,
+    GalleryChapterOrderPayload,
+    GalleryChapterResponse,
     GalleryImageUploadResult,
     GalleryResponse,
     GallerySettingsPayload,
@@ -125,11 +128,17 @@ from backend.app.services.auth import (
 )
 from backend.app.services.media import cleanup_unreferenced_media_files, list_media_files
 from backend.app.services.gallery import (
+    create_gallery_chapter,
     create_gallery_character,
+    delete_gallery_chapter,
     delete_gallery_character,
     get_gallery,
+    get_gallery_chapter,
     get_gallery_character,
+    list_gallery_chapters,
+    reorder_gallery_chapters,
     reorder_gallery_characters,
+    update_gallery_chapter,
     update_gallery_character,
     update_gallery_settings,
 )
@@ -994,6 +1003,78 @@ def write_gallery_settings(
     return build_success_response(request, result, message="展厅设置已保存")
 
 
+@router.get("/gallery/chapters", tags=["gallery"], response_model=ApiResponse[list[GalleryChapterResponse]])
+def read_gallery_chapters(
+    request: Request,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[list[GalleryChapterResponse]]:
+    return build_success_response(request, list_gallery_chapters(session, include_hidden=True))
+
+
+@router.post("/gallery/chapters", tags=["gallery"], response_model=ApiResponse[GalleryChapterResponse])
+def create_manage_gallery_chapter(
+    request: Request,
+    payload: GalleryChapterPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GalleryChapterResponse]:
+    try:
+        result = create_gallery_chapter(session, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, result, message="展厅分类已创建")
+
+
+@router.put("/gallery/chapters/order", tags=["gallery"], response_model=ApiResponse[list[GalleryChapterResponse]])
+def reorder_manage_gallery_chapters(
+    request: Request,
+    payload: GalleryChapterOrderPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[list[GalleryChapterResponse]]:
+    try:
+        result = reorder_gallery_chapters(session, payload.chapter_ids)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, result, message="展厅分类顺序已保存")
+
+
+@router.put("/gallery/chapters/{chapter_id}", tags=["gallery"], response_model=ApiResponse[GalleryChapterResponse])
+def update_manage_gallery_chapter(
+    request: Request,
+    chapter_id: int,
+    payload: GalleryChapterPayload,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[GalleryChapterResponse]:
+    chapter = get_gallery_chapter(session, chapter_id)
+    if chapter is None:
+        raise HTTPException(status_code=404, detail="展厅分类不存在")
+    try:
+        result = update_gallery_chapter(session, chapter, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, result, message="展厅分类已更新")
+
+
+@router.delete("/gallery/chapters/{chapter_id}", tags=["gallery"], response_model=ApiResponse[dict[str, int]])
+def delete_manage_gallery_chapter(
+    request: Request,
+    chapter_id: int,
+    _admin_session: AdminSessionResponse = Depends(require_admin_session),
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[dict[str, int]]:
+    chapter = get_gallery_chapter(session, chapter_id)
+    if chapter is None:
+        raise HTTPException(status_code=404, detail="展厅分类不存在")
+    try:
+        delete_gallery_chapter(session, chapter)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return build_success_response(request, {"id": chapter_id}, message="展厅分类已删除")
+
+
 @router.post(
     "/gallery/media/{kind}",
     tags=["gallery"],
@@ -1078,7 +1159,10 @@ def update_manage_gallery_character(
     character = get_gallery_character(session, character_id)
     if character is None:
         raise HTTPException(status_code=404, detail="展厅人物不存在")
-    result = update_gallery_character(session, character, payload)
+    try:
+        result = update_gallery_character(session, character, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     return build_success_response(request, result, message="展厅人物已更新")
 
 

@@ -1,0 +1,22 @@
+{
+  "asset": "log-pose",
+  "triangles": 23520,
+  "materials": 9,
+  "mesh_draw_calls": 9,
+  "dimensions_m": [
+    0.506,
+    0.6073,
+    0.8433
+  ],
+  "bytes": 799092,
+  "embedded_textures": 2,
+  "front": "Blender -Y / glTF +Z",
+  "grounded": true,
+  "source": "Original Blender modelling; anime-inspired fan reconstruction",
+  "glass": "Alpha blend only, no transmission render pass",
+  "glb_container_valid": true,
+  "glb_reimport_verified": true,
+  "imported_triangles": 23520,
+  "imported_mesh_count": 9,
+  "imported_floor_z": 0.0
+}

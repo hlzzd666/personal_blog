@@ -1,0 +1,52 @@
+{
+  "operation": "edit",
+  "model": "gpt-image-2",
+  "input_images": [
+    "D:\\codex-test\\personal_blog\\web\\public\\gallery\\museum\\portraits.webp"
+  ],
+  "mask": null,
+  "image_count": 1,
+  "images": [
+    {
+      "filename": "brook-museum.png",
+      "format": "png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGB",
+      "bytes": 2609141,
+      "sha256": "1ee092980b4ef405ca100de8945792241c1ef4b23037a5c3b4e7aa4f06ce46d1",
+      "has_alpha": false
+    }
+  ],
+  "prompt_review": {
+    "profile": "illustration",
+    "operation": "edit",
+    "status": "warn",
+    "issues": [
+      {
+        "code": "edit-scope-not-surgical",
+        "severity": "warning",
+        "message": "The edit scope is not bounded with a 'change only X' instruction.",
+        "suggestion": "State the exact change, then add 'keep everything else the same.'"
+      }
+    ],
+    "features": {
+      "characters": 2068,
+      "has_labeled_sections": false,
+      "requests_text": false,
+      "mentions_text": true,
+      "has_exact_copy": false,
+      "declares_no_text": false,
+      "image_count": 1,
+      "has_mask": false,
+      "quality": "high",
+      "size": "1024x1536",
+      "background": "auto",
+      "model": "gpt-image-2",
+      "model_family": "gpt-image-2"
+    }
+  },
+  "warnings": [
+    "Prompt [edit-scope-not-surgical]: The edit scope is not bounded with a 'change only X' instruction."
+  ]
+}

@@ -8,9 +8,9 @@ const props = withDefaults(defineProps<{ variant?: AtmosphereVariant }>(), {
 });
 
 const assetByVariant: Record<AtmosphereVariant, string> = {
-  detail: "/atmosphere/deep-current.svg",
-  series: "/atmosphere/clouded-route.svg",
-  notes: "/atmosphere/sunset-wake.svg",
+  detail: `${import.meta.env.BASE_URL}atmosphere/deep-current.svg`,
+  series: `${import.meta.env.BASE_URL}atmosphere/clouded-route.svg`,
+  notes: `${import.meta.env.BASE_URL}atmosphere/sunset-wake.svg`,
 };
 
 const assetUrl = computed(() => assetByVariant[props.variant]);

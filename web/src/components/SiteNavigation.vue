@@ -28,7 +28,8 @@ let loadingBrand = false;
 const brand = computed(() => props.brand ?? loadedBrand.value);
 const readingActive = computed(() => /^\/(articles|series|notes)(\/|$)/.test(route.path));
 const voyageActive = computed(() => route.path === "/dashboard" || route.path.startsWith("/gallery"));
-const usesLightSurface = computed(() => route.path === "/about" || route.path === "/privacy" || route.path === "/guestbook" || /^\/articles\/[^/]+/.test(route.path));
+const usesLightSurface = computed(() => route.path === "/privacy" || route.path === "/guestbook" || /^\/articles\/[^/]+/.test(route.path));
+const usesNightSurface = computed(() => route.path === "/about");
 const usesSystemSurface = computed(() => route.path === "/icons");
 
 async function loadBrand() {
@@ -185,7 +186,7 @@ onBeforeUnmount(() => {
   <header
     :class="[
       'floating-nav',
-      { hidden: !navVisible, revealing: navRevealing, 'light-surface': usesLightSurface, 'system-surface': usesSystemSurface, 'menu-open': mobileMenuOpen },
+      { hidden: !navVisible, revealing: navRevealing, 'light-surface': usesLightSurface, 'night-surface': usesNightSurface, 'system-surface': usesSystemSurface, 'menu-open': mobileMenuOpen },
     ]"
   >
     <RouterLink class="brand" :to="{ path: '/', hash: '#hero' }" @click="closeMenus">{{ brand }}</RouterLink>
@@ -539,5 +540,16 @@ nav > a:focus-visible,
   .floating-nav.system-surface .mobile-nav-group p { color: #f0c162; }
   .floating-nav.system-surface .mobile-nav-panel a:hover, .floating-nav.system-surface .mobile-nav-panel a:focus-visible, .floating-nav.system-surface .mobile-nav-search:hover, .floating-nav.system-surface .mobile-nav-search:focus-visible { color: #f0c162; background: rgba(255,211,111,.1); }
 }
+.floating-nav.night-surface { --nav-accent: #e2bc74; }
+.floating-nav.night-surface::before { border-bottom: 1px solid rgba(169,187,192,.14); background: rgba(6,26,34,.92); }
+.floating-nav.night-surface :is(.brand, .nav-primary-link, .nav-group-trigger, .nav-search-button, .nav-cta) { color: #f3edda; }
+.floating-nav.night-surface :is(.nav-primary-link, .nav-group-trigger, .nav-search-button, .nav-cta):is(:hover, :focus-visible, .router-link-active), .floating-nav.night-surface .nav-menu-group:is(.active, .open) .nav-group-trigger { color: var(--nav-accent); }
+.floating-nav.night-surface :is(.nav-dropdown, .mobile-nav-panel) { border-color: rgba(226,188,116,.24); background: rgba(6,26,34,.97); box-shadow: 0 1.4rem 2.8rem rgba(0,10,16,.28); }
+.floating-nav.night-surface :is(.nav-dropdown a, .mobile-nav-panel a, .mobile-nav-search, .mobile-menu-toggle) { color: #f3edda; }
+.floating-nav.night-surface :is(.nav-dropdown small, .nav-dropdown-empty) { color: #a9bbc0; }
+.floating-nav.night-surface :is(.nav-dropdown a, .mobile-nav-panel a, .mobile-nav-search):is(:hover, :focus-visible) { color: var(--nav-accent); background: rgba(226,188,116,.09); }
+.floating-nav.night-surface :is(.mobile-nav-group p, .mobile-nav-search) { color: var(--nav-accent); }
+.floating-nav.night-surface .mobile-menu-toggle { border-color: rgba(169,187,192,.3); background: rgba(6,26,34,.45); }
+.floating-nav.night-surface .mobile-nav-cta { color: #061a22 !important; background: #e2bc74 !important; }
 @media (prefers-reduced-motion: reduce) { .floating-nav, .floating-nav::before, .nav-primary-link::after, .nav-group-trigger::after, .nav-search-button::after, .nav-cta::after, .nav-group-icon, .nav-dropdown, .nav-cta, .mobile-menu-toggle span { transition: none; } }
 </style>
