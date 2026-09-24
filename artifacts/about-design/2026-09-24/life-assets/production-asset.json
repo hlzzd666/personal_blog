@@ -1,0 +1,12 @@
+{
+  "asset": "web/public/about/quiet-harbor.webp",
+  "source": "artifacts/about-design/2026-09-24/life-assets/quiet-harbor.png",
+  "width": 1536,
+  "height": 1024,
+  "bytes": 195190,
+  "quality": 86,
+  "sha256": "19f6a5bd5bb13cb887bb66cf147164c1a4732e9163d7268b6bdfaccdd681430e",
+  "use": "Decorative imagined coastal illustration, not a personal photograph",
+  "review": "Single generated image visually checked: quiet dark sea left, green travel car and lantern right, continuous coast toward lighthouse; no people or UI. Small non-legible trim marks on car do not identify a brand.",
+  "createdAt": "2026-09-24T08:38:07.485073+00:00"
+}

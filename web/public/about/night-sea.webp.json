@@ -1,0 +1,13 @@
+{
+  "source": "artifacts/about-design/2026-09-24/upgrade-assets/background/night-sea.png",
+  "model": "gpt-image-2",
+  "requested_quality": "high",
+  "reported_quality": "low",
+  "prompt": "Deliverable: a clean production website scene background, landscape 1536 x 1024. Image 1 is the primary scene and style reference. Preserve its moonlit deep midnight teal ocean, cloud shapes, distant mountainous island horizon, restrained silver moon reflection, camera height, realistic material and overall lighting. Change only the foreground object region and moon placement. Remove the entire foreground diorama: the ship, the circular platform and its thick rim, compass, journal, parchment and rope. Fill their former area with continuous realistic dark rippling ocean consistent with surrounding water. The result is ONLY an empty cinematic seascape.\n\nComposition: dark quiet negative space across the left 45 percent so real cream website text can sit there. One full moon around x=1050 y=195; soft broken moonlit cloud bank; low dark mountain horizon around y=350; dark textured ocean below. The moon's silver reflection is restrained and in the right half. The right half of the lower scene will later receive a separate miniature ship/workbench layer, so the seascape should remain subtly atmospheric. No bright distracting foreground glints at left. Bottom and corner tones gently settle toward #061a22 for seamless integration on the website.\n\nTreatment: preserve the reference's cinematic natural nighttime sea, dark cyan/teal, muted cool cloud edges, photographic waves and believable distant atmosphere. Do not turn it into a smooth gradient, vector scene, cartoon, extreme fantasy galaxy or empty studio. No new objects. No ship, boat, table, platform, compass, book, journal, ropes, maps, persons, starbursts, sparkles, neon, letters, typography, UI, border, watermark or signature. Output one complete clean ocean scene, no comparison panels, and no inset images.\n",
+  "processing": "保持原始构图，仅导出压缩 WebP。",
+  "size": [
+    1536,
+    1024
+  ],
+  "alpha": false
+}
