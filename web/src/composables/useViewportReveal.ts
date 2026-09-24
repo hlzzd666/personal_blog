@@ -2,10 +2,16 @@ import { nextTick, onBeforeUnmount } from "vue";
 
 export function useViewportReveal(selector = "[data-reveal]") {
   let observer: IntersectionObserver | undefined;
+  let disposed = false;
+  let generation = 0;
 
   async function observe(root?: HTMLElement | null) {
+    if (disposed) return;
+    const currentGeneration = ++generation;
     observer?.disconnect();
+    observer = undefined;
     await nextTick();
+    if (disposed || currentGeneration !== generation) return;
     const scope = root ?? document;
     const elements = Array.from(scope.querySelectorAll<HTMLElement>(selector));
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -14,6 +20,7 @@ export function useViewportReveal(selector = "[data-reveal]") {
     }
     observer = new IntersectionObserver(
       (entries) => {
+        if (disposed || currentGeneration !== generation) return;
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
           entry.target.classList.add("is-revealed");
@@ -28,6 +35,10 @@ export function useViewportReveal(selector = "[data-reveal]") {
     });
   }
 
-  onBeforeUnmount(() => observer?.disconnect());
+  onBeforeUnmount(() => {
+    disposed = true;
+    observer?.disconnect();
+    observer = undefined;
+  });
   return { observe };
 }

@@ -32,6 +32,51 @@ class GallerySettingsResponse(GallerySettingsPayload):
     model_config = {"from_attributes": True}
 
 
+class GalleryChapterPayload(BaseModel):
+    title: str = Field(..., min_length=1, max_length=80)
+    subtitle: str = Field(default="", max_length=200)
+    heading: str = Field(default="", max_length=200)
+    description: str = Field(default="", max_length=500)
+    note: str = Field(default="", max_length=300)
+    label: str = Field(default="", max_length=120)
+    story: str = Field(default="", max_length=5000)
+    artwork_index: int = Field(default=0, ge=0, le=3)
+    is_visible: bool = True
+
+    @field_validator("title")
+    @classmethod
+    def normalize_chapter_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("不能为空")
+        return normalized
+
+    @field_validator("subtitle", "heading", "description", "note", "label", "story")
+    @classmethod
+    def trim_chapter_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class GalleryChapterResponse(GalleryChapterPayload):
+    id: int
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GalleryChapterOrderPayload(BaseModel):
+    chapter_ids: list[int] = Field(..., max_length=20)
+
+    @field_validator("chapter_ids")
+    @classmethod
+    def validate_chapter_ids(cls, value: list[int]) -> list[int]:
+        if any(item < 1 for item in value) or len(value) != len(set(value)):
+            raise ValueError("分类排序必须使用有效且不重复的分类编号")
+        return value
+
+
 class GalleryCharacterPayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
     epithet: str = Field(..., min_length=1, max_length=120)
@@ -41,6 +86,7 @@ class GalleryCharacterPayload(BaseModel):
     description: str = Field(..., min_length=1, max_length=5000)
     quote: str = Field(..., min_length=1, max_length=500)
     poster_url: str | None = Field(default=None, max_length=2048)
+    chapter_id: int | None = Field(default=None, ge=1)
     is_visible: bool = False
 
     @field_validator(
@@ -70,6 +116,7 @@ class GalleryCharacterResponse(GalleryCharacterPayload):
 
 class GalleryResponse(BaseModel):
     settings: GallerySettingsResponse
+    chapters: list[GalleryChapterResponse]
     characters: list[GalleryCharacterResponse]
 
 

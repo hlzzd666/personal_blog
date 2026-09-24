@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 
 import { ArrowLeft, ArrowRight, Search, X, Maximize, Minimize, BookOpen, MoveUpRight } from "lucide-vue-next";
 import { fetchGallery, type GalleryCharacter, type GalleryResponse } from "../api/gallery";
 import type { GalleryScene, NavigationState } from "../gallery/GalleryScene";
-import { chapters, chapterCharacters, museumAsset } from "../gallery/curation";
+import { entryChapter, museumAsset } from "../gallery/curation";
 import { artifacts, logoCredit, type MuseumArtifact } from "../gallery/artifacts";
 import GalleryPortrait from "../components/GalleryPortrait.vue";
 import GalleryCompass from "../components/GalleryCompass.vue";
@@ -11,10 +11,10 @@ import GalleryCompass from "../components/GalleryCompass.vue";
 type View = "entry" | "archive" | "story" | "moments" | "tour";
 const view = ref<View>("entry");
 const chapter = ref(0);
-const currentChapter = computed(() => chapters[chapter.value]!);
 const sceneRoot = ref<HTMLElement | null>(null);
 const detailDialog = ref<HTMLDialogElement | null>(null);
 const artifactDialog = ref<HTMLDialogElement | null>(null);
+const characterCopyScroll = ref<HTMLElement | null>(null);
 const gallery = shallowRef<GalleryResponse | null>(null);
 const navigation = shallowRef<NavigationState | null>(null);
 const loading = ref(true);
@@ -35,10 +35,16 @@ let scene: GalleryScene | null = null;
 let generation = 0;
 let resumeAfterDialog = false;
 const characters = computed(() => gallery.value?.characters ?? []);
-const title = computed(() => chapter.value === 0 ? (gallery.value?.settings.hall_name || currentChapter.value.heading).replace("伟大航路人物档案馆", "伟大航路\n人物档案馆") : currentChapter.value.heading);
+const currentChapters = computed(() => [entryChapter, ...(gallery.value?.chapters ?? [])]);
+const currentChapter = computed(() => currentChapters.value[chapter.value] ?? currentChapters.value[0]!);
+const title = computed(() => chapter.value === 0 ? (gallery.value?.settings.hall_name || currentChapter.value.heading).replace("伟大航路人物档案馆", "伟大航路\n人物档案馆") : currentChapter.value.heading || currentChapter.value.title);
 const filteredCharacters = computed(() => {
   const term = query.value.trim().toLocaleLowerCase();
-  return chapterCharacters(characters.value, chapter.value).filter((c) =>
+  const selectedChapter = currentChapters.value[chapter.value];
+  const scopedCharacters = chapter.value === 0
+    ? characters.value
+    : characters.value.filter((character) => character.chapter_id === selectedChapter?.id);
+  return scopedCharacters.filter((c) =>
     [c.name, c.epithet, c.faction, c.description, c.ability].join(" ").toLocaleLowerCase().includes(term),
   );
 });
@@ -89,9 +95,10 @@ async function loadGallery() {
   selectedArtifact.value = null;
   navigation.value = null;
   try {
-    const data = await fetchGallery();
+    const data = await fetchGallery(true);
     if (run !== generation) return;
     gallery.value = { ...data, characters: data.characters.filter((c) => c.is_visible).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).slice(0, 40) };
+    chapter.value = 0;
   } catch {
     if (run === generation) { loading.value = false; error.value = "人物档案暂时无法读取，请重试。"; }
     return;
@@ -155,7 +162,10 @@ function openCharacter(character: GalleryCharacter) {
   selectedArtifact.value = null;
   selectedCharacter.value = character;
   scene?.unlock();
-  void nextTick(() => detailDialog.value?.showModal());
+  void nextTick(() => {
+    characterCopyScroll.value?.scrollTo({ top: 0 });
+    detailDialog.value?.showModal();
+  });
 }
 function closeCharacter() {
   detailDialog.value?.close();
@@ -184,7 +194,10 @@ function openActiveDisplay() {
 function adjacentCharacter(delta: number) {
   const index = characters.value.findIndex((c) => c.id === selectedCharacter.value?.id);
   const character = characters.value[(index + delta + characters.value.length) % characters.value.length];
-  if (character) { selectedCharacter.value = character; detailDialog.value?.scrollTo({ top: 0 }); }
+  if (character) {
+    selectedCharacter.value = character;
+    void nextTick(() => characterCopyScroll.value?.scrollTo({ top: 0 }));
+  }
 }
 async function toggleFullscreen() {
   try {
@@ -240,7 +253,7 @@ onBeforeUnmount(() => {
         <div class="entry-visual">
           <div class="entry-image">
             <img v-show="chapter === 0" class="cabin-backdrop" :src="museumAsset('collection-interior.webp')" alt="深海色典藏舱中，草帽、和道一文字、橡胶果实与梅利号围绕 ONE PIECE 徽标陈列" fetchpriority="high" />
-            <div v-if="chapter > 0" class="chapter-backdrop chapter-art" :class="'chapter-art-' + chapter" role="img" :aria-label="currentChapter.title + '航路插画'"></div>
+            <div v-if="chapter > 0" class="chapter-backdrop chapter-art" :class="'chapter-art-' + currentChapter.artwork_index" role="img" :aria-label="currentChapter.title + '航路插画'"></div>
           </div>
           <div class="entry-visual-caption">
             <button v-if="chapter === 0 && featuredCharacter" class="featured-label" @click="openCharacter(featuredCharacter)">
@@ -256,18 +269,18 @@ onBeforeUnmount(() => {
       </div>
       <footer class="exhibition-dock">
         <ol class="archive-rail" aria-label="展馆章节">
-          <li v-for="(item, index) in chapters" :key="item.title">
+          <li v-for="(item, index) in currentChapters" :key="item.id">
             <button :class="{ active: chapter === index }" :aria-pressed="chapter === index" @click="selectChapter(index)">
-              <span class="chapter-art" :class="'chapter-art-' + index"></span>
+              <span class="chapter-art" :class="'chapter-art-' + item.artwork_index"></span>
               <span class="chapter-number">{{ ordinal(index + 1) }}</span>
-              <span class="chapter-heading"><strong>{{ item.title }}</strong><small>{{ ['馆藏序章', '梦想起点', '伙伴与远方', '时代回声'][index] }}</small></span>
+              <span class="chapter-heading"><strong>{{ item.title }}</strong><small>{{ index === 0 ? '馆藏序章' : item.label }}</small></span>
               <span class="chapter-caption">{{ item.subtitle }}</span>
             </button>
           </li>
         </ol>
         <div class="dock-compass">
           <GalleryCompass :heading="chapter * 45" />
-          <div><small>当前方位</small><strong>{{ currentChapter.title }}</strong><i></i><span>第 {{ ordinal(chapter + 1) }} 章 / 共 04 章</span><p>伟大的航路，永不止步。</p></div>
+          <div><small>当前方位</small><strong>{{ currentChapter.title }}</strong><i></i><span>第 {{ ordinal(chapter + 1) }} 章 / 共 {{ ordinal(currentChapters.length) }} 章</span><p>伟大的航路，永不止步。</p></div>
         </div>
       </footer>
     </section>
@@ -276,7 +289,7 @@ onBeforeUnmount(() => {
       <div class="collection-heading"><button class="quiet-button" @click="navigate('entry')"><ArrowLeft :size="16" />返回序厅</button><span>THE COLLECTION · {{ ordinal(characters.length) }} RECORDS</span></div>
       <header class="fallback-header"><div><h1>人物档案</h1><p>他们的名字，构成了一个时代的航海史。</p></div><div class="collection-count"><strong>{{ ordinal(characters.length) }}</strong><span>人物档案 / 现正展出</span></div></header>
       <div class="archive-controls">
-        <nav aria-label="档案章节筛选"><button v-for="(item, index) in chapters" :key="item.title" :class="{ active: chapter === index }" :aria-pressed="chapter === index" @click="selectChapter(index)">{{ index === 0 ? '全部馆藏' : item.title }}</button></nav>
+        <nav aria-label="档案章节筛选"><button v-for="(item, index) in currentChapters" :key="item.id" :class="{ active: chapter === index }" :aria-pressed="chapter === index" @click="selectChapter(index)">{{ index === 0 ? '全部馆藏' : item.title }}</button></nav>
         <label class="archive-search"><Search :size="17" /><input ref="searchInput" v-model="query" type="search" placeholder="姓名、称号、能力…" aria-label="检索馆藏" /><span>{{ filteredCharacters.length }} 件</span></label>
       </div>
       <p v-if="loading" role="status" class="empty-state">正在读取馆藏…</p>
@@ -297,7 +310,7 @@ onBeforeUnmount(() => {
       </section>
       <aside class="gallery-asset-credits" aria-label="展馆素材来源">
         <p>展馆标识：<a :href="logoCredit.modelUrl" target="_blank" rel="noreferrer">{{ logoCredit.title }}</a>，作者 <a :href="logoCredit.authorUrl" target="_blank" rel="noreferrer">{{ logoCredit.author }}</a> · <a :href="logoCredit.licenseUrl" target="_blank" rel="noreferrer">{{ logoCredit.license }}</a>。{{ logoCredit.changes }}</p>
-        <p>道具模型作者与许可见各展签。<a :href="assetSourcesUrl" target="_blank" rel="noreferrer">完整素材来源与处理记录</a></p>
+        <p>道具模型署名、许可与修改说明：<a :href="assetSourcesUrl" target="_blank" rel="noreferrer">完整素材来源与处理记录</a></p>
       </aside>
     </section>
 
@@ -305,8 +318,8 @@ onBeforeUnmount(() => {
       <div class="collection-heading"><button class="quiet-button" @click="navigate('entry')"><ArrowLeft :size="16" />返回序厅</button><span>{{ view === 'story' ? 'THE VOYAGE' : 'VOICES OF THE SEA' }}</span></div>
       <header class="editorial-heading"><h1>{{ view === 'story' ? '航海图志' : '经典时刻' }}</h1><p>{{ view === 'story' ? '把相遇写进航线，把梦想留给大海。' : '一句话，记住一个人；一个约定，驶过整片海。' }}</p></header>
       <template v-if="view === 'story'">
-        <nav class="story-tabs" aria-label="阅读章节"><button v-for="(item, index) in chapters" :key="item.title" :aria-pressed="chapter === index" :class="{ active: chapter === index }" @click="selectChapter(index)">{{ ordinal(index + 1) }} <span>{{ item.title }}</span></button></nav>
-        <article :key="chapter" class="chapter-spread"><div class="chapter-landscape chapter-art" :class="'chapter-art-' + chapter" role="img" :aria-label="currentChapter.title + '航路插画'"></div><div class="chapter-essay"><h2>{{ currentChapter.title }}</h2><p>{{ currentChapter.story }}</p><button class="text-button" @click="navigate('archive')">查阅本章人物<ArrowRight :size="17" /></button></div></article>
+        <nav class="story-tabs" aria-label="阅读章节"><button v-for="(item, index) in currentChapters" :key="item.id" :aria-pressed="chapter === index" :class="{ active: chapter === index }" @click="selectChapter(index)">{{ ordinal(index + 1) }} <span>{{ item.title }}</span></button></nav>
+        <article :key="chapter" class="chapter-spread"><div class="chapter-landscape chapter-art" :class="'chapter-art-' + currentChapter.artwork_index" role="img" :aria-label="currentChapter.title + '航路插画'"></div><div class="chapter-essay"><h2>{{ currentChapter.title }}</h2><p>{{ currentChapter.story || '本章故事正在整理，可以先查阅人物档案。' }}</p><button class="text-button" @click="navigate('archive')">查阅本章人物<ArrowRight :size="17" /></button></div></article>
       </template>
       <div v-else class="moments-list"><article v-for="character in characters.filter(c => c.quote.trim())" :key="character.id"><button class="moment-portrait" :aria-label="'查看' + character.name + '档案'" @click="openCharacter(character)"><GalleryPortrait :record-number="slotOf(character)" :character="character" /></button><div><span>GL · {{ String(slotOf(character)).padStart(3, '0') }}</span><blockquote>“{{ character.quote }}”</blockquote><button @click="openCharacter(character)">{{ character.name }}<ArrowRight :size="18" /></button></div></article><p v-if="!characters.some(c => c.quote.trim())" class="empty-state">馆藏语录正在整理，稍后再来看看。</p></div>
     </section>
@@ -322,7 +335,7 @@ onBeforeUnmount(() => {
       <article v-if="selectedCharacter" class="character-record">
         <button class="dialog-close" aria-label="关闭" autofocus @click="closeCharacter"><X :size="20" /></button>
         <div class="dialog-poster"><GalleryPortrait :record-number="selectedSlot" :character="selectedCharacter" /><span>GRAND LINE · COLLECTION</span></div>
-        <div class="dialog-copy"><span class="record-code">人物档案 / GL · {{ String(selectedSlot).padStart(3, '0') }}</span><h2 id="character-title">{{ selectedCharacter.name }}</h2><p class="character-meta">{{ selectedCharacter.epithet }} · {{ selectedCharacter.faction }}</p><dl><div><dt>悬赏记录</dt><dd>{{ selectedCharacter.bounty || '暂无记录' }}</dd></div><div><dt>能力档案</dt><dd>{{ selectedCharacter.ability || '暂无记录' }}</dd></div></dl><p class="character-description">{{ selectedCharacter.description || '人物履历正在整理。' }}</p><blockquote v-if="selectedCharacter.quote">“{{ selectedCharacter.quote }}”</blockquote><nav v-if="characters.length > 1" class="record-pagination" aria-label="前后人物"><button @click="adjacentCharacter(-1)"><ArrowLeft :size="16" />上一份</button><span>{{ ordinal(selectedSlot) }} / {{ ordinal(characters.length) }}</span><button @click="adjacentCharacter(1)">下一份<ArrowRight :size="16" /></button></nav></div>
+        <div class="dialog-copy character-copy"><div ref="characterCopyScroll" class="character-copy-scroll"><span class="record-code">人物档案 / GL · {{ String(selectedSlot).padStart(3, '0') }}</span><h2 id="character-title">{{ selectedCharacter.name }}</h2><p class="character-meta">{{ selectedCharacter.epithet }} · {{ selectedCharacter.faction }}</p><dl><div><dt>悬赏记录</dt><dd>{{ selectedCharacter.bounty || '暂无记录' }}</dd></div><div><dt>能力档案</dt><dd>{{ selectedCharacter.ability || '暂无记录' }}</dd></div></dl><p class="character-description">{{ selectedCharacter.description || '人物履历正在整理。' }}</p><blockquote v-if="selectedCharacter.quote">“{{ selectedCharacter.quote }}”</blockquote></div><nav v-if="characters.length > 1" class="record-pagination" aria-label="前后人物"><button @click="adjacentCharacter(-1)"><ArrowLeft :size="16" />上一份</button><span>{{ ordinal(selectedSlot) }} / {{ ordinal(characters.length) }}</span><button @click="adjacentCharacter(1)">下一份<ArrowRight :size="16" /></button></nav></div>
       </article>
     </dialog>
 
@@ -330,15 +343,16 @@ onBeforeUnmount(() => {
       <article v-if="selectedArtifact" class="artifact-record">
         <button class="dialog-close" aria-label="关闭" autofocus @click="closeArtifact"><X :size="20" /></button>
         <div class="dialog-copy artifact-copy">
-          <h2 id="artifact-title">{{ selectedArtifact.title }}</h2><p class="artifact-subtitle">{{ selectedArtifact.subtitle }}</p><p class="character-description">{{ selectedArtifact.description }}</p>
-          <dl class="artifact-features">
-            <div><dt>展品看点</dt><dd><ul><li v-for="feature in selectedArtifact.features" :key="feature">{{ feature }}</li></ul></dd></div>
-            <div v-if="selectedArtifact.modelCredit" class="artifact-model-credit">
-              <dt>模型作者与许可</dt>
-              <dd><a :href="selectedArtifact.modelCredit.modelUrl" target="_blank" rel="noreferrer">{{ selectedArtifact.modelCredit.title }}</a> · <a :href="selectedArtifact.modelCredit.authorUrl" target="_blank" rel="noreferrer">{{ selectedArtifact.modelCredit.author }}</a><br /><a :href="selectedArtifact.modelCredit.licenseUrl" target="_blank" rel="noreferrer">{{ selectedArtifact.modelCredit.license }}</a><small>{{ selectedArtifact.modelCredit.changes }}</small></dd>
-            </div>
-          </dl>
-          <footer class="artifact-footer"><span class="record-code">典藏展签 · {{ ordinal(selectedArtifactSlot) }} / {{ ordinal(artifacts.length) }}</span><a class="artifact-source" :href="selectedArtifact.source" target="_blank" rel="noreferrer">设定参考 · ONE PIECE.com<MoveUpRight :size="14" /></a></footer>
+          <header>
+            <h2 id="artifact-title">{{ selectedArtifact.title }}</h2>
+            <p class="artifact-subtitle">{{ selectedArtifact.subtitle }}</p>
+          </header>
+          <p class="character-description">{{ selectedArtifact.description }}</p>
+          <section class="artifact-features" aria-labelledby="artifact-features-title">
+            <h3 id="artifact-features-title">展品看点</h3>
+            <ul><li v-for="feature in selectedArtifact.features" :key="feature">{{ feature }}</li></ul>
+          </section>
+          <footer class="artifact-footer"><span class="record-code">典藏展签 · {{ ordinal(selectedArtifactSlot) }} / {{ ordinal(artifacts.length) }}</span></footer>
         </div>
       </article>
     </dialog>

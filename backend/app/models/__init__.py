@@ -3,7 +3,7 @@ from .about_profile import AboutProfile
 from .article import Article, ArticleCategory, ArticleLikeRecord, ArticleTag, ArticleTagLink
 from .content import Note, Series
 from .daily_learning import DailyLearningRun, DailyLearningSettings
-from .gallery import GalleryCharacter, GallerySettings
+from .gallery import GalleryCharacter, GalleryChapter, GallerySettings
 from .guestbook import GuestbookMessage
 from .visitor_record import VisitorRecord
 
@@ -18,6 +18,7 @@ __all__ = [
     "DailyLearningRun",
     "DailyLearningSettings",
     "GalleryCharacter",
+    "GalleryChapter",
     "GallerySettings",
     "GuestbookMessage",
     "Note",

@@ -73,6 +73,9 @@ _FIELD_LABELS: dict[str, str] = {
     "poster_url": "人物海报链接",
     "is_visible": "是否在展厅展示",
     "character_ids": "人物顺序",
+    "chapter_id": "所属分类",
+    "chapter_ids": "分类顺序",
+    "artwork_index": "章节插画",
     # 关于我
     "display_name": "展示名称",
     "role": "角色",
@@ -168,7 +171,8 @@ def _error_response(
         code=status_code,
         status=status_code,
         message=message,
-        data=ErrorDetail(detail=detail),
+        # Pydantic 会先序列化模型，须提前转换校验上下文里的 ValueError。
+        data=ErrorDetail(detail=jsonable_encoder(detail, custom_encoder={Exception: str})),
         request_id=_request_id_from(request),
     )
     return JSONResponse(

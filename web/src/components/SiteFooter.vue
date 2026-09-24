@@ -7,7 +7,8 @@ import OceanIcon from "./OceanIcon.vue";
 
 const route = useRoute();
 const currentYear = new Date().getFullYear();
-const light = computed(() => route.path === "/about" || route.path === "/privacy" || route.path === "/guestbook");
+const light = computed(() => route.path === "/privacy" || route.path === "/guestbook");
+const nightSurface = computed(() => route.path === "/about");
 const systemSurface = computed(() => route.path === "/icons");
 const icpFilingUrl = "https://beian.miit.gov.cn/";
 const policeFilingUrl = "https://www.beian.gov.cn/portal/index";
@@ -26,7 +27,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <footer :class="['site-footer', { light, 'system-surface': systemSurface }]">
+  <footer :class="['site-footer', { light, 'night-surface': nightSurface, 'system-surface': systemSurface }]">
     <div>
       <strong>个人航海日志</strong>
       <span>© {{ currentYear }} 内容与代码持续更新</span>
@@ -65,6 +66,10 @@ onMounted(async () => {
 .site-footer.light strong { color: #173541; }
 .site-footer.light span { color: #123247; }
 .site-footer.light a:hover, .site-footer.light a:focus-visible { color: #a92f2a; }
+.site-footer.night-surface { border-color: rgba(169,187,192,.16); color: #a9bbc0; background: #061a22; }
+.site-footer.night-surface strong { color: #f3edda; }
+.site-footer.night-surface span { color: #a9bbc0; }
+.site-footer.night-surface a:hover, .site-footer.night-surface a:focus-visible { color: #e2bc74; }
 @media (prefers-color-scheme: light) { .site-footer.system-surface { border-color: rgba(16, 42, 54, 0.1); color: rgba(23, 53, 65, 0.66); background: #dce8e9; } .site-footer.system-surface strong { color: #173541; } .site-footer.system-surface span { color: #123247; } .site-footer.system-surface a:hover, .site-footer.system-surface a:focus-visible { color: #a92f2a; } }
 @media (max-width: 680px) { .site-footer { align-items: flex-start; flex-direction: column; gap: 1.25rem; } .site-footer nav { justify-content: flex-start; } }
 @media (prefers-reduced-motion: reduce) { .site-footer a { transition: none; } }

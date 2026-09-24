@@ -10,7 +10,8 @@ fs.mkdirSync(output, { recursive: true });
 const names = ['蒙奇·D·路飞', '罗罗诺亚·索隆', '娜美', '乌索普', '山治', '乔巴', '妮可·罗宾', '弗兰奇', '甚平'];
 const data = {
   settings: { id: 1, hall_name: '伟大航路人物档案馆', entry_title: '人物展馆', show_entry: true, show_logo: false, logo_url: null },
-  characters: names.map((name, i) => ({ id: i + 1, name, epithet: '航海者', faction: '草帽一伙', bounty: '档案记录', ability: '测试能力', description: '公开人物履历。', quote: '向着梦想启航。', poster_url: null, is_visible: true, sort_order: i })),
+  chapters: ['东海群像', '伟大航路', '新世界'].map((title, i) => ({ id: i + 1, title, subtitle: '航海章节', heading: title, description: '章节说明', note: '查阅本章人物', label: '人物故事', story: '章节故事', artwork_index: i + 1, is_visible: true, sort_order: i })),
+  characters: names.map((name, i) => ({ id: i + 1, chapter_id: i < 5 ? 1 : i < 8 ? 2 : 3, name, epithet: '航海者', faction: '草帽一伙', bounty: '档案记录', ability: '测试能力', description: '公开人物履历。', quote: '向着梦想启航。', poster_url: null, is_visible: true, sort_order: i })),
 };
 const envelope = value => ({ code: 200, status: 200, data: value });
 let browser;
@@ -102,11 +103,8 @@ let browser;
     await page.locator('.artifact-catalog button').filter({ hasText: name }).click();
     assert.equal(await page.locator('#artifact-title').textContent(), name);
     assert.equal(await page.locator('.artifact-features li').count(), 3);
-    assert.match(await page.locator('.artifact-source').getAttribute('href'), /^https:\/\/one-piece\.com\//);
-    if (['路飞的草帽', '橡胶果实', '和道一文字'].includes(name)) {
-      assert.equal(await page.locator('.artifact-model-credit a').count(), 3);
-      if (name === '路飞的草帽') assert.match(await page.locator('.artifact-model-credit').textContent(), /仅限非商业使用/);
-    }
+    assert.equal(await page.locator('.gallery-artifact-dialog a').count(), 0);
+    assert.equal(await page.locator('.artifact-model-credit').count(), 0);
     if (name === '电话虫') await page.screenshot({ path: path.join(output, 'artifact-detail.png') });
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('dialog[open]').count(), 0);
@@ -314,7 +312,7 @@ let browser;
   await phone.getByRole('button', { name: '关闭', exact: true }).click();
   await phone.locator('.artifact-catalog button').filter({ hasText: '路飞的草帽' }).click();
   assert.equal(await phone.locator('#artifact-title').textContent(), '路飞的草帽');
-  assert.match(await phone.locator('.artifact-model-credit').textContent(), /仅限非商业使用/);
+  assert.equal(await phone.locator('.gallery-artifact-dialog a, .artifact-model-credit').count(), 0);
   assert(await phone.locator('.gallery-artifact-dialog').evaluate(e => e.scrollWidth <= e.clientWidth));
   await phone.screenshot({ path: path.join(output, 'mobile-artifact.png') });
   await phone.getByRole('button', { name: '关闭', exact: true }).click(); await phone.context().close();
