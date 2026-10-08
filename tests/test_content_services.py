@@ -1,6 +1,8 @@
+import hashlib
 import json
 import unittest
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
@@ -8,10 +10,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.app.core.database import get_db_session
+from backend.app.core.cache import build_article_list_cache_key
 from backend.app.main import app
 from backend.app.models.base import Base
 from backend.app.models.article import Article, ArticleCategory, ArticleTag
 from backend.app.models.content import Note, Series
+from backend.app.models.daily_learning import DailyLearningRun
 from backend.app.schemas.auth import AdminSessionResponse
 from backend.app.schemas.article import ArticleCreate
 from backend.app.schemas.content import NotePayload, SeriesPayload
@@ -212,6 +216,73 @@ class ContentServicesTest(unittest.TestCase):
 
         self.assertEqual(total, 1)
         self.assertEqual([item.id for item in items], [repost.id])
+
+    def test_learning_articles_only_appear_in_series_and_management(self) -> None:
+        series = create_series(self.session, SeriesPayload(slug="daily-learning", title="今日份学习"))
+        ordinary_series = create_series(self.session, SeriesPayload(slug="ai-tools", title="AI 工具"))
+        older = self.article("older", tags=["vue"], published_offset=0)
+        latest = self.article("latest", category="AI", series_id=ordinary_series.id, tags=["vue"], published_offset=1)
+        daily = self.article("daily", series_id=series.id, category="AI 问答", tags=["定时问答"], published_offset=70)
+        renamed = self.article("renamed", series_id=series.id, category="学习", tags=["定时问答"], published_offset=71)
+        legacy = self.article("legacy", category="AI 问答", tags=["定时问答"], published_offset=72)
+        self.session.add(DailyLearningRun(
+            run_date=datetime(2026, 3, 14).date(), scheduled_for=datetime(2026, 3, 14),
+            status="succeeded", article_id=legacy.id,
+        ))
+        self.session.commit()
+        app.dependency_overrides[get_db_session] = lambda: self.session
+        app.dependency_overrides[require_admin_session] = lambda: "admin"
+
+        with (
+            patch("backend.app.services.articles.build_article_list_cache_key", return_value=None),
+            patch("backend.app.services.articles.invalidate_article_list_cache"),
+            TestClient(app) as client,
+        ):
+            first = client.get("/api/v1/articles", params={"page_size": 1})
+            self.assertEqual(first.status_code, 200)
+            data = first.json()["data"]
+            self.assertEqual(data["total"], 2)
+            self.assertEqual([item["id"] for item in data["items"]], [latest.id])
+            self.assertEqual(data["stats"]["months"], [{"key": "2026-01", "count": 2}])
+            self.assertEqual({item["name"] for item in data["stats"]["categories"]}, {"技术", "AI"})
+            self.assertEqual(data["stats"]["tags"], [{"name": "vue", "count": 2}])
+            second = client.get("/api/v1/articles", params={"page_size": 1, "page": 2}).json()["data"]
+            self.assertEqual([item["id"] for item in second["items"]], [older.id])
+            for params in ({"category": "AI 问答"}, {"tag": "定时问答"}, {"search": "legacy"}):
+                with self.subTest(params=params):
+                    filtered = client.get("/api/v1/articles", params=params).json()["data"]
+                    self.assertEqual(filtered["items"], [])
+                    self.assertEqual(filtered["total"], 0)
+                    self.assertEqual(filtered["stats"]["months"], [])
+
+            managed = client.get("/api/v1/articles/manage").json()["data"]
+            self.assertEqual(managed["total"], 5)
+            self.assertEqual({item["id"] for item in managed["items"]}, {older.id, latest.id, daily.id, renamed.id, legacy.id})
+            self.assertIn({"name": "AI 问答", "count": 2}, managed["stats"]["categories"])
+            topic = client.get("/api/v1/series/daily-learning").json()["data"]
+            self.assertEqual([item["id"] for item in topic["articles"]], [renamed.id, daily.id])
+            self.assertEqual(client.get("/api/v1/articles/daily").status_code, 200)
+
+        context = get_article_context(self.session, older.slug)
+        self.assertEqual(context.next.id, latest.id)
+        self.assertEqual([item.id for item in context.related], [latest.id])
+        daily_context = get_article_context(self.session, daily.slug)
+        self.assertEqual(daily_context.previous.id, renamed.id)
+        self.assertEqual(daily_context.series.slug, "daily-learning")
+
+    def test_public_article_cache_does_not_reuse_unfiltered_list(self) -> None:
+        params = dict(
+            public_only=True, page=1, page_size=6, category=None, tag=None, search=None,
+            is_repost=None, published_from=None, published_to=None, updated_from=None, updated_to=None,
+        )
+        legacy_digest = hashlib.sha256(
+            json.dumps(params, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        with patch("backend.app.core.cache.get_redis_client") as redis:
+            redis.return_value.get.return_value = "0"
+            public_key = build_article_list_cache_key(**params)
+        self.assertIsNotNone(public_key)
+        self.assertNotEqual(public_key, f"personal-blog:articles:list:0:{legacy_digest}")
 
     def test_notes_filter_uses_exact_json_membership(self) -> None:
         create_note(

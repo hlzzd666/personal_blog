@@ -13,6 +13,7 @@ from backend.app.core.cache import (
 )
 from backend.app.models.article import Article, ArticleCategory, ArticleLikeRecord, ArticleTag, ArticleTagLink
 from backend.app.models.content import Series
+from backend.app.models.daily_learning import DailyLearningRun
 from backend.app.schemas.article import (
     ArticleContextResponse,
     ArticleCountItem,
@@ -48,6 +49,7 @@ def _article_tag_names(article: Article) -> list[str]:
 
 def build_article_filters(
     *,
+    public_only: bool = False,
     category: str | None = None,
     tag: str | None = None,
     search: str | None = None,
@@ -58,6 +60,14 @@ def build_article_filters(
     updated_to: datetime | None = None,
 ) -> list:
     filters = []
+    if public_only:
+        # 学习问答仅通过专题阅读；生成记录兼容未关联专题的历史文章。
+        filters.extend([
+            ~exists(select(Series.id).where(
+                Series.id == Article.series_id, Series.slug == "daily-learning",
+            )),
+            ~exists(select(DailyLearningRun.id).where(DailyLearningRun.article_id == Article.id)),
+        ])
     if category:
         filters.append(
             or_(
@@ -121,8 +131,8 @@ def list_articles(
 ) -> tuple[list[Article], int]:
     query = select(Article)
     count_query = select(func.count(Article.id))
-    # 文章不区分草稿和发布状态，public_only 参数保留用于兼容调用方。
     filters = build_article_filters(
+        public_only=public_only,
         category=category,
         tag=tag,
         search=search,
@@ -149,6 +159,7 @@ def list_articles(
 def get_article_list_stats(
     session: Session,
     *,
+    public_only: bool = False,
     category: str | None = None,
     tag: str | None = None,
     search: str | None = None,
@@ -162,6 +173,7 @@ def get_article_list_stats(
         session.scalars(
             select(Article).where(
                 *build_article_filters(
+                    public_only=public_only,
                     category=category,
                     tag=tag,
                     search=search,
@@ -174,7 +186,7 @@ def get_article_list_stats(
             )
         )
     )
-    all_articles = list(session.scalars(select(Article)))
+    all_articles = list(session.scalars(select(Article).where(*build_article_filters(public_only=public_only))))
 
     month_counts: dict[str, int] = {}
     for article in filtered_articles:
@@ -264,6 +276,7 @@ def get_article_list_response(
         page_size=page_size,
         stats=get_article_list_stats(
             session,
+            public_only=public_only,
             category=category,
             tag=tag,
             search=search,
@@ -297,7 +310,9 @@ def get_article_context(session: Session, slug: str) -> ArticleContextResponse |
     if article is None:
         return None
 
-    all_articles = list(session.scalars(select(Article).where(Article.id != article.id)))
+    all_articles = list(session.scalars(select(Article).where(
+        Article.id != article.id, *build_article_filters(public_only=True),
+    )))
     series = session.get(Series, article.series_id) if article.series_id else None
 
     if article.series_id is not None:

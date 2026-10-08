@@ -57,6 +57,9 @@ def build_article_list_cache_key(
         "updated_from": updated_from.isoformat() if updated_from else None,
         "updated_to": updated_to.isoformat() if updated_to else None,
     }
+    if public_only:
+        # 隔离旧的全量列表缓存，部署后立即使用专题专属的展示规则。
+        params["exclude_daily_learning"] = True
     digest = hashlib.sha256(
         json.dumps(params, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()

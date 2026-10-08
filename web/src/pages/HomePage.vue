@@ -8,6 +8,7 @@ import { fetchSiteSettings, type SiteSettings } from "../api/site-settings";
 import { fetchVisitorLocation, type VisitorLocation } from "../api/visitor-location";
 import { fetchNotes, fetchSeries, type Note, type Series } from "../api/content";
 import { fetchGallery } from "../api/gallery";
+import { fetchGuestbook, type GuestbookItem } from "../api/guestbook";
 import { type IconName } from "../icons";
 
 const fallbackSettings: SiteSettings = {
@@ -78,6 +79,9 @@ const homeArticlesStatus = ref("最近文章");
 const homeProfile = ref<AboutProfile>(fallbackProfile);
 const homeSeries = ref<Series[]>([]);
 const homeNotes = ref<Note[]>([]);
+const homeGuestbook = ref<GuestbookItem[]>([]);
+const homeGuestbookLoading = ref(true);
+const homeGuestbookError = ref(false);
 const homeGalleryEntryVisible = ref(true);
 const homeDiscoveryRoot = ref<HTMLElement | null>(null);
 const activeQuoteIndex = ref(0);
@@ -296,14 +300,20 @@ async function loadHomeProfile(session: number) {
   }
 }
 
-async function loadHomeSeriesAndNotes(session: number) {
-  const [seriesResult, notesResult] = await Promise.allSettled([
+async function loadHomeDiscovery(session: number) {
+  homeGuestbookLoading.value = true;
+  homeGuestbookError.value = false;
+  const [seriesResult, notesResult, guestbookResult] = await Promise.allSettled([
     fetchSeries(),
     fetchNotes({ page: 1, page_size: 3 }),
+    fetchGuestbook(1, 3),
   ]);
   if (session !== homeSession || !isHome.value) return;
   homeSeries.value = seriesResult.status === "fulfilled" ? seriesResult.value.items : [];
   homeNotes.value = notesResult.status === "fulfilled" ? notesResult.value.items : [];
+  homeGuestbook.value = guestbookResult.status === "fulfilled" ? guestbookResult.value.items : [];
+  homeGuestbookError.value = guestbookResult.status === "rejected";
+  homeGuestbookLoading.value = false;
 }
 
 async function loadHomeContent(session: number) {
@@ -328,14 +338,14 @@ async function loadHomeGalleryVisibility(session: number) {
 function observeHomeDiscovery(session: number) {
   discoveryObserver?.disconnect();
   if (!homeDiscoveryRoot.value || typeof IntersectionObserver === "undefined") {
-    void loadHomeSeriesAndNotes(session);
+    void loadHomeDiscovery(session);
     return;
   }
   discoveryObserver = new IntersectionObserver(
     (entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
       discoveryObserver?.disconnect();
-      void loadHomeSeriesAndNotes(session).then(async () => {
+      void loadHomeDiscovery(session).then(async () => {
         await nextTick();
         if (session === homeSession && isHome.value) observeCards();
       });
@@ -635,10 +645,21 @@ onBeforeUnmount(() => {
                 </div>
                 <p v-else class="compact-empty">最近还没有新的动态信号。</p>
               </section>
-              <section class="home-signal-panel home-guestbook-panel home-reveal">
+              <section class="home-signal-panel home-guestbook-panel home-reveal" :aria-busy="homeGuestbookLoading">
                 <div class="home-section-heading"><h3>留言航标</h3><RouterLink to="/guestbook">进入留言板</RouterLink></div>
-                <p>把想说的话留在这段航程里，审核通过后会成为日志的一部分。</p>
-                <RouterLink class="home-guestbook-action" to="/guestbook"><OceanIcon name="comment" :size="22" />留下第一枚航标</RouterLink>
+                <p v-if="homeGuestbookLoading" class="compact-empty" role="status">正在读取留言……</p>
+                <template v-else-if="homeGuestbookError">
+                  <p class="compact-empty" role="alert">留言读取失败，请重试。</p>
+                  <button class="home-guestbook-retry" type="button" @click="loadHomeDiscovery(homeSession)">重新读取</button>
+                </template>
+                <ol v-else-if="homeGuestbook.length" class="home-guestbook-list">
+                  <li v-for="message in homeGuestbook" :key="message.id">
+                    <div><strong>{{ message.nickname }}</strong><time :datetime="message.created_at">{{ formatFullDate(message.created_at) }}</time></div>
+                    <p>{{ message.content }}</p>
+                  </li>
+                </ol>
+                <p v-else class="compact-empty">还没有公开留言，审核通过后会显示在这里。</p>
+                <RouterLink class="home-guestbook-action" to="/guestbook"><OceanIcon name="comment" :size="22" />写下留言</RouterLink>
               </section>
             </div>
 
@@ -2419,6 +2440,13 @@ onBeforeUnmount(() => {
 .home-discovery-layout { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .home-guestbook-panel { border-color: rgba(230,111,82,.28); }
 .home-guestbook-panel > p { max-width: 22rem; margin: .95rem 0 1.15rem; color: var(--home-muted); font-size: .8rem; line-height: 1.7; }
+.home-guestbook-list { margin: .45rem 0 1rem; padding: 0; list-style: none; }
+.home-guestbook-list li { padding: .65rem 0; border-bottom: 1px solid var(--flow-line); }
+.home-guestbook-list li > div { display: flex; align-items: baseline; justify-content: space-between; gap: .65rem; }
+.home-guestbook-list strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--home-ink); font-size: .8rem; }
+.home-guestbook-list time { flex-shrink: 0; color: var(--home-muted); font-size: .65rem; }
+.home-guestbook-list p { display: -webkit-box; margin: .35rem 0 0; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: var(--home-muted); font-size: .8rem; line-height: 1.7; white-space: pre-line; }
+.home-guestbook-retry { margin: 0 0 1rem; padding: .4rem .65rem; border: 1px solid var(--flow-line); border-radius: 4px; background: transparent; color: var(--home-brass); font: inherit; font-size: .8rem; cursor: pointer; }
 .home-guestbook-action { display: inline-flex; gap: .4rem; align-items: center; color: var(--home-brass); font-size: .76rem; font-weight: 800; text-decoration: none; }
 .home-guestbook-action:hover, .home-guestbook-action:focus-visible { color: var(--home-coral); }
 @media (hover: hover) and (pointer: fine) {
