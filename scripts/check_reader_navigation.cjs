@@ -78,7 +78,8 @@ const notes = Array.from({ length: 14 }, (_, index) => ({
       }));
       assert(gaps.every(gap => Math.abs(gap) <= 1), `Timeline gaps: ${gaps}`);
       await page.screenshot({ path: path.join(output, `notes-${width}.png`) });
-      assert.equal(await page.locator(".site-footer a[href*='feed']").count(), 0);
+      assert.equal(await page.getByRole("link", { name: "RSS 订阅", exact: true }).getAttribute("href"), "/api/feed.xml");
+      assert.equal(await page.locator('head link[rel="alternate"][type="application/rss+xml"]').getAttribute("href"), "/api/feed.xml");
       assert(await page.locator(".site-footer nav a").evaluateAll(links => links.every(link => link.querySelector("img"))));
       await page.locator(".site-footer").scrollIntoViewIfNeeded();
       await page.screenshot({ path: path.join(output, `footer-${width}.png`) });

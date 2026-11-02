@@ -2,7 +2,7 @@
 import DOMPurify from "dompurify";
 import hljs from "highlight.js/lib/common";
 import { marked } from "marked";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import {
@@ -48,6 +48,7 @@ const previewImage = ref<PreviewImage | null>(null);
 const copyState = ref<"idle" | "copied" | "error">("idle");
 const shareState = ref<"idle" | "shared" | "copied" | "error">("idle");
 const { applySeo } = useSeo();
+const diagramId = useId();
 
 let scrollFrame: number | undefined;
 let revealObserver: IntersectionObserver | undefined;
@@ -161,13 +162,16 @@ function transformCodeBlocks(root: HTMLElement) {
     const preElement = codeElement.parentElement;
     if (!preElement) return;
     const requestedLanguage = /language-([\w-]+)/.exec(codeElement.className)?.[1] ?? "";
+    const isMermaid = requestedLanguage === "mermaid";
     // marked 会在代码文本末尾补一个换行，先去掉，行号和高亮才不会多出一行。
     const rawCode = (codeElement.textContent ?? "").replace(/\n$/, "");
     const language = hljs.getLanguage(requestedLanguage) ? requestedLanguage : "";
     let highlighted: string;
     let displayLanguage = requestedLanguage || "code";
     try {
-      if (language) {
+      if (isMermaid) {
+        highlighted = escapeCodeHtml(rawCode);
+      } else if (language) {
         highlighted = hljs.highlight(rawCode, { language }).value;
       } else {
         const detected = hljs.highlightAuto(rawCode);
@@ -180,7 +184,7 @@ function transformCodeBlocks(root: HTMLElement) {
     }
     const lineNumbers = Array.from({ length: Math.max(rawCode.split("\n").length, 1) }, (_, index) => index + 1).join("\n");
     const wrapper = document.createElement("div");
-    wrapper.className = "md-code";
+    wrapper.className = isMermaid ? "md-code md-mermaid-source" : "md-code";
     wrapper.innerHTML = [
       '<div class="md-code-head">',
       '  <span class="md-code-dots" aria-hidden="true"><i></i><i></i><i></i></span>',
@@ -196,6 +200,60 @@ function transformCodeBlocks(root: HTMLElement) {
     ].join("");
     preElement.replaceWith(wrapper);
   });
+}
+
+async function renderMermaidBlocks(root: HTMLElement, currentLoad: number) {
+  const blocks = Array.from(root.querySelectorAll<HTMLElement>(".md-mermaid-source"));
+  if (!blocks.length) return;
+  const isCurrent = () => currentLoad === loadVersion && root.isConnected;
+  const showError = (block: HTMLElement) => {
+    const message = document.createElement("p");
+    message.className = "md-diagram-error";
+    message.setAttribute("role", "status");
+    message.textContent = "流程图暂时无法显示，以下为原始代码。";
+    block.prepend(message);
+  };
+  try {
+    // 按需加载，普通文章无需下载绘图库；严格模式禁用图内脚本和点击回调。
+    const { default: mermaid } = await import("mermaid");
+    if (!isCurrent()) return;
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      suppressErrorRendering: true,
+      theme: "neutral",
+      htmlLabels: false,
+      fontFamily: '"Noto Sans SC", sans-serif',
+    });
+    await document.fonts.ready;
+    for (const [index, block] of blocks.entries()) {
+      if (!isCurrent()) return;
+      try {
+        const source = block.querySelector(".md-code-content code")?.textContent ?? "";
+        const { svg } = await mermaid.render(`article-diagram-${diagramId}-${currentLoad}-${index}`, source);
+        if (!isCurrent()) return;
+        const diagram = document.createElement("figure");
+        diagram.className = "md-diagram is-visible";
+        diagram.setAttribute("role", "img");
+        diagram.setAttribute("aria-label", "文章流程图");
+        diagram.setAttribute("tabindex", "0");
+        diagram.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+        const svgElement = diagram.querySelector("svg");
+        // 大图在窄屏内滚动，小图保持自身尺寸，避免被强行放大。
+        if (svgElement) svgElement.style.minWidth = `${Math.min(svgElement.viewBox.baseVal.width, 576)}px`;
+        block.replaceWith(diagram);
+      } catch (error) {
+        if (!isCurrent()) return;
+        console.warn("文章 Mermaid 流程图渲染失败", error);
+        showError(block);
+      }
+      updateReadingState();
+    }
+  } catch (error) {
+    if (!isCurrent()) return;
+    console.warn("文章 Mermaid 绘图库加载失败", error);
+    blocks.forEach(showError);
+  }
 }
 
 function buildArticleContent(markdown: string) {
@@ -461,6 +519,7 @@ async function loadArticle() {
     updateReadingState();
     await nextTick();
     setupContentReveal();
+    if (contentRoot.value) void renderMermaidBlocks(contentRoot.value, currentLoad);
   } catch (error) {
     if (currentLoad === loadVersion) {
       notFound.value = error instanceof ApiError && error.status === 404;
@@ -584,6 +643,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  loadVersion++;
   window.removeEventListener("scroll", updateReadingState);
   window.removeEventListener("resize", updateReadingState);
   window.removeEventListener("pointermove", handleDocumentScrollbarPointerMove);
@@ -937,6 +997,10 @@ onBeforeUnmount(() => {
 .markdown-body :deep(pre:not([class])) { position: relative; overflow-x: auto; margin: 2.25rem 0; padding: 2.5rem 1.35rem 1.35rem; border: 1px solid rgba(39, 111, 109, 0.14); border-radius: 4px; color: #e7f2e8; background: #16363b; box-shadow: 0 0.9rem 2rem rgba(31, 54, 55, 0.12); }
 .markdown-body :deep(pre:not([class]))::before { content: "CODE"; position: absolute; top: 0.72rem; left: 1.3rem; color: rgba(214, 229, 222, 0.66); font-size: 0.55rem; letter-spacing: 0.08em; }
 .markdown-body :deep(pre:not([class]) code) { padding: 0; border: 0; color: inherit; background: transparent; }
+.markdown-body :deep(.md-diagram) { margin: 2.25rem 0; padding: 1rem; overflow-x: auto; border: 1px solid #d6ddd9; border-radius: 6px; background: #f8faf8; }
+.markdown-body :deep(.md-diagram > svg) { display: block; width: 100%; height: auto; margin: 0 auto; }
+.markdown-body :deep(.md-diagram:focus-visible) { outline: 2px solid var(--current); outline-offset: 3px; }
+.markdown-body :deep(.md-diagram-error) { padding: 0 1rem; color: #9b5845; font-family: "Noto Sans SC", sans-serif; }
 /* mac 风格代码卡片：对齐后台编辑预览，用浅色代码区降低长文阅读疲劳。 */
 .markdown-body :deep(.md-code) { margin: 2.25rem 0; overflow: hidden; border: 1px solid #d6ddd9; border-radius: 6px; color: #24292e; background: #f8faf8; box-shadow: 0 0.75rem 1.8rem rgba(31, 54, 55, 0.09); font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; font-size: 0.85rem; }
 .markdown-body :deep(.md-code-head) { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.55rem 0.9rem; border-bottom: 1px solid #dce2df; background: #f0f3f1; }

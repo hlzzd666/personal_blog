@@ -6,6 +6,7 @@ import { computed, onMounted, ref } from "vue";
 import { fetchSiteSettings, updateSiteSettings, uploadImage } from "../api/site-settings";
 import { resolveErrorMessage } from "../api/http";
 import PageHeader from "../components/PageHeader.vue";
+import ImagePreview from "../components/ImagePreview.vue";
 import type { QuoteItem, SiteSettings, VisualAssetItem } from "../types/site";
 
 function createVisualAssetDraft(): VisualAssetItem {
@@ -351,7 +352,7 @@ onMounted(() => {
 
           <el-form-item label="站点封面图">
             <div class="image-picker image-picker-hero">
-              <img :src="form.hero_image_url" alt="站点封面图" />
+              <ImagePreview :src="form.hero_image_url" alt="站点封面图" />
               <div class="image-picker-overlay">
                 <input
                   ref="heroInput"
@@ -370,7 +371,7 @@ onMounted(() => {
                 </el-button>
               </div>
             </div>
-            <span class="image-picker-hint">建议使用横向图片，上传后点击底部按钮保存。</span>
+            <span class="image-picker-hint">外链可能失效或禁止引用。请上传原图，上传后点击底部按钮保存。</span>
           </el-form-item>
 
           <el-form-item label="文章列表页视觉资产">
@@ -384,7 +385,8 @@ onMounted(() => {
               </div>
 
               <div v-for="(asset, index) in form.visual_assets" :key="asset.key" class="visual-asset-card">
-                <div class="visual-asset-preview" :style="{ backgroundImage: asset.image_url ? `url(${asset.image_url})` : 'none' }">
+                <div class="visual-asset-preview">
+                  <ImagePreview class="asset-image" :src="asset.image_url" :alt="asset.name" />
                   <span :class="['visual-asset-state', { muted: !asset.enabled }]">
                     {{ asset.enabled ? "启用" : "停用" }}
                   </span>
@@ -484,8 +486,8 @@ onMounted(() => {
               v-for="asset in previewVisualAssets"
               :key="asset.key"
               class="preview-asset-card"
-              :style="{ backgroundImage: `url(${asset.image_url})` }"
             >
+              <ImagePreview class="asset-image" :src="asset.image_url" :alt="asset.name" />
               <div class="preview-asset-shade">
                 <strong>{{ asset.name }}</strong>
                 <span>{{ asset.key }}</span>
@@ -497,3 +499,8 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.asset-image { position: absolute; inset: 0; }
+.image-picker-hero > .image-preview { position: absolute; inset: 0; }
+</style>

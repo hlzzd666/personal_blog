@@ -4,18 +4,23 @@ export type MediaReference = {
 };
 
 export type MediaFileItem = {
+  storage: "local" | "oss";
+  cleanup_eligible: boolean;
   filename: string;
   relative_path: string;
   url: string;
   content_type: string;
   media_type: "image" | "resume" | "other" | string;
-  size: number;
-  modified_at: string;
+  size: number | null;
+  modified_at: string | null;
   referenced: boolean;
   references: MediaReference[];
 };
 
 export type MediaListResponse = {
+  warnings: string[];
+  oss_complete: boolean;
+  upload_storage: "local" | "oss";
   items: MediaFileItem[];
   total: number;
   used_count: number;

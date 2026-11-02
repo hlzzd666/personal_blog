@@ -10,6 +10,42 @@ class ObjectStorageError(RuntimeError):
     """对象存储配置或上传失败。"""
 
 
+def managed_prefix() -> str:
+    prefix = settings.oss_object_prefix.strip("/")
+    if not prefix:
+        raise ObjectStorageError("管理 OSS 资源必须设置专属目录 OSS_OBJECT_PREFIX")
+    return prefix + "/"
+
+
+def list_objects() -> list:
+    """只列举本站目录，遍历全部分页，失败时不返回部分清单。"""
+    prefix = managed_prefix()
+    objects = []
+    marker = ""
+    try:
+        while True:
+            page = _bucket().list_objects(prefix=prefix, marker=marker, max_keys=1000)
+            objects.extend(item for item in page.object_list if not item.key.endswith("/"))
+            if not page.is_truncated:
+                return objects
+            if not page.next_marker or page.next_marker == marker:
+                raise ObjectStorageError("OSS 分页异常，请刷新重试")
+            marker = page.next_marker
+    except ObjectStorageError:
+        raise
+    except Exception as error:
+        raise ObjectStorageError("OSS 列表读取失败，请检查网络及 oss:ListObjects 权限") from error
+
+
+def delete_object(key: str) -> None:
+    if not key.startswith(managed_prefix()) or key.endswith("/"):
+        raise ObjectStorageError("只能删除本站目录内的文件")
+    try:
+        _bucket().delete_object(key)
+    except Exception as error:
+        raise ObjectStorageError("OSS 删除失败，请检查 oss:DeleteObject 权限") from error
+
+
 def storage_enabled() -> bool:
     return settings.media_storage_driver.strip().lower() == "oss"
 

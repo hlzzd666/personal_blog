@@ -17,6 +17,7 @@ import {
 import { resolveErrorMessage } from "../api/http";
 import { uploadImage } from "../api/site-settings";
 import PageHeader from "../components/PageHeader.vue";
+import ImagePreview from "../components/ImagePreview.vue";
 import type { Article, ArticlePayload } from "../types/article";
 import type { Series, TaxonomyItem } from "../types/content";
 
@@ -61,6 +62,8 @@ const form = reactive<ArticlePayload>(emptyArticle());
 const drawerTitle = computed(() => (editingId.value === null ? "写一篇新文章" : "编辑文章"));
 const markdownInput = ref<HTMLInputElement | null>(null);
 const importingMarkdown = ref(false);
+const coverInput = ref<HTMLInputElement | null>(null);
+const uploadingCover = ref(false);
 const quickCreateVisible = ref(false);
 const quickCreateKind = ref<QuickCreateKind>("category");
 const quickCreateSaving = ref(false);
@@ -71,6 +74,27 @@ const tagOptions = ref<TaxonomyItem[]>([]);
 const route = useRoute();
 const seriesNameById = computed(() => new Map(seriesOptions.value.map((item) => [item.id, item.title])));
 const quickCreateLabel = computed(() => ({ category: "分类", series: "专题", tag: "标签" })[quickCreateKind.value]);
+
+async function handleCoverSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
+    ElMessage.error("请选择不超过 10 MB 的图片");
+    return;
+  }
+  uploadingCover.value = true;
+  try {
+    const result = await uploadImage(file);
+    form.cover_image_url = result.url;
+    ElMessage.success("封面上传成功，请保存文章");
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, "封面上传失败，原地址已保留"));
+  } finally {
+    uploadingCover.value = false;
+  }
+}
 
 function formatDate(value: string | null) {
   if (!value) return "未设置";
@@ -203,6 +227,7 @@ async function saveQuickCreate() {
 }
 
 async function saveArticle() {
+  if (uploadingCover.value) return;
   const category = categoryOptions.value.find((item) => item.id === form.category_id);
   const selectedTags = tagOptions.value.filter((item) => form.tag_ids.includes(item.id));
   if (!category) {
@@ -389,7 +414,7 @@ onMounted(async () => {
         <el-table-column label="文章" min-width="300">
           <template #default="{ row }">
             <div class="article-table-title">
-              <img v-if="row.cover_image_url" :src="row.cover_image_url" :alt="row.title" />
+              <ImagePreview v-if="row.cover_image_url" class="article-cover-preview" :src="row.cover_image_url" :alt="row.title" />
               <div><strong>{{ row.title }}</strong><span>{{ row.slug }}</span></div>
             </div>
           </template>
@@ -418,7 +443,7 @@ onMounted(async () => {
       <el-pagination v-if="total > 20" v-model:current-page="page" class="article-pagination" layout="prev, pager, next" :page-size="20" :total="total" @current-change="handlePageChange" />
     </el-card>
 
-    <el-drawer v-model="drawerVisible" :title="drawerTitle" size="min(1180px, 100vw)" destroy-on-close>
+    <el-drawer v-model="drawerVisible" :close-on-click-modal="!uploadingCover" :close-on-press-escape="!uploadingCover" :show-close="!uploadingCover" :title="drawerTitle" size="min(1180px, 100vw)" destroy-on-close>
       <el-form label-position="top" class="article-editor-form" @submit.prevent="saveArticle">
         <div class="editor-form-grid">
           <el-form-item label="文章标题" required><el-input v-model="form.title" placeholder="例如：在潮汐里学习 TypeScript" /></el-form-item>
@@ -494,7 +519,13 @@ onMounted(async () => {
           <el-form-item label="更新时间"><el-date-picker v-model="form.updated_at" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY年MM月DD日 HH:mm" placeholder="选择更新时间" :teleported="false" popper-class="article-date-picker-popper" /></el-form-item>
         </div>
         <div class="editor-form-grid">
-          <el-form-item label="封面图 URL"><el-input v-model="form.cover_image_url" placeholder="可选" /></el-form-item>
+          <el-form-item label="封面图 URL">
+            <el-input v-model="form.cover_image_url" :disabled="uploadingCover" placeholder="可选" />
+            <ImagePreview v-if="form.cover_image_url" class="editor-cover-preview" :src="form.cover_image_url" alt="文章封面预览" />
+            <input ref="coverInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden @change="handleCoverSelected" />
+            <el-button :icon="Upload" :loading="uploadingCover" @click="coverInput?.click()">上传原图</el-button>
+            <p class="cover-hint">外链加载失败时可上传原图；保存文章后生效。</p>
+          </el-form-item>
           <el-form-item label="转载来源链接"><el-input v-model="form.source_url" :disabled="!form.is_repost" placeholder="开启转载后填写" /></el-form-item>
         </div>
         <el-form-item label="内容属性"><el-checkbox v-model="form.is_repost">这是一篇转载文章</el-checkbox></el-form-item>
@@ -502,7 +533,7 @@ onMounted(async () => {
           <el-form-item label="浏览量"><el-input-number v-model="form.views" :min="0" controls-position="right" /></el-form-item>
           <el-form-item label="点赞数"><el-input-number v-model="form.likes" :min="0" controls-position="right" /></el-form-item>
         </div>
-        <div class="drawer-actions"><el-button @click="drawerVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveArticle">保存文章</el-button></div>
+        <div class="drawer-actions"><el-button :disabled="uploadingCover" @click="drawerVisible = false">取消</el-button><el-button type="primary" :disabled="uploadingCover" :loading="saving" @click="saveArticle">保存文章</el-button></div>
       </el-form>
     </el-drawer>
 
@@ -522,3 +553,9 @@ onMounted(async () => {
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.article-cover-preview { width: 56px; height: 40px; flex: 0 0 56px; border-radius: 5px; }
+.editor-cover-preview { width: 100%; height: 160px; margin: 8px 0; border-radius: 6px; }
+.cover-hint { width: 100%; color: var(--admin-muted); font-size: 12px; line-height: 1.6; }
+</style>

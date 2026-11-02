@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -126,7 +127,8 @@ from backend.app.services.auth import (
     delete_admin_session,
     require_admin_session,
 )
-from backend.app.services.media import cleanup_unreferenced_media_files, list_media_files
+from backend.app.services.media import cleanup_unreferenced_media_files, list_media_files, store_uploaded_image
+from backend.app.services.object_storage import ObjectStorageError
 from backend.app.services.gallery import (
     create_gallery_chapter,
     create_gallery_character,
@@ -634,10 +636,14 @@ def read_media_files(
 )
 def delete_unreferenced_media_files(
     request: Request,
+    storage: Literal["local", "oss"] = Query("local"),
     _admin_session: AdminSessionResponse = Depends(require_admin_session),
     session: Session = Depends(get_db_session),
 ) -> ApiResponse[MediaCleanupResponse]:
-    cleanup_result = cleanup_unreferenced_media_files(session)
+    try:
+        cleanup_result = cleanup_unreferenced_media_files(session, storage)
+    except ObjectStorageError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     return build_success_response(request, cleanup_result, message="未引用文件已清理")
 
 
@@ -1360,28 +1366,26 @@ async def upload_image(
     if extension is None:
         raise HTTPException(status_code=415, detail="仅支持 JPG、PNG、WEBP 或 GIF 图片")
 
-    upload_dir = settings.upload_path
-    upload_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid4().hex}{extension}"
-    destination = upload_dir / filename
-    size = 0
-
     try:
-        with destination.open("wb") as target:
-            while chunk := await file.read(1024 * 1024):
-                size += len(chunk)
-                if size > MAX_IMAGE_SIZE:
-                    destination.unlink(missing_ok=True)
-                    raise HTTPException(status_code=413, detail="图片大小不能超过 10 MB")
-                target.write(chunk)
+        content = await file.read(MAX_IMAGE_SIZE + 1)
+        if len(content) > MAX_IMAGE_SIZE:
+            raise HTTPException(status_code=413, detail="图片大小不能超过 10 MB")
+        if not content:
+            raise HTTPException(status_code=422, detail="图片不能为空")
+        url = await run_in_threadpool(
+            store_uploaded_image, filename, content, file.content_type
+        )
+    except ObjectStorageError as error:
+        raise HTTPException(status_code=502, detail="图片上传到对象存储失败，请稍后重试") from error
     finally:
         await file.close()
 
     result = ImageUploadResult(
-        url=f"{settings.public_base_url.rstrip('/')}/uploads/{filename}",
+        url=url,
         filename=filename,
         content_type=file.content_type or "application/octet-stream",
-        size=size,
+        size=len(content),
     )
     return build_success_response(request, result, message="图片上传成功")
 

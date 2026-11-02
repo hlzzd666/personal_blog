@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import mimetypes
+import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,6 +23,18 @@ from backend.app.schemas.media import (
     MediaReference,
 )
 from backend.app.services.site_settings import get_site_settings
+from backend.app.services.object_storage import (put_object, storage_enabled, list_objects, delete_object, public_url, managed_prefix, ObjectStorageError)
+
+
+def store_uploaded_image(filename: str, content: bytes, content_type: str) -> str:
+    """普通图片与展厅共用存储配置；OSS 失败时不回退到本地。"""
+    if storage_enabled():
+        prefix = settings.oss_object_prefix.strip("/")
+        key = f"{prefix + '/' if prefix else ''}uploads/{filename}"
+        return put_object(key, content, content_type)
+    settings.upload_path.mkdir(parents=True, exist_ok=True)
+    (settings.upload_path / filename).write_bytes(content)
+    return _build_public_url(filename)
 
 
 @dataclass(frozen=True)
@@ -38,28 +51,48 @@ def list_media_files(session: Session) -> MediaListResponse:
         _build_media_item(upload_root, path, reference_candidates)
         for path in _iter_upload_files(upload_root)
     ]
-    items.sort(key=lambda item: item.modified_at, reverse=True)
+    warnings = []
+    oss_complete = True
+    if storage_enabled():
+        try:
+            items.extend(_list_oss_media(reference_candidates))
+        except ObjectStorageError as error:
+            oss_complete = False
+            warnings.append(f"{error}。当前仅显示内容中已引用的 OSS 资源，数量和空间统计不完整，OSS 清理已禁用。")
+            items.extend(_known_oss_media(reference_candidates))
+    items.sort(key=lambda item: item.modified_at or datetime.min, reverse=True)
 
-    total_size = sum(item.size for item in items)
+    total_size = sum(item.size or 0 for item in items)
     unused_items = [item for item in items if not item.referenced]
     return MediaListResponse(
+        warnings=warnings, oss_complete=oss_complete,
+        upload_storage="oss" if storage_enabled() else "local",
         items=items,
         total=len(items),
         used_count=len(items) - len(unused_items),
         unused_count=len(unused_items),
         total_size=total_size,
-        unused_size=sum(item.size for item in unused_items),
+        unused_size=sum(item.size or 0 for item in unused_items),
     )
 
 
-def cleanup_unreferenced_media_files(session: Session) -> MediaCleanupResponse:
+def cleanup_unreferenced_media_files(session: Session, storage: str = "local") -> MediaCleanupResponse:
     upload_root = settings.upload_path.resolve()
     media_files = list_media_files(session)
+    if storage not in {"local", "oss"}:
+        raise ValueError("请选择一个存储来源进行清理")
+    if storage == "oss" and not media_files.oss_complete:
+        raise ObjectStorageError("OSS 列表不完整，无法执行清理")
     deleted_files: list[str] = []
     deleted_size = 0
 
     for item in media_files.items:
-        if item.referenced:
+        if item.referenced or item.storage != storage or not item.cleanup_eligible:
+            continue
+        if item.storage == "oss":
+            delete_object(item.relative_path)
+            deleted_files.append(item.relative_path)
+            deleted_size += item.size or 0
             continue
 
         target_path = (upload_root / item.relative_path).resolve()
@@ -81,6 +114,47 @@ def cleanup_unreferenced_media_files(session: Session) -> MediaCleanupResponse:
         deleted_size=deleted_size,
         deleted_files=deleted_files,
     )
+
+
+
+def _oss_references(key: str, candidates: list[MediaReferenceCandidate]) -> list[MediaReference]:
+    url = public_url(key)
+    matches = [MediaReference(source=c.source, label=c.label) for c in candidates
+               if re.search(re.escape(url) + r"(?=$|[\s\"'<>?#)])", c.value)]
+    # 已迁移的旧本站 URL 仍可使用对象，必须保留引用保护。
+    prefix = managed_prefix() + "uploads/"
+    if key.startswith(prefix):
+        matches.extend(_find_references(key[len(prefix):], candidates))
+    return list({(r.source, r.label): r for r in matches}.values())
+
+
+def _oss_item(key: str, candidates: list[MediaReferenceCandidate], size=None, modified_at=None) -> MediaFileItem:
+    content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+    references = _oss_references(key, candidates)
+    # 只清理本应用上传接口生成的图片，不把同目录的其他资源当作孤立文件删除。
+    relative_key = key.removeprefix(managed_prefix())
+    eligible = bool(re.fullmatch(r"(?:uploads|gallery/poster|gallery/logo)/[a-f0-9]{32}\.(?:jpg|jpeg|png|webp|gif)", relative_key))
+    return MediaFileItem(storage="oss", cleanup_eligible=eligible, filename=Path(key).name, relative_path=key,
+                         url=public_url(key), content_type=content_type,
+                         media_type=_get_media_type(content_type, key), size=size,
+                         modified_at=modified_at, referenced=bool(references), references=references)
+
+
+def _list_oss_media(candidates: list[MediaReferenceCandidate]) -> list[MediaFileItem]:
+    return [_oss_item(obj.key, candidates, obj.size, datetime.fromtimestamp(obj.last_modified))
+            for obj in list_objects()]
+
+
+def _known_oss_media(candidates: list[MediaReferenceCandidate]) -> list[MediaFileItem]:
+    try:
+        prefix = managed_prefix()
+    except ObjectStorageError:
+        return []
+    base = public_url("")
+    pattern = re.escape(base + quote(prefix, safe="/")) + r"[^\s\"'<>?#)]+"
+    keys = {unquote(match[len(base):]) for candidate in candidates
+            for match in re.findall(pattern, candidate.value)}
+    return [_oss_item(key, candidates) for key in sorted(keys)]
 
 
 def _iter_upload_files(upload_root: Path) -> list[Path]:
@@ -195,8 +269,6 @@ def _collect_from_payload(
 ) -> list[MediaReferenceCandidate]:
     candidates: list[MediaReferenceCandidate] = []
     for field_path, value in _iter_strings(payload):
-        if "/uploads/" not in value:
-            continue
         label = f"{label_prefix} / {field_path}" if field_path else label_prefix
         candidates.append(MediaReferenceCandidate(source=source, label=label, value=value))
     return candidates

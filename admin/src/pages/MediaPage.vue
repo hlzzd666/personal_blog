@@ -6,6 +6,7 @@ import { CopyDocument, Delete, Refresh, Upload } from "@element-plus/icons-vue";
 import { cleanupUnreferencedMediaFiles, fetchMediaFiles, uploadMediaImage } from "../api/media";
 import { resolveErrorMessage } from "../api/http";
 import PageHeader from "../components/PageHeader.vue";
+import ImagePreview from "../components/ImagePreview.vue";
 import type { MediaFileItem, MediaListResponse } from "../types/media";
 
 type MediaFilter = "all" | "used" | "unused";
@@ -15,6 +16,7 @@ const loading = ref(false);
 const cleanupLoading = ref(false);
 const uploading = ref(false);
 const searchKeyword = ref("");
+const storageFilter = ref<"all" | "local" | "oss">("all");
 const referenceFilter = ref<MediaFilter>("all");
 const uploadInput = ref<HTMLInputElement | null>(null);
 
@@ -31,16 +33,22 @@ const filteredItems = computed(() => {
       referenceFilter.value === "all" ||
       (referenceFilter.value === "used" && item.referenced) ||
       (referenceFilter.value === "unused" && !item.referenced);
-    return matchesKeyword && matchesStatus;
+    return matchesKeyword && matchesStatus && (storageFilter.value === "all" || item.storage === storageFilter.value);
   });
 });
 
-const stats = computed(() => [
-  { label: "全部文件", value: mediaData.value?.total ?? 0, helper: "上传目录文件数" },
-  { label: "已引用", value: mediaData.value?.used_count ?? 0, helper: "正在被内容使用" },
-  { label: "未引用", value: mediaData.value?.unused_count ?? 0, helper: "可执行清理" },
-  { label: "占用空间", value: formatBytes(mediaData.value?.total_size ?? 0), helper: "当前上传目录" },
-]);
+const cleanupItems = computed(() => mediaItems.value.filter(item => item.storage === storageFilter.value && !item.referenced && item.cleanup_eligible));
+const canCleanup = computed(() => storageFilter.value !== "all" && !searchKeyword.value.trim() && referenceFilter.value !== "used" && cleanupItems.value.length > 0 && !loading.value && (storageFilter.value !== "oss" || mediaData.value?.oss_complete));
+const stats = computed(() => {
+  const items = filteredItems.value;
+  const partial = items.some(item => item.size === null) || (storageFilter.value !== "local" && mediaData.value?.oss_complete === false);
+  return [
+    { label: "全部文件", value: items.length, helper: "当前筛选结果" },
+    { label: "已引用", value: items.filter(item => item.referenced).length, helper: "正在被内容使用" },
+    { label: "未引用", value: items.filter(item => !item.referenced).length, helper: "所选存储内可清理" },
+    { label: "占用空间", value: formatBytes(items.reduce((sum, item) => sum + (item.size ?? 0), 0)), helper: partial ? "仅统计已知大小，数据不完整" : "当前筛选结果" },
+  ];
+});
 
 onMounted(() => {
   void loadMediaFiles();
@@ -70,7 +78,13 @@ async function handleImageSelected(event: Event) {
 
   uploading.value = true;
   try {
-    await uploadMediaImage(file);
+    const result = await uploadMediaImage(file);
+    storageFilter.value = mediaData.value?.upload_storage ?? "all";
+    searchKeyword.value = "";
+    referenceFilter.value = "all";
+    if (!mediaData.value?.oss_complete) {
+      ElMessage.info(`上传地址：${result.url}；OSS 列举权限恢复后可在完整列表查看`);
+    }
     ElMessage.success("图片上传成功");
     await loadMediaFiles();
   } catch (error) {
@@ -82,15 +96,16 @@ async function handleImageSelected(event: Event) {
 }
 
 async function handleCleanup() {
-  if ((mediaData.value?.unused_count ?? 0) === 0) {
+  if (!canCleanup.value || storageFilter.value === "all") {
     ElMessage.info("当前没有未引用文件");
     return;
   }
 
+  const storage = storageFilter.value;
   try {
     await ElMessageBox.confirm(
-      `将清理 ${mediaData.value?.unused_count ?? 0} 个未引用文件，预计释放 ${formatBytes(
-        mediaData.value?.unused_size ?? 0,
+      `将清理${storage === "oss" ? " OSS" : "服务器本地"}的 ${cleanupItems.value.length} 个未引用文件，预计释放 ${formatBytes(
+        cleanupItems.value.reduce((sum, item) => sum + (item.size ?? 0), 0),
       )}。清理后无法恢复，是否继续？`,
       "清理未引用文件",
       {
@@ -105,11 +120,12 @@ async function handleCleanup() {
 
   cleanupLoading.value = true;
   try {
-    const result = await cleanupUnreferencedMediaFiles();
+    const result = await cleanupUnreferencedMediaFiles(storage);
     ElMessage.success(`已清理 ${result.deleted_count} 个文件，释放 ${formatBytes(result.deleted_size)}`);
     await loadMediaFiles();
   } catch (error) {
     ElMessage.error(resolveErrorMessage(error, "未引用文件清理失败"));
+    await loadMediaFiles();
   } finally {
     cleanupLoading.value = false;
   }
@@ -142,7 +158,8 @@ function getMediaTypeLabel(item: MediaFileItem) {
   return "文件";
 }
 
-function formatBytes(size: number) {
+function formatBytes(size: number | null) {
+  if (size === null) return "未知";
   if (size < 1024) {
     return `${size} B`;
   }
@@ -156,7 +173,8 @@ function formatBytes(size: number) {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 }
 
-function formatDate(value: string) {
+function formatDate(value: string | null) {
+  if (!value) return "未知";
   return new Intl.DateTimeFormat("zh-CN", {
     year: "numeric",
     month: "2-digit",
@@ -172,6 +190,8 @@ function formatDate(value: string) {
 <template>
   <div class="page-stack media-admin-page">
     <PageHeader eyebrow="MEDIA" title="媒体资源管理" description="统一查看上传文件、引用状态与未引用文件清理。" />
+
+    <el-alert v-for="warning in mediaData?.warnings ?? []" :key="warning" :title="warning" type="warning" :closable="false" show-icon />
 
     <section class="media-stat-grid" aria-label="媒体资源统计">
       <article v-for="item in stats" :key="item.label" class="media-stat-card">
@@ -190,6 +210,11 @@ function formatDate(value: string) {
             placeholder="搜索文件名 / 路径 / 类型"
             class="media-search-input"
           />
+          <el-select v-model="storageFilter" class="media-status-select" aria-label="存储来源筛选">
+            <el-option label="全部存储" value="all" />
+            <el-option label="服务器本地" value="local" />
+            <el-option label="OSS" value="oss" />
+          </el-select>
           <el-select v-model="referenceFilter" class="media-status-select" aria-label="引用状态筛选">
             <el-option label="全部资源" value="all" />
             <el-option label="已引用" value="used" />
@@ -211,18 +236,19 @@ function formatDate(value: string) {
             plain
             :icon="Delete"
             :loading="cleanupLoading"
-            :disabled="(mediaData?.unused_count ?? 0) === 0"
+            :disabled="!canCleanup"
             @click="handleCleanup"
           >
-            清理未引用
+            清理{{ storageFilter === "oss" ? " OSS" : storageFilter === "local" ? "本地" : "" }}未引用
           </el-button>
         </div>
       </div>
 
+      <p class="media-muted">上传位置：{{ mediaData?.upload_storage === "oss" ? "OSS" : "服务器本地" }}。清理前请选择一个存储来源并清空搜索，已引用文件不会被清理。</p>
       <el-table
         v-loading="loading"
         :data="filteredItems"
-        row-key="relative_path"
+        :row-key="(item: MediaFileItem) => `${item.storage}:${item.relative_path}`"
         class="media-table"
         max-height="620"
         empty-text="暂无媒体文件"
@@ -231,7 +257,7 @@ function formatDate(value: string) {
           <template #default="{ row }">
             <div class="media-file-cell">
               <div class="media-file-preview">
-                <img v-if="isImage(row)" :src="row.url" :alt="row.filename" />
+                <ImagePreview v-if="isImage(row)" :src="row.url" :alt="row.filename" />
                 <span v-else>{{ getMediaTypeLabel(row).slice(0, 1) }}</span>
               </div>
               <div class="media-file-meta">
@@ -241,6 +267,7 @@ function formatDate(value: string) {
             </div>
           </template>
         </el-table-column>
+        <el-table-column label="存储来源" width="120"><template #default="{ row }"><el-tag :type="row.storage === 'oss' ? 'warning' : 'info'">{{ row.storage === "oss" ? "OSS" : "服务器本地" }}</el-tag></template></el-table-column>
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
             <el-tag effect="plain">{{ getMediaTypeLabel(row) }}</el-tag>
@@ -280,3 +307,9 @@ function formatDate(value: string) {
     </el-card>
   </div>
 </template>
+
+<style scoped>
+.media-toolbar { flex-wrap: wrap; }
+.media-toolbar-filters { flex-wrap: wrap; }
+.media-status-select { flex-shrink: 0; }
+</style>

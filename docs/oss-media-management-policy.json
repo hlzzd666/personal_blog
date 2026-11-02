@@ -1,0 +1,32 @@
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:ListObjects"
+      ],
+      "Resource": [
+        "acs:oss:*:*:ranjl-gallery-prod-1"
+      ],
+      "Condition": {
+        "StringLike": {
+          "oss:Prefix": [
+            "personal-blog/prod/*"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:DeleteObject"
+      ],
+      "Resource": [
+        "acs:oss:*:*:ranjl-gallery-prod-1/personal-blog/prod/uploads/*",
+        "acs:oss:*:*:ranjl-gallery-prod-1/personal-blog/prod/gallery/poster/*",
+        "acs:oss:*:*:ranjl-gallery-prod-1/personal-blog/prod/gallery/logo/*"
+      ]
+    }
+  ]
+}

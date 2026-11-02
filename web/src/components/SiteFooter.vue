@@ -48,6 +48,7 @@ onMounted(async () => {
       <RouterLink to="/guestbook"><OceanIcon name="comment" :size="20" />留言板</RouterLink>
       <RouterLink to="/icons"><OceanIcon name="toc" :size="20" />图标航海图</RouterLink>
       <RouterLink to="/privacy"><OceanIcon name="about" :size="20" />隐私说明</RouterLink>
+      <a href="/api/feed.xml" target="_blank" rel="alternate noreferrer noopener" type="application/rss+xml"><OceanIcon name="external" :size="20" />RSS 订阅</a>
     </nav>
   </footer>
 </template>

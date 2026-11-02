@@ -16,10 +16,11 @@ export async function fetchMediaFiles(): Promise<MediaListResponse> {
   });
 }
 
-export async function cleanupUnreferencedMediaFiles(): Promise<MediaCleanupResponse> {
+export async function cleanupUnreferencedMediaFiles(storage: "local" | "oss"): Promise<MediaCleanupResponse> {
   return request<MediaCleanupResponse>({
     method: "DELETE",
     url: "/media/files/unreferenced",
+    params: { storage },
     timeout: 30000,
   });
 }
